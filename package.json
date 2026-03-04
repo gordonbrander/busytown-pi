@@ -1,0 +1,19 @@
+{
+  "name": "busytown-pi",
+  "version": "0.1.0",
+  "description": "Busytown event queue as a Pi extension",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "busytown": "src/cli.ts"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
