@@ -151,6 +151,97 @@ export default (pi: ExtensionAPI) => {
         };
       },
     });
+
+    // Register commands (slash-command equivalents of the tools)
+
+    pi.registerCommand("busytown-push", {
+      description:
+        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json]",
+      handler: async (args, ctx) => {
+        if (!db) {
+          ctx.ui.notify("Busytown not initialized", "error");
+          return;
+        }
+        const parts = (args ?? "").trim().split(/\s+/);
+        const type = parts[0];
+        if (!type) {
+          ctx.ui.notify(
+            "Usage: /busytown-push <type> [payload-json]",
+            "warning",
+          );
+          return;
+        }
+        const payloadStr = parts.slice(1).join(" ") || "{}";
+        try {
+          const payload = JSON.parse(payloadStr);
+          const event = pushEvent(db, "host", type, payload);
+          ctx.ui.notify(
+            `Pushed event #${event.id} (${event.type})`,
+            "info",
+          );
+        } catch (err) {
+          ctx.ui.notify(`Invalid payload JSON: ${err}`, "error");
+        }
+      },
+    });
+
+    pi.registerCommand("busytown-events", {
+      description:
+        "List recent events from the Busytown event queue. Usage: /busytown-events [tail] [type-filter]",
+      handler: async (args, ctx) => {
+        if (!db) {
+          ctx.ui.notify("Busytown not initialized", "error");
+          return;
+        }
+        const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
+        const tail = parts[0] ? parseInt(parts[0], 10) : 20;
+        const filterType = parts[1];
+        const events = getEventsSince(db, {
+          tail: isNaN(tail) ? 20 : tail,
+          filterType,
+        });
+        if (events.length === 0) {
+          ctx.ui.notify("No events found", "info");
+          return;
+        }
+        const summary = events
+          .map(
+            (e) =>
+              `#${e.id} [${e.type}] worker=${e.worker_id} ts=${e.timestamp}`,
+          )
+          .join("\n");
+        ctx.ui.notify(`${events.length} event(s):\n${summary}`, "info");
+      },
+    });
+
+    pi.registerCommand("busytown-claim", {
+      description:
+        "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <worker-id>",
+      handler: async (args, ctx) => {
+        if (!db) {
+          ctx.ui.notify("Busytown not initialized", "error");
+          return;
+        }
+        const parts = (args ?? "").trim().split(/\s+/);
+        const eventId = parseInt(parts[0], 10);
+        const worker = parts[1];
+        if (isNaN(eventId) || !worker) {
+          ctx.ui.notify(
+            "Usage: /busytown-claim <event-id> <worker-id>",
+            "warning",
+          );
+          return;
+        }
+        const claimed = claimEvent(db, worker, eventId);
+        const claimant = getClaimant(db, eventId);
+        ctx.ui.notify(
+          claimed
+            ? `Event #${eventId} claimed by ${claimant}`
+            : `Event #${eventId} already claimed by ${claimant}`,
+          claimed ? "info" : "warning",
+        );
+      },
+    });
   });
 
   pi.on("session_shutdown", async () => {
