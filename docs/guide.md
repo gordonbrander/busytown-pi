@@ -25,6 +25,12 @@ npm install /path/to/busytown-pi
 This creates a symlink to the local directory, so any changes you make to
 busytown-pi are immediately available without reinstalling.
 
+You can also install using the Pi CLI directly:
+
+```bash
+pi install /path/to/busytown-pi
+```
+
 ### Enable the extension
 
 Add busytown-pi to your Pi configuration so it loads on session start. The
