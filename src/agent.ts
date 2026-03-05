@@ -1,21 +1,34 @@
-import { z } from "zod/v4"
+import { Type, type Static } from "@sinclair/typebox"
+import { Value } from "@sinclair/typebox/value"
 import matter from "gray-matter"
 import fs from "node:fs"
 import path from "node:path"
 import { pathToSlug } from "./slug.ts"
 
-const AgentFrontmatterSchema = z.object({
-  name: z.string().optional(),
-  type: z.enum(["pi", "shell"]).default("pi"),
-  description: z.string().default(""),
-  listen: z.array(z.string()).default([]),
-  ignore_self: z.boolean().default(true),
-  emits: z.array(z.string()).default([]),
-  tools: z
-    .union([z.string(), z.array(z.string())])
-    .default([])
-    .transform((v) => (typeof v === "string" ? v.split(",").map((s) => s.trim()) : v)),
-  model: z.string().optional(),
+const AgentFrontmatterSchema = Type.Object({
+  name: Type.Optional(Type.String()),
+  type: Type.Optional(Type.Union([Type.Literal("pi"), Type.Literal("shell")])),
+  description: Type.Optional(Type.String()),
+  listen: Type.Optional(Type.Array(Type.String())),
+  ignore_self: Type.Optional(Type.Boolean()),
+  emits: Type.Optional(Type.Array(Type.String())),
+  tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
+  model: Type.Optional(Type.String()),
+})
+
+type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>
+
+const applyDefaults = (raw: AgentFrontmatter) => ({
+  name: raw.name,
+  type: raw.type ?? "pi" as const,
+  description: raw.description ?? "",
+  listen: raw.listen ?? [],
+  ignore_self: raw.ignore_self ?? true,
+  emits: raw.emits ?? [],
+  tools: typeof raw.tools === "string"
+    ? raw.tools.split(",").map((s) => s.trim())
+    : raw.tools ?? [],
+  model: raw.model,
 })
 
 export type PiAgentDef = {
@@ -45,7 +58,13 @@ export type AgentDef = PiAgentDef | ShellAgentDef
 export const loadAgentDef = (filePath: string): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8")
   const { data, content } = matter(raw)
-  const frontmatter = AgentFrontmatterSchema.parse(data)
+  const cleaned = Value.Clean(AgentFrontmatterSchema, data)
+  const checked = Value.Check(AgentFrontmatterSchema, cleaned)
+  if (!checked) {
+    const errors = [...Value.Errors(AgentFrontmatterSchema, cleaned)]
+    throw new Error(`Invalid agent frontmatter: ${errors.map((e) => e.message).join(", ")}`)
+  }
+  const frontmatter = applyDefaults(cleaned as AgentFrontmatter)
   const id = frontmatter.name ?? pathToSlug(filePath)
   if (!id) {
     throw new Error(`Cannot derive agent ID from path: ${filePath}`)
