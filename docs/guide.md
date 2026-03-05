@@ -8,10 +8,22 @@ does work, and pushes new events for other agents to pick up.
 
 ### Install
 
+From npm:
+
 ```bash
 cd your-project
 npm install busytown-pi
 ```
+
+Or install from a local checkout (useful during development):
+
+```bash
+cd your-project
+npm install /path/to/busytown-pi
+```
+
+This creates a symlink to the local directory, so any changes you make to
+busytown-pi are immediately available without reinstalling.
 
 ### Enable the extension
 
