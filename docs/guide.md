@@ -33,9 +33,66 @@ pi install /path/to/busytown-pi
 
 ### Enable the extension
 
-Add busytown-pi to your Pi configuration so it loads on session start. The
-extension registers three tools (`busytown-push`, `busytown-events`,
-`busytown-claim`) and starts watching for agent definitions.
+Once installed, tell Pi to load busytown-pi as an extension. There are a few
+ways to do this depending on your needs.
+
+**Project-local (recommended)** — add it to `.pi/settings.json` in your project
+so everyone on the team gets it automatically:
+
+```json
+{
+  "packages": [
+    "busytown-pi"
+  ]
+}
+```
+
+If you installed from a local path, use the path instead:
+
+```json
+{
+  "packages": [
+    "/path/to/busytown-pi"
+  ]
+}
+```
+
+**Global** — add it to `~/.pi/agent/settings.json` to enable busytown across
+all your projects:
+
+```json
+{
+  "packages": [
+    "busytown-pi"
+  ]
+}
+```
+
+**Via the CLI** — use `pi install` to add it to your settings automatically:
+
+```bash
+# Install globally (writes to ~/.pi/agent/settings.json)
+pi install busytown-pi
+
+# Install project-local (writes to .pi/settings.json)
+pi install -l busytown-pi
+
+# Install from a local checkout
+pi install /path/to/busytown-pi
+```
+
+**Quick test** — try it for a single session without modifying any settings:
+
+```bash
+pi -e busytown-pi
+# or from a local checkout
+pi -e /path/to/busytown-pi
+```
+
+Once loaded, the extension registers three tools (`busytown-push`,
+`busytown-events`, `busytown-claim`) and starts watching for agent definitions.
+Run `/reload` inside an existing Pi session to pick up newly added extensions
+without restarting.
 
 ### Directory structure
 
