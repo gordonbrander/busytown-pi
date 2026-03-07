@@ -166,10 +166,12 @@ const eventsCommand = defineCommand({
         filterType: args.type,
       })
       if (events.length === 0) {
-        console.log("No events found.")
+        console.error("No events found.")
         return
       }
-      console.log(JSON.stringify(events, null, 2))
+      for (const event of events) {
+        console.log(JSON.stringify(event))
+      }
     } finally {
       db.close()
     }

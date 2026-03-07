@@ -118,8 +118,9 @@ export default (pi: ExtensionAPI) => {
           tail: (params.tail as number) ?? 20,
           filterType: params.type as string,
         });
+        const ljson = events.map((e) => JSON.stringify(e)).join("\n");
         return {
-          content: [{ type: "text", text: JSON.stringify(events, null, 2) }],
+          content: [{ type: "text", text: ljson }],
           details: {},
         };
       },
