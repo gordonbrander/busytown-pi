@@ -1,5 +1,10 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import fs from "node:fs";
+import path from "node:path";
+import { memoize } from "./lib/memoize.ts";
 import type { Event, RawEventRow } from "./event.ts";
+
+export type DatabaseHandle = { db: DatabaseSync; path: string };
 
 const SCHEMA = `
   PRAGMA journal_mode = WAL;
@@ -27,11 +32,19 @@ const SCHEMA = `
   );
 `;
 
-export const openDb = (dbPath: string): DatabaseSync => {
+/**
+ * Open a database connection and create the schema if it doesn't exist.
+ * Creates intermediate directories as needed.
+ */
+export const openDb = (dbPath: string): DatabaseHandle => {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
-  return db;
+  return { db, path: dbPath };
 };
+
+/** Returns a cached DatabaseHandle for the given path, opening it on first access. */
+export const getOrOpenDb = memoize(openDb, (dbPath) => dbPath);
 
 const parseEvent = (row: RawEventRow): Event => ({
   ...row,

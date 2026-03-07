@@ -5,7 +5,7 @@ import path from "node:path"
 import type { DatabaseSync } from "node:sqlite"
 import type { Event } from "./event.ts"
 import type { PiAgentDef, ShellAgentDef, AgentDef } from "./agent.ts"
-import { pushEvent } from "./event-queue.ts"
+import { type DatabaseHandle, pushEvent } from "./event-queue.ts"
 import { renderTemplate } from "./template.ts"
 import { worker, type Worker } from "./worker.ts"
 
@@ -69,12 +69,12 @@ const pipeLinesToEvents = (
 export const runPiAgent = (
   agent: PiAgentDef,
   event: Event,
-  dbPath: string,
+  handle: DatabaseHandle,
   projectRoot: string,
-  db: DatabaseSync,
   cliBin: string,
 ): Promise<number> => {
-  const systemPromptFile = writeSystemPromptFile(agent, dbPath, cliBin, projectRoot)
+  const systemPromptFile = writeSystemPromptFile(agent, handle.path, cliBin, projectRoot)
+  const db = handle.db
 
   const args = [
     "--mode", "json",
@@ -114,8 +114,9 @@ export const runShellAgent = (
   agent: ShellAgentDef,
   event: Event,
   projectRoot: string,
-  db: DatabaseSync,
+  handle: DatabaseHandle,
 ): Promise<number> => {
+  const db = handle.db
   const rendered = renderTemplate(agent.body, { event })
 
   return new Promise((resolve, reject) => {
@@ -134,8 +135,7 @@ export const runShellAgent = (
 }
 
 export const makeAgentWorker = (
-  db: DatabaseSync,
-  dbPath: string,
+  handle: DatabaseHandle,
   projectRoot: string,
   cliBin: string,
 ): ((agent: AgentDef) => Worker) => {
@@ -146,9 +146,9 @@ export const makeAgentWorker = (
       ignoreSelf: agent.ignoreSelf,
       run: async (event, { abortSignal }) => {
         if (agent.type === "pi") {
-          await runPiAgent(agent, event, dbPath, projectRoot, db, cliBin)
+          await runPiAgent(agent, event, handle, projectRoot, cliBin)
         } else {
-          await runShellAgent(agent, event, projectRoot, db)
+          await runShellAgent(agent, event, projectRoot, handle)
         }
         // If aborted during run, that's fine — the process already completed or was killed
       },

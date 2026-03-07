@@ -1,12 +1,11 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
-import type { DatabaseSync } from "node:sqlite";
 import {
   claimEvent,
   getClaimant,
   getEventsSince,
-  openDb,
+  getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
 import { loadAllAgents } from "./agent.ts";
@@ -14,11 +13,6 @@ import { createSystem, type WorkerSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
 import { type AgentWatcherCleanup, watchAgents } from "./agent-watcher.ts";
 import { nextTick } from "./utils.ts";
-
-// Extension state
-let db: DatabaseSync | undefined;
-let system: WorkerSystem | undefined;
-let watcherCleanup: AgentWatcherCleanup | undefined;
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -32,22 +26,22 @@ const resolveCliBin = (): string => {
 };
 
 export default (pi: ExtensionAPI) => {
+  const projectRoot = process.cwd();
+  const dbPath = resolveDbPath(projectRoot);
+  const agentsDir = resolveAgentsDir(projectRoot);
+  const cliBin = resolveCliBin();
+  const handle = getOrOpenDb(dbPath);
+  const db = handle.db;
+
+  let system: WorkerSystem | undefined;
+  let watcherCleanup: AgentWatcherCleanup | undefined;
+
   pi.on("session_start", async (_event: unknown, _ctx: unknown) => {
-    const projectRoot = process.cwd();
-    const dbPath = resolveDbPath(projectRoot);
-    const agentsDir = resolveAgentsDir(projectRoot);
-    const cliBin = resolveCliBin();
-
-    // Ensure .busytown directory exists
-    const { mkdirSync } = await import("node:fs");
-    mkdirSync(path.dirname(dbPath), { recursive: true });
-
-    db = openDb(dbPath);
     system = createSystem(db);
 
     // Load agents with listen fields and spawn workers
     const agents = loadAllAgents(agentsDir);
-    const toWorker = makeAgentWorker(db, dbPath, projectRoot, cliBin);
+    const toWorker = makeAgentWorker(handle, projectRoot, cliBin);
 
     for (const agent of agents) {
       if (agent.listen.length === 0) continue;
@@ -62,8 +56,7 @@ export default (pi: ExtensionAPI) => {
     watcherCleanup = watchAgents(
       agentsDir,
       system,
-      db,
-      dbPath,
+      handle,
       projectRoot,
       cliBin,
     );
@@ -85,7 +78,6 @@ export default (pi: ExtensionAPI) => {
       }),
       execute: async (_toolCallId, params) => {
         await nextTick();
-        if (!db) throw new Error("Busytown not initialized");
         const payload = params.payload
           ? JSON.parse(params.payload as string)
           : {};
@@ -113,7 +105,6 @@ export default (pi: ExtensionAPI) => {
       }),
       async execute(_toolCallId, params) {
         await nextTick();
-        if (!db) throw new Error("Busytown not initialized");
         const events = getEventsSince(db, {
           tail: (params.tail as number) ?? 20,
           filterType: params.type as string,
@@ -136,7 +127,6 @@ export default (pi: ExtensionAPI) => {
       }),
       async execute(_toolCallId, params) {
         await nextTick();
-        if (!db) throw new Error("Busytown not initialized");
         const claimed = claimEvent(
           db,
           params.worker as string,
@@ -159,10 +149,6 @@ export default (pi: ExtensionAPI) => {
       description:
         "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json]",
       handler: async (args, ctx) => {
-        if (!db) {
-          ctx.ui.notify("Busytown not initialized", "error");
-          return;
-        }
         const parts = (args ?? "").trim().split(/\s+/);
         const type = parts[0];
         if (!type) {
@@ -190,10 +176,6 @@ export default (pi: ExtensionAPI) => {
       description:
         "List recent events from the Busytown event queue. Usage: /busytown-events [tail] [type-filter]",
       handler: async (args, ctx) => {
-        if (!db) {
-          ctx.ui.notify("Busytown not initialized", "error");
-          return;
-        }
         const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
         const tail = parts[0] ? parseInt(parts[0], 10) : 20;
         const filterType = parts[1];
@@ -219,10 +201,6 @@ export default (pi: ExtensionAPI) => {
       description:
         "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <worker-id>",
       handler: async (args, ctx) => {
-        if (!db) {
-          ctx.ui.notify("Busytown not initialized", "error");
-          return;
-        }
         const parts = (args ?? "").trim().split(/\s+/);
         const eventId = parseInt(parts[0], 10);
         const worker = parts[1];
@@ -246,9 +224,8 @@ export default (pi: ExtensionAPI) => {
   });
 
   pi.on("session_shutdown", async () => {
-    if (db) {
-      pushEvent(db, "sys", "sys.lifecycle.finish");
-    }
+    pushEvent(db, "sys", "sys.lifecycle.finish");
+
     if (watcherCleanup) {
       await watcherCleanup();
       watcherCleanup = undefined;
@@ -257,9 +234,8 @@ export default (pi: ExtensionAPI) => {
       await system.stop();
       system = undefined;
     }
-    if (db) {
-      db.close();
-      db = undefined;
-    }
+
+    handle.db.close();
+    getOrOpenDb.cache.delete(dbPath);
   });
 };

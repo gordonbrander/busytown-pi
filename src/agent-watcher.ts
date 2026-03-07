@@ -1,8 +1,7 @@
 import { watch } from "chokidar"
 import path from "node:path"
-import type { DatabaseSync } from "node:sqlite"
 import { loadAgentDef } from "./agent.ts"
-import { pushEvent } from "./event-queue.ts"
+import { type DatabaseHandle, pushEvent } from "./event-queue.ts"
 import { makeAgentWorker } from "./pi-process.ts"
 import type { WorkerSystem } from "./worker.ts"
 
@@ -11,13 +10,12 @@ export type AgentWatcherCleanup = () => Promise<void>
 export const watchAgents = (
   agentsDir: string,
   system: WorkerSystem,
-  db: DatabaseSync,
-  dbPath: string,
+  handle: DatabaseHandle,
   projectRoot: string,
   cliBin: string,
 ): AgentWatcherCleanup => {
   const knownIds = new Set<string>()
-  const toWorker = makeAgentWorker(db, dbPath, projectRoot, cliBin)
+  const toWorker = makeAgentWorker(handle, projectRoot, cliBin)
 
   const watcher = watch(agentsDir, {
     ignoreInitial: true,
@@ -36,10 +34,10 @@ export const watchAgents = (
       system.spawn(toWorker(agent))
 
       const eventType = wasKnown ? "sys.agent.reload" : "sys.agent.create"
-      pushEvent(db, "sys", eventType, { agent_id: agent.id, path: filePath })
+      pushEvent(handle.db, "sys", eventType, { agent_id: agent.id, path: filePath })
     } catch (err) {
       const agentId = path.basename(filePath, ".md")
-      pushEvent(db, "sys", "sys.agent.error", {
+      pushEvent(handle.db, "sys", "sys.agent.error", {
         agent_id: agentId,
         path: filePath,
         error: err instanceof Error ? err.message : String(err),
@@ -53,7 +51,7 @@ export const watchAgents = (
     if (knownIds.has(agentId)) {
       await system.kill(agentId)
       knownIds.delete(agentId)
-      pushEvent(db, "sys", "sys.agent.remove", { agent_id: agentId, path: filePath })
+      pushEvent(handle.db, "sys", "sys.agent.remove", { agent_id: agentId, path: filePath })
     }
   }
 
