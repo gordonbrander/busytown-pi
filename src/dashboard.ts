@@ -81,7 +81,11 @@ const dashboardReducer = (
       const [, agentId, workerAction] = match;
       const existing = agents.get(agentId!);
       if (existing) {
-        const updated = applyWorkerEvent(existing, workerAction!, event.payload);
+        const updated = applyWorkerEvent(
+          existing,
+          workerAction!,
+          event.payload,
+        );
         if (updated !== existing) {
           // Copy-on-first-write
           if (agents === state.agents) agents = new Map(state.agents);
@@ -125,18 +129,22 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
       const detail = agent.eventType
         ? theme.fg("muted", `(${agent.eventType})`)
         : theme.fg("muted", "(running)");
-      parts.push(`${icon} ${name} ${(detail)}`);
+      parts.push(`${icon} ${name} ${detail}`);
     } else if (agent.status === "error") {
-      parts.push(`${theme.fg("error", "●")} ${name} ${theme.fg("error", "(error)")}`);
+      parts.push(
+        `${theme.fg("error", "●")} ${name} ${theme.fg("error", "(error)")}`,
+      );
     } else {
-      parts.push(`${theme.fg("dim", "○")} ${name} ${theme.fg("dim", "(idle)")}`);
+      parts.push(
+        `${theme.fg("dim", "○")} ${name} ${theme.fg("dim", "(idle)")}`,
+      );
     }
   }
 
   return [
     theme.fg("border", "─ ") +
-    theme.fg("muted", "busytown") +
-    theme.fg("border", " ─"),
+      theme.fg("muted", "busytown") +
+      theme.fg("border", " ─"),
     "  " + parts.join(theme.fg("border", " / ")),
   ];
 };
@@ -168,7 +176,7 @@ export const startWidget = (
       "busytown",
       (_tui: unknown, theme: Theme) => {
         const lines = buildWidgetLines(store.value, theme);
-        return { render: () => lines, invalidate: () => { } };
+        return { render: () => lines, invalidate: () => {} };
       },
       { placement: "aboveEditor" },
     );
@@ -276,9 +284,9 @@ export const registerEventLogCommand = (
               const rDash = Math.max(1, innerW - lDash - tagLen);
               lines.push(
                 theme.fg("border", "╭" + "─".repeat(lDash)) +
-                theme.fg("accent", theme.bold(title)) +
-                (filterTag ? theme.fg("dim", filterTag) : "") +
-                theme.fg("border", "─".repeat(rDash) + "╮"),
+                  theme.fg("accent", theme.bold(title)) +
+                  (filterTag ? theme.fg("dim", filterTag) : "") +
+                  theme.fg("border", "─".repeat(rDash) + "╮"),
               );
 
               // --- column sizing ---
@@ -296,9 +304,9 @@ export const registerEventLogCommand = (
               lines.push(
                 row(
                   theme.fg("muted", pad("TIME", COL_TIME)) +
-                  theme.fg("muted", pad("TYPE", colType)) +
-                  theme.fg("muted", pad("WORKER", COL_WORKER)) +
-                  theme.fg("muted", "PAYLOAD"),
+                    theme.fg("muted", pad("TYPE", colType)) +
+                    theme.fg("muted", pad("WORKER", COL_WORKER)) +
+                    theme.fg("muted", "PAYLOAD"),
                 ),
               );
 
@@ -344,18 +352,18 @@ export const registerEventLogCommand = (
                   theme.fg(
                     "dim",
                     `↑↓ scroll  g/G top/bottom  f toggle filter  esc close` +
-                    " ".repeat(
-                      Math.max(
-                        1,
-                        innerW -
-                        visibleWidth(
-                          "↑↓ scroll  g/G top/bottom  f toggle filter  esc close",
-                        ) -
-                        visibleWidth(pos) -
-                        2,
-                      ),
-                    ) +
-                    pos,
+                      " ".repeat(
+                        Math.max(
+                          1,
+                          innerW -
+                            visibleWidth(
+                              "↑↓ scroll  g/G top/bottom  f toggle filter  esc close",
+                            ) -
+                            visibleWidth(pos) -
+                            2,
+                        ),
+                      ) +
+                      pos,
                   ),
                 ),
               );
@@ -394,7 +402,7 @@ export const registerEventLogCommand = (
               tui.requestRender();
             },
 
-            invalidate(): void { },
+            invalidate(): void {},
           };
         },
         {
