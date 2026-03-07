@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
+import { type ArgsDef, parseArgs } from "citty";
 import {
   claimEvent,
   getClaimant,
@@ -14,6 +15,7 @@ import { createSystem, type WorkerSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
 import { type AgentWatcherCleanup, watchAgents } from "./agent-watcher.ts";
 import { nextTick } from "./utils.ts";
+import { shellSplit } from "./lib/shell-split.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -33,11 +35,11 @@ export default (pi: ExtensionAPI) => {
   const cliBin = resolveCliBin();
   const db = getOrOpenDb(dbPath);
 
-  let system: WorkerSystem | undefined;
+  const system = createSystem(db);
   let watcherCleanup: AgentWatcherCleanup | undefined;
 
   pi.on("session_start", async (_event: unknown, _ctx: unknown) => {
-    system = createSystem(db);
+    await nextTick();
 
     // Load agents with listen fields and spawn workers
     const agents = loadAllAgents(agentsDir);
@@ -145,23 +147,34 @@ export default (pi: ExtensionAPI) => {
 
     // Register commands (slash-command equivalents of the tools)
 
+    const pushArgs = {
+      type: {
+        type: "positional" as const,
+        description: "Event type",
+        required: true,
+      },
+      payload: {
+        type: "positional" as const,
+        description: "Event payload as JSON (default: {})",
+      },
+    } satisfies ArgsDef;
+
     pi.registerCommand("busytown-push", {
       description:
         "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json]",
-      handler: async (args, ctx) => {
-        const parts = (args ?? "").trim().split(/\s+/);
-        const type = parts[0];
-        if (!type) {
+      handler: async (raw, ctx) => {
+        await nextTick();
+        const args = parseArgs(shellSplit(raw ?? ""), pushArgs);
+        if (!args.type) {
           ctx.ui.notify(
             "Usage: /busytown-push <type> [payload-json]",
             "warning",
           );
           return;
         }
-        const payloadStr = parts.slice(1).join(" ") || "{}";
         try {
-          const payload = JSON.parse(payloadStr);
-          const event = pushEvent(db, "host", type, payload);
+          const payload = args.payload ? JSON.parse(args.payload) : {};
+          const event = pushEvent(db, "host", args.type, payload);
           ctx.ui.notify(
             `Pushed event #${event.id} (${event.type})`,
             "info",
@@ -172,16 +185,29 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
+    const eventsArgs = {
+      tail: {
+        type: "string" as const,
+        alias: "n",
+        description: "Number of recent events to show (default: 20)",
+      },
+      type: {
+        type: "string" as const,
+        alias: "t",
+        description: "Filter by event type",
+      },
+    } satisfies ArgsDef;
+
     pi.registerCommand("busytown-events", {
       description:
-        "List recent events from the Busytown event queue. Usage: /busytown-events [tail] [type-filter]",
-      handler: async (args, ctx) => {
-        const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
-        const tail = parts[0] ? parseInt(parts[0], 10) : 20;
-        const filterType = parts[1];
+        "List recent events from the Busytown event queue. Usage: /busytown-events [--tail N] [--type filter]",
+      handler: async (raw, ctx) => {
+        await nextTick();
+        const args = parseArgs(shellSplit(raw ?? ""), eventsArgs);
+        const tail = args.tail ? parseInt(args.tail, 10) : 20;
         const events = getEventsSince(db, {
           tail: isNaN(tail) ? 20 : tail,
-          filterType,
+          filterType: args.type,
         });
         if (events.length === 0) {
           ctx.ui.notify("No events found", "info");
@@ -197,21 +223,34 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
+    const claimArgs = {
+      event: {
+        type: "positional" as const,
+        description: "Event ID",
+        required: true,
+      },
+      worker: {
+        type: "positional" as const,
+        description: "Worker ID",
+        required: true,
+      },
+    } satisfies ArgsDef;
+
     pi.registerCommand("busytown-claim", {
       description:
         "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <worker-id>",
-      handler: async (args, ctx) => {
-        const parts = (args ?? "").trim().split(/\s+/);
-        const eventId = parseInt(parts[0], 10);
-        const worker = parts[1];
-        if (isNaN(eventId) || !worker) {
+      handler: async (raw, ctx) => {
+        await nextTick();
+        const args = parseArgs(shellSplit(raw ?? ""), claimArgs);
+        const eventId = parseInt(args.event, 10);
+        if (isNaN(eventId) || !args.worker) {
           ctx.ui.notify(
             "Usage: /busytown-claim <event-id> <worker-id>",
             "warning",
           );
           return;
         }
-        const claimed = claimEvent(db, worker, eventId);
+        const claimed = claimEvent(db, args.worker, eventId);
         const claimant = getClaimant(db, eventId);
         ctx.ui.notify(
           claimed
@@ -230,10 +269,7 @@ export default (pi: ExtensionAPI) => {
       await watcherCleanup();
       watcherCleanup = undefined;
     }
-    if (system) {
-      await system.stop();
-      system = undefined;
-    }
+    await system.stop();
 
     db.close();
     getOrOpenDb.cache.delete(dbPath);
