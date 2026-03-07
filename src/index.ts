@@ -112,19 +112,28 @@ export default (pi: ExtensionAPI) => {
       label: "Busytown Events",
       description: "List recent events from the Busytown event queue",
       parameters: Type.Object({
+        type: Type.Optional(
+          Type.String({ description: "Filter by event type" }),
+        ),
         tail: Type.Optional(
           Type.Integer({
             description: "Number of recent events to show (default: 20)",
           }),
         ),
-        type: Type.Optional(
-          Type.String({ description: "Filter by event type" }),
+        since: Type.Optional(
+          Type.Integer({
+            description:
+              "List events since this event ID (mutually exclusive with tail)",
+          }),
         ),
       }),
       async execute(_toolCallId, params) {
         await nextTick();
+        const sinceId = params.since as number | undefined;
         const events = getEventsSince(db, {
-          tail: (params.tail as number) ?? 20,
+          ...(sinceId != null
+            ? { sinceId }
+            : { tail: (params.tail as number) ?? 20 }),
           filterType: params.type as string,
         });
         const ljson = events.map((e) => JSON.stringify(e)).join("\n");
@@ -165,34 +174,39 @@ export default (pi: ExtensionAPI) => {
 
     // Register commands (slash-command equivalents of the tools)
 
-    const pushArgs = {
-      type: {
-        type: "positional" as const,
-        description: "Event type",
-        required: true,
-      },
-      payload: {
-        type: "positional" as const,
-        description: "Event payload as JSON (default: {})",
-      },
-    } satisfies ArgsDef;
-
     pi.registerCommand("busytown-push", {
       description:
-        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json]",
+        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json] [--worker name]",
       handler: async (raw, ctx) => {
         await nextTick();
-        const args = parseArgs(shellSplit(raw ?? ""), pushArgs);
+        const args = parseArgs(shellSplit(raw ?? ""), {
+          type: {
+            type: "positional" as const,
+            description: "Event type",
+            required: true,
+          },
+          worker: {
+            type: "string" as const,
+            alias: "w",
+            description: "Worker ID (default: user)",
+            default: "user",
+          },
+          payload: {
+            type: "positional" as const,
+            description: "Event payload as JSON (default: {})",
+            default: "{}",
+          },
+        });
         if (!args.type) {
           ctx.ui.notify(
-            "Usage: /busytown-push <type> [payload-json]",
+            "Usage: /busytown-push <type> [--worker name] [payload-json]",
             "warning",
           );
           return;
         }
         try {
-          const payload = args.payload ? JSON.parse(args.payload) : {};
-          const event = pushEvent(db, "host", args.type, payload);
+          const payload = JSON.parse(args.payload);
+          const event = pushEvent(db, args.worker, args.type, payload);
           ctx.ui.notify(`Pushed event #${event.id} (${event.type})`, "info");
         } catch (err) {
           ctx.ui.notify(`Invalid payload JSON: ${err}`, "error");
@@ -200,28 +214,34 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
-    const eventsArgs = {
-      tail: {
-        type: "string" as const,
-        alias: "n",
-        description: "Number of recent events to show (default: 20)",
-      },
-      type: {
-        type: "string" as const,
-        alias: "t",
-        description: "Filter by event type",
-      },
-    } satisfies ArgsDef;
-
     pi.registerCommand("busytown-events", {
       description:
-        "List recent events from the Busytown event queue. Usage: /busytown-events [--tail N] [--type filter]",
+        "List recent events from the Busytown event queue. Usage: /busytown-events [--type filter] [--since ID] [--tail N]",
       handler: async (raw, ctx) => {
         await nextTick();
-        const args = parseArgs(shellSplit(raw ?? ""), eventsArgs);
+        const args = parseArgs(shellSplit(raw ?? ""), {
+          type: {
+            type: "string" as const,
+            alias: "t",
+            description: "Filter by event type",
+          },
+          since: {
+            type: "string" as const,
+            alias: "s",
+            description: "List events since this event ID",
+          },
+          tail: {
+            type: "string" as const,
+            alias: "n",
+            description: "Number of recent events to show (default: 20)",
+          },
+        });
+        const sinceId = args.since ? parseInt(args.since, 10) : undefined;
         const tail = args.tail ? parseInt(args.tail, 10) : 20;
         const events = getEventsSince(db, {
-          tail: isNaN(tail) ? 20 : tail,
+          ...(sinceId && !isNaN(sinceId)
+            ? { sinceId }
+            : { tail: isNaN(tail) ? 20 : tail }),
           filterType: args.type,
         });
         if (events.length === 0) {
@@ -233,25 +253,23 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
-    const claimArgs = {
-      event: {
-        type: "positional" as const,
-        description: "Event ID",
-        required: true,
-      },
-      worker: {
-        type: "positional" as const,
-        description: "Worker ID",
-        required: true,
-      },
-    } satisfies ArgsDef;
-
     pi.registerCommand("busytown-claim", {
       description:
         "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <worker-id>",
       handler: async (raw, ctx) => {
         await nextTick();
-        const args = parseArgs(shellSplit(raw ?? ""), claimArgs);
+        const args = parseArgs(shellSplit(raw ?? ""), {
+          event: {
+            type: "positional" as const,
+            description: "Event ID",
+            required: true,
+          },
+          worker: {
+            type: "positional" as const,
+            description: "Worker ID",
+            required: true,
+          },
+        });
         const eventId = parseInt(args.event, 10);
         if (isNaN(eventId) || !args.worker) {
           ctx.ui.notify(
