@@ -1,14 +1,15 @@
 # busytown-pi
 
-_A town full of busy little guys who do things — now as a Pi extension._
+_A town full of busy little guys who do things_
 
-**busytown** is a multi-agent coordination framework built around a shared
-SQLite event queue.
+**busytown** is a multi-agent framework built around a shared
+SQLite event queue. It can be used standalone, or as a [Pi](https://github.com/nichochar/pi-coding-agent)
+extension.
 
-It can be used standalone, or as a [Pi](https://github.com/nichochar/pi-coding-agent)
-extension. Each agent is a separate subprocess. Agents listen for events,
-react to them, and push new events, forming an asynchronous pipeline where no
+Agents listen for events, react to them, and push new events, forming an asynchronous pipeline where no
 agent needs to know about any other agent — only about the events.
+
+<p><img src="./busytown.png" src="A town full of busy little guys who do things" /></p>
 
 ## How it works
 
