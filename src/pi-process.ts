@@ -1,15 +1,19 @@
-import { spawn, type ChildProcess } from "node:child_process"
-import { createInterface } from "node:readline"
-import fs from "node:fs"
-import path from "node:path"
-import type { DatabaseSync } from "node:sqlite"
-import type { Event } from "./lib/event.ts"
-import type { PiAgentDef, ShellAgentDef, AgentDef } from "./agent.ts"
-import { pushEvent } from "./event-queue.ts"
-import { renderTemplate } from "./lib/template.ts"
-import { worker, type Worker } from "./worker.ts"
+import { type ChildProcess, spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import fs from "node:fs";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import type { Event } from "./lib/event.ts";
+import type { AgentDef, PiAgentDef, ShellAgentDef } from "./agent.ts";
+import { pushEvent } from "./event-queue.ts";
+import { renderTemplate } from "./lib/template.ts";
+import { type Worker, worker } from "./worker.ts";
 
-const buildSystemPrompt = (agent: PiAgentDef, dbPath: string, cliBin: string): string => {
+const buildSystemPrompt = (
+  agent: PiAgentDef,
+  dbPath: string,
+  cliBin: string,
+): string => {
   const lines = [
     `You are the "${agent.id}" agent. ${agent.description}`,
     "",
@@ -29,14 +33,14 @@ const buildSystemPrompt = (agent: PiAgentDef, dbPath: string, cliBin: string): s
     "",
     "If the claim returns `false`, another agent has already claimed it — skip the event.",
     "",
-  ]
+  ];
 
   if (agent.body) {
-    lines.push("## Agent instructions", "", agent.body)
+    lines.push("## Agent instructions", "", agent.body);
   }
 
-  return lines.join("\n")
-}
+  return lines.join("\n");
+};
 
 const writeSystemPromptFile = (
   agent: PiAgentDef,
@@ -44,12 +48,12 @@ const writeSystemPromptFile = (
   cliBin: string,
   projectRoot: string,
 ): string => {
-  const dir = path.join(projectRoot, ".busytown")
-  fs.mkdirSync(dir, { recursive: true })
-  const filePath = path.join(dir, `system-prompt-${agent.id}.md`)
-  fs.writeFileSync(filePath, buildSystemPrompt(agent, dbPath, cliBin))
-  return filePath
-}
+  const dir = path.join(projectRoot, ".busytown");
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `system-prompt-${agent.id}.md`);
+  fs.writeFileSync(filePath, buildSystemPrompt(agent, dbPath, cliBin));
+  return filePath;
+};
 
 const pipeLinesToEvents = (
   child: ChildProcess,
@@ -58,85 +62,161 @@ const pipeLinesToEvents = (
   workerId: string,
   eventType: string,
 ): void => {
-  const readable = child[stream]
-  if (!readable) return
-  const rl = createInterface({ input: readable })
+  const readable = child[stream];
+  if (!readable) return;
+  const rl = createInterface({ input: readable });
   rl.on("line", (line) => {
-    pushEvent(db, workerId, eventType, { line })
-  })
-}
+    pushEvent(db, workerId, eventType, { line });
+  });
+};
 
-export const runPiAgent = (
-  agent: PiAgentDef,
-  event: Event,
-  db: DatabaseSync,
-  projectRoot: string,
-  cliBin: string,
-): Promise<number> => {
-  const systemPromptFile = writeSystemPromptFile(agent, db.location()!, cliBin, projectRoot)
+type RunPiAgentArgs = {
+  agent: PiAgentDef;
+  event: Event;
+  db: DatabaseSync;
+  projectRoot: string;
+  cliBin: string;
+  abortSignal?: AbortSignal;
+};
+
+export const runPiAgent = ({
+  agent,
+  event,
+  db,
+  projectRoot,
+  cliBin,
+  abortSignal,
+}: RunPiAgentArgs): Promise<number> => {
+  const systemPromptFile = writeSystemPromptFile(
+    agent,
+    db.location()!,
+    cliBin,
+    projectRoot,
+  );
 
   const args = [
-    "--mode", "json",
+    "--mode",
+    "json",
     "-p",
     "--no-session",
-    "--append-system-prompt", systemPromptFile,
-  ]
+    "--append-system-prompt",
+    systemPromptFile,
+  ];
 
   if (agent.model) {
-    args.push("--model", agent.model)
+    args.push("--model", agent.model);
   }
 
   if (agent.tools.length > 0) {
-    args.push("--tools", agent.tools.join(","))
+    args.push("--tools", agent.tools.join(","));
   }
 
   return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      resolve(1);
+      return;
+    }
+
     const child = spawn("pi", args, {
       cwd: projectRoot,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
-    })
+    });
 
-    pipeLinesToEvents(child, "stdout", db, agent.id, `sys.worker.${agent.id}.stdout`)
-    pipeLinesToEvents(child, "stderr", db, agent.id, `sys.worker.${agent.id}.stderr`)
+    const onAbort = (): void => {
+      child.kill("SIGTERM");
+    };
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    pipeLinesToEvents(
+      child,
+      "stdout",
+      db,
+      agent.id,
+      `sys.worker.${agent.id}.stdout`,
+    );
+    pipeLinesToEvents(
+      child,
+      "stderr",
+      db,
+      agent.id,
+      `sys.worker.${agent.id}.stderr`,
+    );
 
     // Write event JSON as the task prompt on stdin
-    child.stdin?.write(JSON.stringify(event))
-    child.stdin?.end()
+    child.stdin?.write(JSON.stringify(event));
+    child.stdin?.end();
 
-    child.on("error", reject)
-    child.on("close", (code) => resolve(code ?? 1))
-  })
-}
+    child.on("error", reject);
+    child.on("close", (code) => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve(code ?? 1);
+    });
+  });
+};
 
-export const runShellAgent = (
-  agent: ShellAgentDef,
-  event: Event,
-  projectRoot: string,
-  db: DatabaseSync,
-): Promise<number> => {
-  const rendered = renderTemplate(agent.body, { event })
+type RunShellAgentArgs = {
+  agent: ShellAgentDef;
+  event: Event;
+  db: DatabaseSync;
+  projectRoot: string;
+  abortSignal?: AbortSignal;
+};
+
+export const runShellAgent = ({
+  agent,
+  event,
+  db,
+  projectRoot,
+  abortSignal,
+}: RunShellAgentArgs): Promise<number> => {
+  const rendered = renderTemplate(agent.body, { event });
 
   return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      resolve(1);
+      return;
+    }
+
     const child = spawn("sh", ["-c", rendered], {
       cwd: projectRoot,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env },
-    })
+    });
 
-    pipeLinesToEvents(child, "stdout", db, agent.id, `sys.worker.${agent.id}.stdout`)
-    pipeLinesToEvents(child, "stderr", db, agent.id, `sys.worker.${agent.id}.stderr`)
+    const onAbort = (): void => {
+      child.kill("SIGTERM");
+    };
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    child.on("error", reject)
-    child.on("close", (code) => resolve(code ?? 1))
-  })
-}
+    pipeLinesToEvents(
+      child,
+      "stdout",
+      db,
+      agent.id,
+      `sys.worker.${agent.id}.stdout`,
+    );
+    pipeLinesToEvents(
+      child,
+      "stderr",
+      db,
+      agent.id,
+      `sys.worker.${agent.id}.stderr`,
+    );
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve(code ?? 1);
+    });
+  });
+};
 
 export const makeAgentWorker = (
   db: DatabaseSync,
   projectRoot: string,
   cliBin: string,
-): ((agent: AgentDef) => Worker) => {
+): (agent: AgentDef) => Worker => {
   return (agent: AgentDef): Worker =>
     worker({
       id: agent.id,
@@ -144,11 +224,23 @@ export const makeAgentWorker = (
       ignoreSelf: agent.ignoreSelf,
       run: async (event, { abortSignal }) => {
         if (agent.type === "pi") {
-          await runPiAgent(agent, event, db, projectRoot, cliBin)
+          await runPiAgent({
+            agent,
+            event,
+            db,
+            projectRoot,
+            cliBin,
+            abortSignal,
+          });
         } else {
-          await runShellAgent(agent, event, projectRoot, db)
+          await runShellAgent({
+            agent,
+            event,
+            db,
+            projectRoot,
+            abortSignal,
+          });
         }
-        // If aborted during run, that's fine — the process already completed or was killed
       },
-    })
-}
+    });
+};
