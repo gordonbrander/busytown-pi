@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value"
 import matter from "gray-matter"
 import fs from "node:fs"
 import path from "node:path"
-import { pathToSlug } from "./slug.ts"
+import { pathToSlug } from "./lib/slug.ts"
 
 const AgentFrontmatterSchema = Type.Object({
   name: Type.Optional(Type.String()),

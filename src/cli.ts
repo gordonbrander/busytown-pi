@@ -13,7 +13,7 @@ import { loadAllAgents } from "./agent.ts";
 import { createSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
 import { watchAgents } from "./agent-watcher.ts";
-import { forever } from "./utils.ts";
+import { forever } from "./lib/promise.ts";
 
 // -- Shared arg definitions --------------------------------------------------
 

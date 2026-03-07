@@ -3,10 +3,10 @@ import { createInterface } from "node:readline"
 import fs from "node:fs"
 import path from "node:path"
 import type { DatabaseSync } from "node:sqlite"
-import type { Event } from "./event.ts"
+import type { Event } from "./lib/event.ts"
 import type { PiAgentDef, ShellAgentDef, AgentDef } from "./agent.ts"
 import { pushEvent } from "./event-queue.ts"
-import { renderTemplate } from "./template.ts"
+import { renderTemplate } from "./lib/template.ts"
 import { worker, type Worker } from "./worker.ts"
 
 const buildSystemPrompt = (agent: PiAgentDef, dbPath: string, cliBin: string): string => {

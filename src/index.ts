@@ -11,11 +11,11 @@ import {
 } from "./event-queue.ts";
 
 import { loadAllAgents } from "./agent.ts";
-import { createSystem, type WorkerSystem } from "./worker.ts";
+import { createSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
 import { type AgentWatcherCleanup, watchAgents } from "./agent-watcher.ts";
-import { nextTick } from "./utils.ts";
-import { shellSplit } from "./lib/shell-split.ts";
+import { nextTick } from "./lib/promise.ts";
+import { shellSplit } from "./lib/shell.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");

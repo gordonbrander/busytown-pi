@@ -2,7 +2,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { memoize } from "./lib/memoize.ts";
-import type { Event, RawEventRow } from "./event.ts";
+import type { Event, RawEventRow } from "./lib/event.ts";
 
 const SCHEMA = `
   PRAGMA journal_mode = WAL;

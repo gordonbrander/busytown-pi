@@ -1,13 +1,13 @@
 import type { DatabaseSync } from "node:sqlite"
-import type { Event } from "./event.ts"
-import { eventMatches } from "./event.ts"
+import type { Event } from "./lib/event.ts"
+import { eventMatches } from "./lib/event.ts"
 import {
   getOrCreateCursor,
   getNextEvent,
   updateCursor,
   pushEvent,
 } from "./event-queue.ts"
-import { abortableSleep, nextTick } from "./utils.ts"
+import { abortableSleep, nextTick } from "./lib/promise.ts"
 
 export type EffectContext = {
   abortSignal: AbortSignal

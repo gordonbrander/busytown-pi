@@ -1,6 +1,6 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
-import { abortableSleep, nextTick } from "./utils.ts"
+import { abortableSleep, nextTick } from "./promise.ts"
 
 describe("abortableSleep", () => {
   it("resolves after delay", async () => {

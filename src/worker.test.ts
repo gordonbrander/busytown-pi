@@ -2,7 +2,7 @@ import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { openDb, pushEvent } from "./event-queue.ts"
 import { createSystem, worker } from "./worker.ts"
-import type { Event } from "./event.ts"
+import type { Event } from "./lib/event.ts"
 
 const createTestDb = () => openDb(":memory:")
 
