@@ -11,9 +11,10 @@ import {
 } from "./event-queue.ts";
 
 import { loadAllAgents } from "./agent.ts";
-import { createSystem } from "./worker.ts";
+import { getOrCreateSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
-import { type AgentWatcherCleanup, watchAgents } from "./agent-watcher.ts";
+import { watchAgents } from "./agent-watcher.ts";
+import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
 
@@ -33,13 +34,22 @@ export default (pi: ExtensionAPI) => {
   const dbPath = resolveDbPath(projectRoot);
   const agentsDir = resolveAgentsDir(projectRoot);
   const cliBin = resolveCliBin();
-  const db = getOrOpenDb(dbPath);
-
-  const system = createSystem(db);
-  let watcherCleanup: AgentWatcherCleanup | undefined;
+  const sessionCleanup = cleanupGroupAsync();
 
   pi.on("session_start", async (_event: unknown, _ctx: unknown) => {
     await nextTick();
+
+    const db = getOrOpenDb(dbPath);
+    sessionCleanup.add(() => {
+      db.close();
+      getOrOpenDb.cache.delete(dbPath);
+    });
+
+    const system = getOrCreateSystem("pi", db, 1000);
+    sessionCleanup.add(async () => {
+      await system.stop();
+      getOrCreateSystem.cache.delete("pi");
+    });
 
     // Load agents with listen fields and spawn workers
     const agents = loadAllAgents(agentsDir);
@@ -55,13 +65,14 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Start watching for agent file changes
-    watcherCleanup = watchAgents(
+    const stopWatcher = watchAgents(
       db,
       agentsDir,
       system,
       projectRoot,
       cliBin,
     );
+    sessionCleanup.add(stopWatcher);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
 
@@ -263,15 +274,8 @@ export default (pi: ExtensionAPI) => {
   });
 
   pi.on("session_shutdown", async () => {
+    const db = getOrOpenDb(dbPath);
     pushEvent(db, "sys", "sys.lifecycle.finish");
-
-    if (watcherCleanup) {
-      await watcherCleanup();
-      watcherCleanup = undefined;
-    }
-    await system.stop();
-
-    db.close();
-    getOrOpenDb.cache.delete(dbPath);
+    await sessionCleanup();
   });
 };
