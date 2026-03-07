@@ -8,6 +8,7 @@ import type {
 import type { AgentDef } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
 import { getEventsSince } from "./event-queue.ts";
+import { storeOf } from "./lib/store.ts";
 import {
   matchesKey,
   truncateToWidth,
@@ -29,6 +30,11 @@ type DashboardState = {
   lastSeenId: number;
 };
 
+type DashboardAction = {
+  type: "events";
+  events: Event[];
+};
+
 // ---------------------------------------------------------------------------
 // Event helpers
 // ---------------------------------------------------------------------------
@@ -40,30 +46,56 @@ const isSysNoise = (type: string): boolean =>
   type.endsWith(".stdout") ||
   type.endsWith(".stderr");
 
-const updateAgentStates = (state: DashboardState, events: Event[]): boolean => {
-  let changed = false;
-  for (const event of events) {
+const applyWorkerEvent = (
+  agent: AgentState,
+  action: string,
+  payload: unknown,
+): AgentState => {
+  if (action === "start") {
+    return {
+      ...agent,
+      status: "running",
+      eventType: (payload as Record<string, unknown>)?.event_type as
+        | string
+        | undefined,
+    };
+  }
+  if (action === "finish") {
+    return { ...agent, status: "idle", eventType: undefined };
+  }
+  if (action === "error") {
+    return { ...agent, status: "error" };
+  }
+  return agent;
+};
+
+const dashboardReducer = (
+  state: DashboardState,
+  action: DashboardAction,
+): DashboardState => {
+  let agents = state.agents;
+
+  for (const event of action.events) {
     const match = event.type.match(WORKER_EVENT_RE);
     if (match) {
-      const [, agentId, action] = match;
-      const agent = state.agents.get(agentId!);
-      if (agent) {
-        changed = true;
-        if (action === "start") {
-          agent.status = "running";
-          agent.eventType = (event.payload as Record<string, unknown>)
-            ?.event_type as string | undefined;
-        } else if (action === "finish") {
-          agent.status = "idle";
-          agent.eventType = undefined;
-        } else if (action === "error") {
-          agent.status = "error";
+      const [, agentId, workerAction] = match;
+      const existing = agents.get(agentId!);
+      if (existing) {
+        const updated = applyWorkerEvent(existing, workerAction!, event.payload);
+        if (updated !== existing) {
+          // Copy-on-first-write
+          if (agents === state.agents) agents = new Map(state.agents);
+          agents.set(agentId!, updated);
         }
       }
     }
-    state.lastSeenId = event.id;
   }
-  return changed;
+
+  const lastSeenId = action.events[action.events.length - 1]!.id;
+
+  return agents === state.agents && lastSeenId === state.lastSeenId
+    ? state
+    : { agents, lastSeenId };
 };
 
 // ---------------------------------------------------------------------------
@@ -87,28 +119,25 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
 
   const parts: string[] = [];
   for (const agent of state.agents.values()) {
-    let icon: string;
-    let detail: string;
+    const name = theme.fg("text", agent.id);
     if (agent.status === "running") {
-      icon = theme.fg("accent", "●");
-      detail = agent.eventType
-        ? theme.fg("muted", agent.eventType)
-        : theme.fg("muted", "running");
+      const icon = theme.fg("accent", "●");
+      const detail = agent.eventType
+        ? theme.fg("muted", `(${agent.eventType})`)
+        : theme.fg("muted", "(running)");
+      parts.push(`${icon} ${name} ${(detail)}`);
     } else if (agent.status === "error") {
-      icon = theme.fg("error", "●");
-      detail = theme.fg("error", "error");
+      parts.push(`${theme.fg("error", "●")} ${name} ${theme.fg("error", "(error)")}`);
     } else {
-      icon = theme.fg("dim", "○");
-      detail = theme.fg("dim", "idle");
+      parts.push(`${theme.fg("dim", "○")} ${name} ${theme.fg("dim", "(idle)")}`);
     }
-    parts.push(`${icon} ${theme.fg("text", agent.id)} ${detail}`);
   }
 
   return [
     theme.fg("border", "─ ") +
-      theme.fg("muted", "busytown") +
-      theme.fg("border", " ─"),
-    "  " + parts.join(theme.fg("border", "  │  ")),
+    theme.fg("muted", "busytown") +
+    theme.fg("border", " ─"),
+    "  " + parts.join(theme.fg("border", " / ")),
   ];
 };
 
@@ -122,27 +151,26 @@ export const startWidget = (
   agents: AgentDef[],
   ctx: ExtensionContext,
 ): (() => void) => {
-  const state: DashboardState = {
+  const tip = getEventsSince(db, { tail: 1 });
+  const initialLastSeenId = tip.length > 0 ? tip[0]!.id : 0;
+
+  const store = storeOf(dashboardReducer, {
     agents: new Map(
       agents
         .filter((a) => a.listen.length > 0)
         .map((a) => [a.id, { id: a.id, status: "idle" as const }]),
     ),
-    lastSeenId: 0,
-  };
-
-  // Seed cursor to current tip so we only track new events
-  const tip = getEventsSince(db, { tail: 1 });
-  if (tip.length > 0) state.lastSeenId = tip[0]!.id;
+    lastSeenId: initialLastSeenId,
+  });
 
   const apply = (): void => {
     ctx.ui.setWidget(
       "busytown",
       (_tui: unknown, theme: Theme) => {
-        const lines = buildWidgetLines(state, theme);
-        return { render: () => lines, invalidate: () => {} };
+        const lines = buildWidgetLines(store.value, theme);
+        return { render: () => lines, invalidate: () => { } };
       },
-      { placement: "belowEditor" },
+      { placement: "aboveEditor" },
     );
   };
 
@@ -150,12 +178,13 @@ export const startWidget = (
 
   const interval = setInterval(() => {
     const events = getEventsSince(db, {
-      sinceId: state.lastSeenId,
+      sinceId: store.value.lastSeenId,
       limit: 200,
     });
-    if (events.length > 0 && updateAgentStates(state, events)) {
-      apply();
-    }
+    if (events.length === 0) return;
+    const prev = store.value;
+    store.send({ type: "events", events });
+    if (store.value !== prev) apply();
   }, 500);
 
   return () => clearInterval(interval);
@@ -247,9 +276,9 @@ export const registerEventLogCommand = (
               const rDash = Math.max(1, innerW - lDash - tagLen);
               lines.push(
                 theme.fg("border", "╭" + "─".repeat(lDash)) +
-                  theme.fg("accent", theme.bold(title)) +
-                  (filterTag ? theme.fg("dim", filterTag) : "") +
-                  theme.fg("border", "─".repeat(rDash) + "╮"),
+                theme.fg("accent", theme.bold(title)) +
+                (filterTag ? theme.fg("dim", filterTag) : "") +
+                theme.fg("border", "─".repeat(rDash) + "╮"),
               );
 
               // --- column sizing ---
@@ -267,9 +296,9 @@ export const registerEventLogCommand = (
               lines.push(
                 row(
                   theme.fg("muted", pad("TIME", COL_TIME)) +
-                    theme.fg("muted", pad("TYPE", colType)) +
-                    theme.fg("muted", pad("WORKER", COL_WORKER)) +
-                    theme.fg("muted", "PAYLOAD"),
+                  theme.fg("muted", pad("TYPE", colType)) +
+                  theme.fg("muted", pad("WORKER", COL_WORKER)) +
+                  theme.fg("muted", "PAYLOAD"),
                 ),
               );
 
@@ -315,18 +344,18 @@ export const registerEventLogCommand = (
                   theme.fg(
                     "dim",
                     `↑↓ scroll  g/G top/bottom  f toggle filter  esc close` +
-                      " ".repeat(
-                        Math.max(
-                          1,
-                          innerW -
-                            visibleWidth(
-                              "↑↓ scroll  g/G top/bottom  f toggle filter  esc close",
-                            ) -
-                            visibleWidth(pos) -
-                            2,
-                        ),
-                      ) +
-                      pos,
+                    " ".repeat(
+                      Math.max(
+                        1,
+                        innerW -
+                        visibleWidth(
+                          "↑↓ scroll  g/G top/bottom  f toggle filter  esc close",
+                        ) -
+                        visibleWidth(pos) -
+                        2,
+                      ),
+                    ) +
+                    pos,
                   ),
                 ),
               );
@@ -365,7 +394,7 @@ export const registerEventLogCommand = (
               tui.requestRender();
             },
 
-            invalidate(): void {},
+            invalidate(): void { },
           };
         },
         {
