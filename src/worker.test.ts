@@ -4,7 +4,7 @@ import { openDb, pushEvent } from "./event-queue.ts"
 import { createSystem, worker } from "./worker.ts"
 import type { Event } from "./event.ts"
 
-const createTestDb = () => openDb(":memory:").db
+const createTestDb = () => openDb(":memory:")
 
 describe("worker", () => {
   it("creates a worker with defaults", () => {

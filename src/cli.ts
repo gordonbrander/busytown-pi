@@ -68,12 +68,12 @@ const startCommand = defineCommand({
     const projectRoot = resolveProjectRoot(args.dir);
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
     const cliBin = resolveCliBin();
-    const handle = resolveDb(args.dir, args.db);
+    const db = resolveDb(args.dir, args.db);
 
-    const system = createSystem(handle.db);
+    const system = createSystem(db);
 
     const agents = loadAllAgents(agentsDir);
-    const toWorker = makeAgentWorker(handle, projectRoot, cliBin);
+    const toWorker = makeAgentWorker(db, projectRoot, cliBin);
     let spawned = 0;
 
     for (const agent of agents) {
@@ -92,27 +92,27 @@ const startCommand = defineCommand({
     }
 
     const stopWatcher = watchAgents(
+      db,
       agentsDir,
       system,
-      handle,
       projectRoot,
       cliBin,
     );
 
-    pushEvent(handle.db, "sys", "sys.lifecycle.start");
+    pushEvent(db, "sys", "sys.lifecycle.start");
     console.log(
       `\nBusytown started (${spawned} agent${spawned === 1 ? "" : "s"})`,
     );
-    console.log(`  db:     ${handle.path}`);
+    console.log(`  db:     ${db.location()}`);
     console.log(`  agents: ${agentsDir}`);
     console.log(`\nWatching for agent changes. Press Ctrl+C to stop.\n`);
 
     const shutdown = async () => {
       console.log("\nShutting down...");
-      pushEvent(handle.db, "sys", "sys.lifecycle.finish");
+      pushEvent(db, "sys", "sys.lifecycle.finish");
       await stopWatcher();
       await system.stop();
-      handle.db.close();
+      db.close();
       process.exit(0);
     };
 
@@ -143,7 +143,7 @@ const pushCommand = defineCommand({
     },
   },
   run: ({ args }) => {
-    const { db } = resolveDb(args.dir, args.db);
+    const db = resolveDb(args.dir, args.db);
     try {
       const payload = args.payload ? JSON.parse(args.payload) : {};
       const event = pushEvent(db, args.worker, args.type, payload);
@@ -168,7 +168,7 @@ const eventsCommand = defineCommand({
     },
   },
   run: ({ args }) => {
-    const { db } = resolveDb(args.dir, args.db);
+    const db = resolveDb(args.dir, args.db);
     try {
       const tail = args.tail ? parseInt(args.tail, 10) : 20;
       const events = getEventsSince(db, {
@@ -234,7 +234,7 @@ const claimCommand = defineCommand({
     },
   },
   run: ({ args }) => {
-    const { db } = resolveDb(args.dir, args.db);
+    const db = resolveDb(args.dir, args.db);
     try {
       const claimed = claimEvent(db, args.worker, parseInt(args.event, 10));
       const claimant = getClaimant(db, parseInt(args.event, 10));
@@ -256,7 +256,7 @@ const checkClaimCommand = defineCommand({
     },
   },
   run: ({ args }) => {
-    const { db } = resolveDb(args.dir, args.db);
+    const db = resolveDb(args.dir, args.db);
     try {
       const claimant = getClaimant(db, parseInt(args.event, 10));
       console.log(JSON.stringify({ claimant: claimant ?? null }));

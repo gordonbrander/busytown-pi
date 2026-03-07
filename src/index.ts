@@ -8,6 +8,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
+
 import { loadAllAgents } from "./agent.ts";
 import { createSystem, type WorkerSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
@@ -30,8 +31,7 @@ export default (pi: ExtensionAPI) => {
   const dbPath = resolveDbPath(projectRoot);
   const agentsDir = resolveAgentsDir(projectRoot);
   const cliBin = resolveCliBin();
-  const handle = getOrOpenDb(dbPath);
-  const db = handle.db;
+  const db = getOrOpenDb(dbPath);
 
   let system: WorkerSystem | undefined;
   let watcherCleanup: AgentWatcherCleanup | undefined;
@@ -41,7 +41,7 @@ export default (pi: ExtensionAPI) => {
 
     // Load agents with listen fields and spawn workers
     const agents = loadAllAgents(agentsDir);
-    const toWorker = makeAgentWorker(handle, projectRoot, cliBin);
+    const toWorker = makeAgentWorker(db, projectRoot, cliBin);
 
     for (const agent of agents) {
       if (agent.listen.length === 0) continue;
@@ -54,9 +54,9 @@ export default (pi: ExtensionAPI) => {
 
     // Start watching for agent file changes
     watcherCleanup = watchAgents(
+      db,
       agentsDir,
       system,
-      handle,
       projectRoot,
       cliBin,
     );
@@ -235,7 +235,7 @@ export default (pi: ExtensionAPI) => {
       system = undefined;
     }
 
-    handle.db.close();
+    db.close();
     getOrOpenDb.cache.delete(dbPath);
   });
 };

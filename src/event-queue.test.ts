@@ -14,7 +14,7 @@ import {
   updateCursor,
 } from "./event-queue.ts";
 
-const createTestDb = (): DatabaseSync => openDb(":memory:").db;
+const createTestDb = (): DatabaseSync => openDb(":memory:");
 
 describe("pushEvent", () => {
   it("inserts an event and returns it with an id", () => {
