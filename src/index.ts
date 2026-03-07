@@ -1,4 +1,7 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
 import { type ArgsDef, parseArgs } from "citty";
@@ -17,6 +20,7 @@ import { watchAgents } from "./agent-watcher.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
+import { startWidget, registerEventLogCommand } from "./dashboard.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -36,7 +40,7 @@ export default (pi: ExtensionAPI) => {
   const cliBin = resolveCliBin();
   const sessionCleanup = cleanupGroupAsync();
 
-  pi.on("session_start", async (_event: unknown, _ctx: unknown) => {
+  pi.on("session_start", async (_event: unknown, ctx: unknown) => {
     await nextTick();
 
     const db = getOrOpenDb(dbPath);
@@ -69,6 +73,13 @@ export default (pi: ExtensionAPI) => {
     sessionCleanup.add(stopWatcher);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
+
+    // Start the dashboard widget (agent status below editor)
+    const stopWidget = startWidget(db, agents, ctx as ExtensionContext);
+    sessionCleanup.add(stopWidget);
+
+    // Register /busytown overlay command
+    registerEventLogCommand(pi, db);
 
     // Register tools
     pi.registerTool({
