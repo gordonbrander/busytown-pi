@@ -40,7 +40,7 @@ export default (pi: ExtensionAPI) => {
   const cliBin = resolveCliBin();
   const sessionCleanup = cleanupGroupAsync();
 
-  pi.on("session_start", async (_event: unknown, ctx: unknown) => {
+  pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
     await nextTick();
 
     const db = getOrOpenDb(dbPath);
@@ -75,7 +75,7 @@ export default (pi: ExtensionAPI) => {
     pushEvent(db, "sys", "sys.lifecycle.start");
 
     // Start the dashboard widget (agent status below editor)
-    const stopWidget = startWidget(db, agents, ctx as ExtensionContext);
+    const stopWidget = startWidget(db, agents, ctx);
     sessionCleanup.add(stopWidget);
 
     // Register /busytown overlay command
