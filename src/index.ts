@@ -4,7 +4,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
-import { type ArgsDef, parseArgs } from "citty";
+import { parseArgs } from "citty";
 import {
   claimEvent,
   getClaimant,
