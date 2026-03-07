@@ -9,6 +9,7 @@ The core value being ported: **decoupled event-driven agents** — each agent on
 ## Architecture
 
 A single Pi extension that:
+
 1. Manages a SQLite event queue (ported from Busytown)
 2. Discovers agents from `.pi/agents/*.md` that have `listen` fields
 3. Runs background worker loops that poll the queue and spawn `pi` subprocesses
@@ -34,18 +35,17 @@ Merges Pi conventions with Busytown's `listen` pattern:
 ---
 name: plan
 description: Explores the codebase and writes implementation plans
-type: pi              # "pi" (default) or "shell"
+type: pi # "pi" (default) or "shell"
 listen:
   - plan.request
   - review.created
 emits:
   - plan.created
   - plan.complete
-ignore_self: true     # default: true
+ignore_self: true # default: true
 tools: read, grep, glob, write, bash
 model: claude-sonnet-4-5
 ---
-
 [System prompt body]
 ```
 
@@ -90,6 +90,7 @@ The CLI is bundled with the extension. The system prompt injected into each subp
 ### SQLite concurrent access
 
 Multiple processes (host Pi + spawned agent subprocesses) read/write the same SQLite file. Safe because:
+
 - WAL mode enabled
 - 5s busy timeout
 - All writes are small single INSERTs

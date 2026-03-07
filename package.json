@@ -11,13 +11,21 @@
     "@mariozechner/pi-coding-agent": "^0.56.1",
     "@sinclair/typebox": "^0.34.48",
     "chokidar": "^4.0.0",
+    "citty": "^0.2.1",
     "gray-matter": "^4.0.3"
   },
   "scripts": {
-    "test": "node --test 'src/**/*.test.ts'"
+    "test": "node --test 'src/**/*.test.ts'",
+    "lint": "eslint 'src/**/*.ts'",
+    "format:check": "prettier --check .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "eslint": "^10.0.3",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.56.1"
   }
 }
