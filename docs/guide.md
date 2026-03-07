@@ -136,7 +136,7 @@ When you receive a `task.created` event, read the file at
 | `listen` | string[] | `[]` | Event patterns to listen for |
 | `ignore_self` | boolean | `true` | Ignore events this agent emitted |
 | `emits` | string[] | `[]` | Event types this agent can emit (documentation only) |
-| `tools` | string \| string[] | `[]` | Pi tools available to the agent |
+| `tools` | string \| string[] | `[]` | Pi tools available to the agent (lowercase names, e.g., `read`, `bash`) |
 | `model` | string | — | Model override (e.g., `"opus"`, `"sonnet"`) |
 
 ### Agent types
@@ -296,10 +296,10 @@ emits:
   - "plan.created"
   - "plan.complete"
 tools:
-  - Read
-  - Grep
-  - Glob
-  - Write
+  - read
+  - grep
+  - glob
+  - write
 ---
 
 When you receive a `plan.request` event, read the file at
@@ -324,11 +324,11 @@ listen:
 emits:
   - "code.review"
 tools:
-  - Read
-  - Grep
-  - Glob
-  - Edit
-  - Write
+  - read
+  - grep
+  - glob
+  - edit
+  - write
 ---
 
 When you receive a `plan.created` event:
@@ -351,10 +351,10 @@ listen:
 emits:
   - "review.created"
 tools:
-  - Read
-  - Grep
-  - Glob
-  - Write
+  - read
+  - grep
+  - glob
+  - write
 ---
 
 When you receive a `code.review` event:
