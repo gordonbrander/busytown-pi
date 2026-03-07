@@ -216,7 +216,7 @@ export const makeAgentWorker = (
   db: DatabaseSync,
   projectRoot: string,
   cliBin: string,
-): ((agent: AgentDef) => Worker) => {
+) => {
   return (agent: AgentDef): Worker =>
     worker({
       id: agent.id,
