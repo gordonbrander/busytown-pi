@@ -228,13 +228,8 @@ export default (pi: ExtensionAPI) => {
           ctx.ui.notify("No events found", "info");
           return;
         }
-        const summary = events
-          .map(
-            (e) =>
-              `#${e.id} [${e.type}] worker=${e.worker_id} ts=${e.timestamp}`,
-          )
-          .join("\n");
-        ctx.ui.notify(`${events.length} event(s):\n${summary}`, "info");
+        const lines = events.map((e) => JSON.stringify(e)).join("\n");
+        ctx.ui.notify(lines, "info");
       },
     });
 
