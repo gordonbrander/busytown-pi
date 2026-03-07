@@ -62,9 +62,9 @@ export const pushEvent = (
        RETURNING id, timestamp`,
     )
     .get(type, workerId, JSON.stringify(payload)) as {
-      id: number;
-      timestamp: number;
-    };
+    id: number;
+    timestamp: number;
+  };
 
   return {
     id: row.id,

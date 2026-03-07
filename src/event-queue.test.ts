@@ -206,7 +206,7 @@ describe("pollEvents", () => {
     pushEvent(db, "w1", "b");
 
     // First poll creates cursor, which itself creates an event
-    const events1 = pollEvents(db, "poller");
+    const _events1 = pollEvents(db, "poller");
     // The cursor.create event is at or after the existing events
     // so the cursor is set past all events
 

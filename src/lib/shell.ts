@@ -6,4 +6,4 @@ export const shellSplit = (raw: string): string[] =>
   (raw ?? "").trim().split(/\s+/).filter(Boolean);
 
 export const shellEscape = (value: string): string =>
-  "'" + value.replace(/'/g, "'\\''") + "'"
+  "'" + value.replace(/'/g, "'\\''") + "'";

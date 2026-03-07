@@ -65,13 +65,7 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Start watching for agent file changes
-    const stopWatcher = watchAgents(
-      db,
-      agentsDir,
-      system,
-      projectRoot,
-      cliBin,
-    );
+    const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
     sessionCleanup.add(stopWatcher);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
@@ -147,10 +141,12 @@ export default (pi: ExtensionAPI) => {
         );
         const claimant = getClaimant(db, params.event_id as number);
         return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({ claimed, claimant }, null, 2),
-          }],
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ claimed, claimant }, null, 2),
+            },
+          ],
           details: {},
         };
       },
@@ -186,10 +182,7 @@ export default (pi: ExtensionAPI) => {
         try {
           const payload = args.payload ? JSON.parse(args.payload) : {};
           const event = pushEvent(db, "host", args.type, payload);
-          ctx.ui.notify(
-            `Pushed event #${event.id} (${event.type})`,
-            "info",
-          );
+          ctx.ui.notify(`Pushed event #${event.id} (${event.type})`, "info");
         } catch (err) {
           ctx.ui.notify(`Invalid payload JSON: ${err}`, "error");
         }

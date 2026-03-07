@@ -41,9 +41,7 @@ so everyone on the team gets it automatically:
 
 ```json
 {
-  "packages": [
-    "busytown-pi"
-  ]
+  "packages": ["busytown-pi"]
 }
 ```
 
@@ -51,9 +49,7 @@ If you installed from a local path, use the path instead:
 
 ```json
 {
-  "packages": [
-    "/path/to/busytown-pi"
-  ]
+  "packages": ["/path/to/busytown-pi"]
 }
 ```
 
@@ -62,9 +58,7 @@ all your projects:
 
 ```json
 {
-  "packages": [
-    "busytown-pi"
-  ]
+  "packages": ["busytown-pi"]
 }
 ```
 
@@ -128,16 +122,16 @@ When you receive a `task.created` event, read the file at
 
 ### Frontmatter fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | string | filename | Override the agent ID |
-| `type` | `"pi"` \| `"shell"` | `"pi"` | Agent type |
-| `description` | string | `""` | What this agent does |
-| `listen` | string[] | `[]` | Event patterns to listen for |
-| `ignore_self` | boolean | `true` | Ignore events this agent emitted |
-| `emits` | string[] | `[]` | Event types this agent can emit (documentation only) |
-| `tools` | string \| string[] | `[]` | Pi tools available to the agent (lowercase names, e.g., `read`, `bash`) |
-| `model` | string | — | Model override (e.g., `"opus"`, `"sonnet"`) |
+| Field         | Type                | Default  | Description                                                             |
+| ------------- | ------------------- | -------- | ----------------------------------------------------------------------- |
+| `name`        | string              | filename | Override the agent ID                                                   |
+| `type`        | `"pi"` \| `"shell"` | `"pi"`   | Agent type                                                              |
+| `description` | string              | `""`     | What this agent does                                                    |
+| `listen`      | string[]            | `[]`     | Event patterns to listen for                                            |
+| `ignore_self` | boolean             | `true`   | Ignore events this agent emitted                                        |
+| `emits`       | string[]            | `[]`     | Event types this agent can emit (documentation only)                    |
+| `tools`       | string \| string[]  | `[]`     | Pi tools available to the agent (lowercase names, e.g., `read`, `bash`) |
+| `model`       | string              | —        | Model override (e.g., `"opus"`, `"sonnet"`)                             |
 
 ### Agent types
 
@@ -183,11 +177,11 @@ Events are the core unit of communication. Each event has:
 
 ```typescript
 {
-  id: number          // Auto-incrementing
-  timestamp: number   // Unix epoch (seconds)
-  type: string        // e.g., "plan.created"
-  worker_id: string   // Who emitted it
-  payload: unknown    // Arbitrary JSON data
+  id: number; // Auto-incrementing
+  timestamp: number; // Unix epoch (seconds)
+  type: string; // e.g., "plan.created"
+  worker_id: string; // Who emitted it
+  payload: unknown; // Arbitrary JSON data
 }
 ```
 
@@ -244,21 +238,21 @@ From the host session, use the `busytown-claim` tool.
 
 Busytown emits system events automatically. These all have the `sys.` prefix:
 
-| Event | When |
-|-------|------|
-| `sys.lifecycle.start` | Extension initialized |
-| `sys.lifecycle.finish` | Extension shutting down |
-| `sys.agent.create` | New agent file detected |
-| `sys.agent.reload` | Agent file modified |
-| `sys.agent.remove` | Agent file deleted |
-| `sys.agent.error` | Agent file failed to parse |
-| `sys.cursor.create` | Worker's first poll |
-| `sys.claim.create` | Event successfully claimed |
-| `sys.worker.<id>.start` | Worker began processing event |
-| `sys.worker.<id>.finish` | Worker completed |
-| `sys.worker.<id>.error` | Worker encountered error |
-| `sys.worker.<id>.stdout` | Line of worker stdout |
-| `sys.worker.<id>.stderr` | Line of worker stderr |
+| Event                    | When                          |
+| ------------------------ | ----------------------------- |
+| `sys.lifecycle.start`    | Extension initialized         |
+| `sys.lifecycle.finish`   | Extension shutting down       |
+| `sys.agent.create`       | New agent file detected       |
+| `sys.agent.reload`       | Agent file modified           |
+| `sys.agent.remove`       | Agent file deleted            |
+| `sys.agent.error`        | Agent file failed to parse    |
+| `sys.cursor.create`      | Worker's first poll           |
+| `sys.claim.create`       | Event successfully claimed    |
+| `sys.worker.<id>.start`  | Worker began processing event |
+| `sys.worker.<id>.finish` | Worker completed              |
+| `sys.worker.<id>.error`  | Worker encountered error      |
+| `sys.worker.<id>.stdout` | Line of worker stdout         |
+| `sys.worker.<id>.stderr` | Line of worker stderr         |
 
 You can listen for system events just like any other:
 

@@ -19,25 +19,25 @@ Pi is a minimal, extensible terminal-based coding agent harness. Key points:
 Mapping Busytown → Pi
 
 ┌───────────────────────────┬───────────────────────────────────────┬──────────────────────────────────────────────────────────────┐
-│     Busytown Concept      │             Pi Equivalent             │                            Notes                             │
+│ Busytown Concept │ Pi Equivalent │ Notes │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ Agent .md files           │ .pi/agents/*.md                       │ Nearly identical format (Markdown + YAML frontmatter)        │
+│ Agent .md files │ .pi/agents/\*.md │ Nearly identical format (Markdown + YAML frontmatter) │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ claude --print subprocess │ pi --mode json subprocess             │ Same pattern — isolated process per agent                    │
+│ claude --print subprocess │ pi --mode json subprocess │ Same pattern — isolated process per agent │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ Event queue (SQLite)      │ No equivalent                         │ Pi subagents communicate via tool results, not event streams │
+│ Event queue (SQLite) │ No equivalent │ Pi subagents communicate via tool results, not event streams │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ Event-driven decoupling   │ Chain/parallel modes                  │ Pi chains pass {previous} output; less decoupled than events │
+│ Event-driven decoupling │ Chain/parallel modes │ Pi chains pass {previous} output; less decoupled than events │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ Claims (first-wins dedup) │ No equivalent                         │ Pi doesn't have competing consumers                          │
+│ Claims (first-wins dedup) │ No equivalent │ Pi doesn't have competing consumers │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ Worker cursors            │ No equivalent                         │ No persistent cursor tracking                                │
+│ Worker cursors │ No equivalent │ No persistent cursor tracking │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ FS watcher                │ No equivalent (could be an extension) │                                                              │
+│ FS watcher │ No equivalent (could be an extension) │ │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ MCP permission server     │ Extension-based tool permissions      │ Different mechanism, same goal                               │
+│ MCP permission server │ Extension-based tool permissions │ Different mechanism, same goal │
 ├───────────────────────────┼───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
-│ React/Ink TUI dashboard   │ Pi TUI (built-in)                     │ Pi has its own TUI                                           │
+│ React/Ink TUI dashboard │ Pi TUI (built-in) │ Pi has its own TUI │
 └───────────────────────────┴───────────────────────────────────────┴──────────────────────────────────────────────────────────────┘
 
 Key Architectural Tension
@@ -49,7 +49,7 @@ Two paths forward:
 
 1. Busytown agents as Pi subagents — Use Pi's chain/parallel modes. Simpler but loses the event-driven decoupling. The plan→code→review loop maps well to chain mode.
 2. Busytown event queue as a Pi extension — Build an extension that registers an event queue tool, enabling the decoupled actor pattern within Pi. Preserves Busytown's
-architecture while leveraging Pi's infrastructure (TUI, multi-provider LLM, auth, sessions).
+   architecture while leveraging Pi's infrastructure (TUI, multi-provider LLM, auth, sessions).
 
 Option 2 is more faithful to Busytown's design but more work. Option 1 gets you running fast but fundamentally changes the coordination model.
 

@@ -91,13 +91,7 @@ const startCommand = defineCommand({
       }
     }
 
-    const stopWatcher = watchAgents(
-      db,
-      agentsDir,
-      system,
-      projectRoot,
-      cliBin,
-    );
+    const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
     console.log(
@@ -205,9 +199,8 @@ const agentsCommand = defineCommand({
       return;
     }
     for (const agent of agents) {
-      const listen = agent.listen.length > 0
-        ? agent.listen.join(", ")
-        : "(none)";
+      const listen =
+        agent.listen.length > 0 ? agent.listen.join(", ") : "(none)";
       const emits = agent.emits.length > 0 ? agent.emits.join(", ") : "(none)";
       console.log(`${agent.id} (${agent.type})`);
       if (agent.description) console.log(`  ${agent.description}`);

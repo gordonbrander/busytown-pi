@@ -1,8 +1,9 @@
 export type Cleanup = () => void;
 
-export type CleanupGroup = Cleanup & Disposable & {
-  add(cleanup: Cleanup): void;
-};
+export type CleanupGroup = Cleanup &
+  Disposable & {
+    add(cleanup: Cleanup): void;
+  };
 
 /**
  * Creates a cleanup group that can be used to add and run cleanup functions.
@@ -37,9 +38,10 @@ export type Awaitable<T> = T | Promise<T>;
 
 export type CleanupAsync = () => Awaitable<void>;
 
-export type CleanupGroupAsync = CleanupAsync & AsyncDisposable & {
-  add(cleanup: CleanupAsync): void;
-};
+export type CleanupGroupAsync = CleanupAsync &
+  AsyncDisposable & {
+    add(cleanup: CleanupAsync): void;
+  };
 
 /**
  * Creates an async cleanup group that can be used to add and run cleanup functions asynchronously.
