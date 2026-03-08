@@ -20,7 +20,7 @@ import { watchAgents } from "./agent-watcher.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
-import { startWidget, registerEventLogCommand } from "./dashboard.ts";
+import { startWidget, startNotifier, registerEventLogCommand } from "./dashboard.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -77,6 +77,10 @@ export default (pi: ExtensionAPI) => {
     // Start the dashboard widget (agent status below editor)
     const stopWidget = startWidget(db, agents, ctx);
     sessionCleanup.add(stopWidget);
+
+    // Fire-and-forget TUI notification for every event
+    const stopNotifier = startNotifier(system, ctx);
+    sessionCleanup.add(stopNotifier);
 
     // Register /busytown overlay command
     registerEventLogCommand(pi, system);

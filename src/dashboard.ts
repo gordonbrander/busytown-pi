@@ -182,6 +182,31 @@ export const startWidget = (
 };
 
 // ---------------------------------------------------------------------------
+// Event notifier (fire-and-forget TUI notifications for every event)
+// ---------------------------------------------------------------------------
+
+export const startNotifier = (
+  system: WorkerSystem,
+  ctx: ExtensionContext,
+): (() => Promise<void>) => {
+  const id = "_notify";
+
+  system.spawn(
+    worker({
+      id,
+      listen: ["*"],
+      hidden: true,
+      run: async (event) => {
+        const payload = JSON.stringify(event.payload);
+        ctx.ui.notify(`> ${event.type}\t@${event.worker_id}\t${payload}`, "info");
+      },
+    }),
+  );
+
+  return async () => { await system.kill(id); };
+};
+
+// ---------------------------------------------------------------------------
 // Event log overlay (/busytown command)
 // ---------------------------------------------------------------------------
 
