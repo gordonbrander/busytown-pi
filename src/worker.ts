@@ -56,7 +56,7 @@ export const createSystem = (
   timeout = 1000,
 ): WorkerSystem => {
   const workers = new Map<string, WorkerHandle>();
-  const runningEffects = new Set<Promise<void>>();
+  const runningEffects = new Set<Promise<Result<void, string>>>();
   const systemAbortController = new AbortController();
 
   const runEffect = async (
