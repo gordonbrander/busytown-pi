@@ -193,7 +193,7 @@ export const registerEventLogCommand = (
   pi: ExtensionAPI,
   system: WorkerSystem,
 ): void => {
-  pi.registerCommand("busytown-log", {
+  pi.registerCommand("busytown-console", {
     description: "Show live Busytown event log",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.ui.custom<null>(
