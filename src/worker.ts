@@ -9,6 +9,7 @@ import {
 } from "./event-queue.ts";
 import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { memoize } from "./lib/memoize.ts";
+import { type Result } from "./lib/result.ts";
 
 export type EffectContext = {
   abortSignal: AbortSignal;
@@ -58,6 +59,22 @@ export const createSystem = (
   const runningEffects = new Set<Promise<void>>();
   const systemAbortController = new AbortController();
 
+  const runEffect = async (
+    worker: Worker,
+    event: Event,
+    abortSignal: AbortSignal,
+  ): Promise<Result<void, string>> => {
+    if (abortSignal.aborted) {
+      return { ok: false, error: `Worker aborted: ${worker.id}` };
+    }
+    try {
+      await worker.run(event, { abortSignal });
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: `${error}` };
+    }
+  };
+
   const manageEffect = async (
     w: Worker,
     event: Event,
@@ -71,27 +88,24 @@ export const createSystem = (
       });
     }
 
-    const effectPromise = (async () => {
-      try {
-        await w.run(event, { abortSignal });
-        if (!w.hidden) {
-          pushEvent(db, w.id, `sys.worker.${w.id}.finish`, {
-            event_id: event.id,
-          });
-        }
-      } catch (err) {
-        if (!w.hidden) {
-          pushEvent(db, w.id, `sys.worker.${w.id}.error`, {
-            event_id: event.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    })();
+    const effectResultPromise = runEffect(w, event, abortSignal);
+    runningEffects.add(effectResultPromise);
 
-    runningEffects.add(effectPromise);
-    effectPromise.finally(() => runningEffects.delete(effectPromise));
-    await effectPromise;
+    const res = await effectResultPromise;
+    runningEffects.delete(effectResultPromise);
+
+    if (!w.hidden) {
+      if (!res.ok) {
+        pushEvent(db, w.id, `sys.worker.${w.id}.error`, {
+          event_id: event.id,
+          error: res.error,
+        });
+      } else {
+        pushEvent(db, w.id, `sys.worker.${w.id}.finish`, {
+          event_id: event.id,
+        });
+      }
+    }
   };
 
   const forkWorker = async (
