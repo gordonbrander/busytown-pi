@@ -79,7 +79,7 @@ export default (pi: ExtensionAPI) => {
     sessionCleanup.add(stopWidget);
 
     // Register /busytown overlay command
-    registerEventLogCommand(pi, db, system);
+    registerEventLogCommand(pi, system);
 
     // Register tools
     pi.registerTool({

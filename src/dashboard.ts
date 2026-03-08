@@ -7,8 +7,9 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { AgentDef } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
-import { getEventsSince, updateCursor } from "./event-queue.ts";
+import { getEventsSince } from "./event-queue.ts";
 import { worker, type WorkerSystem } from "./worker.ts";
+import { pushBuffer } from "./lib/buffer.ts";
 import { storeOf } from "./lib/store.ts";
 import {
   matchesKey,
@@ -42,11 +43,6 @@ type DashboardAction = {
 // ---------------------------------------------------------------------------
 
 const WORKER_EVENT_RE = /^sys\.worker\.(.+)\.(start|finish|error)$/;
-
-const isSysNoise = (type: string): boolean =>
-  type.startsWith("sys.cursor.") ||
-  type.endsWith(".stdout") ||
-  type.endsWith(".stderr");
 
 const applyWorkerEvent = (
   agent: AgentState,
@@ -132,10 +128,7 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
   }
 
   return [
-    theme.fg("border", "─ ") +
-      theme.fg("muted", "busytown") +
-      theme.fg("border", " ─"),
-    "  " + parts.join(theme.fg("border", " / ")),
+    parts.join(theme.fg("border", " / ")),
   ];
 };
 
@@ -166,7 +159,7 @@ export const startWidget = (
       "busytown",
       (_tui: unknown, theme: Theme) => {
         const lines = buildWidgetLines(store.value, theme);
-        return { render: () => lines, invalidate: () => {} };
+        return { render: () => lines, invalidate: () => { } };
       },
       { placement: "aboveEditor" },
     );
@@ -198,7 +191,6 @@ const OVERHEAD = 6; // top border, header, blank, blank, help, bottom border
 
 export const registerEventLogCommand = (
   pi: ExtensionAPI,
-  db: DatabaseSync,
   system: WorkerSystem,
 ): void => {
   pi.registerCommand("busytown-log", {
@@ -206,54 +198,38 @@ export const registerEventLogCommand = (
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       await ctx.ui.custom<null>(
         (tui, theme, _kb, done) => {
-          // State
-          let showAll = false;
-          let events = fetchFiltered(db, showAll);
+          const events: Event[] = [];
           const visibleRows = Math.max(
             8,
             Math.floor((process.stdout.rows ?? 30) * 0.6) - OVERHEAD,
           );
-          let scrollOffset = Math.max(0, events.length - visibleRows);
-
-          const atBottom = (): boolean =>
-            scrollOffset >= events.length - visibleRows;
+          let scrollOffset = 0;
 
           const maxScroll = (): number =>
             Math.max(0, events.length - visibleRows);
 
-          // Live polling via hidden worker
-          const logWorkerId = `_log`;
-          updateCursor(db, logWorkerId, latestId(events));
+          // Stream events via hidden worker
+          const logWorkerId = "_log";
 
-          const logWorker = worker({
-            id: logWorkerId,
-            listen: ["*"],
-            hidden: true,
-            ignoreSelf: true,
-            run: async (event) => {
-              const wasBottom = atBottom();
-              if (showAll || !isSysNoise(event.type)) {
-                events.push(event);
-              }
-              if (wasBottom) scrollOffset = maxScroll();
-              tui.requestRender();
-            },
-          });
-
-          system.spawn(logWorker);
-
-          const reload = (): void => {
-            events = fetchFiltered(db, showAll);
-            updateCursor(db, logWorkerId, latestId(events));
-            scrollOffset = maxScroll();
-          };
+          system.spawn(
+            worker({
+              id: logWorkerId,
+              listen: ["*"],
+              hidden: true,
+              run: async (event) => {
+                const wasBottom = scrollOffset >= maxScroll();
+                pushBuffer(events, event, 500);
+                if (wasBottom) scrollOffset = maxScroll();
+                tui.requestRender();
+              },
+            }),
+          );
 
           return {
             render(width: number): string[] {
               const innerW = width - 2;
               const lines: string[] = [];
 
-              // --- helpers ---
               const pad = (s: string, len: number): string => {
                 const vis = visibleWidth(s);
                 return vis >= len ? s : s + " ".repeat(len - vis);
@@ -272,15 +248,15 @@ export const registerEventLogCommand = (
 
               // --- top border ---
               const title = " Busytown Events ";
-              const filterTag = showAll ? "" : " (filtered) ";
-              const tagLen = title.length + filterTag.length;
-              const lDash = Math.max(1, Math.floor((innerW - tagLen) / 2));
-              const rDash = Math.max(1, innerW - lDash - tagLen);
+              const lDash = Math.max(
+                1,
+                Math.floor((innerW - title.length) / 2),
+              );
+              const rDash = Math.max(1, innerW - lDash - title.length);
               lines.push(
                 theme.fg("border", "╭" + "─".repeat(lDash)) +
-                  theme.fg("accent", theme.bold(title)) +
-                  (filterTag ? theme.fg("dim", filterTag) : "") +
-                  theme.fg("border", "─".repeat(rDash) + "╮"),
+                theme.fg("accent", theme.bold(title)) +
+                theme.fg("border", "─".repeat(rDash) + "╮"),
               );
 
               // --- column sizing ---
@@ -298,9 +274,9 @@ export const registerEventLogCommand = (
               lines.push(
                 row(
                   theme.fg("muted", pad("TIME", COL_TIME)) +
-                    theme.fg("muted", pad("TYPE", colType)) +
-                    theme.fg("muted", pad("WORKER", COL_WORKER)) +
-                    theme.fg("muted", "PAYLOAD"),
+                  theme.fg("muted", pad("TYPE", colType)) +
+                  theme.fg("muted", pad("WORKER", COL_WORKER)) +
+                  theme.fg("muted", "PAYLOAD"),
                 ),
               );
 
@@ -308,34 +284,31 @@ export const registerEventLogCommand = (
               const start = scrollOffset;
               const end = Math.min(start + visibleRows, events.length);
 
-              if (events.length === 0) {
-                lines.push(row(theme.fg("dim", "  No events.")));
-                for (let i = 1; i < visibleRows; i++) lines.push(row(""));
-              } else {
-                for (let i = start; i < end; i++) {
-                  const ev = events[i]!;
-                  const time = theme.fg(
-                    "dim",
-                    pad(formatTime(ev.timestamp), COL_TIME),
-                  );
-                  const type = theme.fg(
-                    typeColor(ev.type),
-                    pad(truncateToWidth(ev.type, colType - 1), colType),
-                  );
-                  const wkr = theme.fg("muted", pad(ev.worker_id, COL_WORKER));
-                  const pStr = JSON.stringify(ev.payload);
-                  const payload =
-                    pStr === "{}"
-                      ? ""
-                      : theme.fg("dim", truncateToWidth(pStr, colPayload));
-                  lines.push(row(`${time}${type}${wkr}${payload}`));
-                }
-                for (let i = end - start; i < visibleRows; i++) {
-                  lines.push(row(""));
-                }
+              for (let i = start; i < end; i++) {
+                const ev = events[i]!;
+                const time = theme.fg(
+                  "dim",
+                  pad(formatTime(ev.timestamp), COL_TIME),
+                );
+                const type = theme.fg(
+                  typeColor(ev.type),
+                  pad(truncateToWidth(ev.type, colType - 1), colType),
+                );
+                const wkr = theme.fg("muted", pad(ev.worker_id, COL_WORKER));
+                const pStr = JSON.stringify(ev.payload);
+                const payload =
+                  pStr === "{}"
+                    ? ""
+                    : theme.fg("dim", truncateToWidth(pStr, colPayload));
+                lines.push(row(`${time}${type}${wkr}${payload}`));
+              }
+              for (let i = end - start; i < visibleRows; i++) {
+                lines.push(row(""));
               }
 
+
               // --- footer ---
+              const helpText = "↑↓ scroll  g/G top/bottom  esc close";
               const pos =
                 events.length > 0
                   ? `${start + 1}–${end} of ${events.length}`
@@ -345,19 +318,17 @@ export const registerEventLogCommand = (
                 row(
                   theme.fg(
                     "dim",
-                    `↑↓ scroll  g/G top/bottom  f toggle filter  esc close` +
-                      " ".repeat(
-                        Math.max(
-                          1,
-                          innerW -
-                            visibleWidth(
-                              "↑↓ scroll  g/G top/bottom  f toggle filter  esc close",
-                            ) -
-                            visibleWidth(pos) -
-                            2,
-                        ),
-                      ) +
-                      pos,
+                    helpText +
+                    " ".repeat(
+                      Math.max(
+                        1,
+                        innerW -
+                        visibleWidth(helpText) -
+                        visibleWidth(pos) -
+                        2,
+                      ),
+                    ) +
+                    pos,
                   ),
                 ),
               );
@@ -389,14 +360,11 @@ export const registerEventLogCommand = (
                 scrollOffset = 0;
               } else if (data === "G") {
                 scrollOffset = maxScroll();
-              } else if (data === "f") {
-                showAll = !showAll;
-                reload();
               }
               tui.requestRender();
             },
 
-            invalidate(): void {},
+            invalidate(): void { },
           };
         },
         {
@@ -415,14 +383,6 @@ export const registerEventLogCommand = (
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const fetchFiltered = (db: DatabaseSync, showAll: boolean): Event[] => {
-  const all = getEventsSince(db, { tail: 500 });
-  return showAll ? all : all.filter((e) => !isSysNoise(e.type));
-};
-
-const latestId = (events: Event[]): number =>
-  events.length > 0 ? events[events.length - 1]!.id : 0;
 
 type FgColor = Parameters<Theme["fg"]>[0];
 
