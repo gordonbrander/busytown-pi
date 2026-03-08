@@ -20,7 +20,11 @@ import { watchAgents } from "./agent-watcher.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
-import { startWidget, startNotifier, registerEventLogCommand } from "./dashboard.ts";
+import {
+  startWidget,
+  startNotifier,
+  registerEventLogCommand,
+} from "./dashboard.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");

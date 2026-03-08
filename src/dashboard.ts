@@ -127,9 +127,7 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
     }
   }
 
-  return [
-    parts.join(theme.fg("border", " / ")),
-  ];
+  return [parts.join(theme.fg("border", " / "))];
 };
 
 /**
@@ -159,7 +157,7 @@ export const startWidget = (
       "busytown",
       (_tui: unknown, theme: Theme) => {
         const lines = buildWidgetLines(store.value, theme);
-        return { render: () => lines, invalidate: () => { } };
+        return { render: () => lines, invalidate: () => {} };
       },
       { placement: "aboveEditor" },
     );
@@ -198,12 +196,17 @@ export const startNotifier = (
       hidden: true,
       run: async (event) => {
         const payload = JSON.stringify(event.payload);
-        ctx.ui.notify(`> ${event.type}\t@${event.worker_id}\t${payload}`, "info");
+        ctx.ui.notify(
+          `> ${event.type}\t@${event.worker_id}\t${payload}`,
+          "info",
+        );
       },
     }),
   );
 
-  return async () => { await system.kill(id); };
+  return async () => {
+    await system.kill(id);
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -280,8 +283,8 @@ export const registerEventLogCommand = (
               const rDash = Math.max(1, innerW - lDash - title.length);
               lines.push(
                 theme.fg("border", "╭" + "─".repeat(lDash)) +
-                theme.fg("accent", theme.bold(title)) +
-                theme.fg("border", "─".repeat(rDash) + "╮"),
+                  theme.fg("accent", theme.bold(title)) +
+                  theme.fg("border", "─".repeat(rDash) + "╮"),
               );
 
               // --- column sizing ---
@@ -299,9 +302,9 @@ export const registerEventLogCommand = (
               lines.push(
                 row(
                   theme.fg("muted", pad("TIME", COL_TIME)) +
-                  theme.fg("muted", pad("TYPE", colType)) +
-                  theme.fg("muted", pad("WORKER", COL_WORKER)) +
-                  theme.fg("muted", "PAYLOAD"),
+                    theme.fg("muted", pad("TYPE", colType)) +
+                    theme.fg("muted", pad("WORKER", COL_WORKER)) +
+                    theme.fg("muted", "PAYLOAD"),
                 ),
               );
 
@@ -331,7 +334,6 @@ export const registerEventLogCommand = (
                 lines.push(row(""));
               }
 
-
               // --- footer ---
               const helpText = "↑↓ scroll  g/G top/bottom  esc close";
               const pos =
@@ -344,16 +346,16 @@ export const registerEventLogCommand = (
                   theme.fg(
                     "dim",
                     helpText +
-                    " ".repeat(
-                      Math.max(
-                        1,
-                        innerW -
-                        visibleWidth(helpText) -
-                        visibleWidth(pos) -
-                        2,
-                      ),
-                    ) +
-                    pos,
+                      " ".repeat(
+                        Math.max(
+                          1,
+                          innerW -
+                            visibleWidth(helpText) -
+                            visibleWidth(pos) -
+                            2,
+                        ),
+                      ) +
+                      pos,
                   ),
                 ),
               );
@@ -389,7 +391,7 @@ export const registerEventLogCommand = (
               tui.requestRender();
             },
 
-            invalidate(): void { },
+            invalidate(): void {},
           };
         },
         {
