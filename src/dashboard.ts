@@ -7,13 +7,15 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { AgentDef } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
-import { getEventsSince } from "./event-queue.ts";
+import { getEventsSince, updateCursor } from "./event-queue.ts";
+import { worker, type WorkerSystem } from "./worker.ts";
 import { storeOf } from "./lib/store.ts";
 import {
   matchesKey,
   truncateToWidth,
   visibleWidth,
 } from "@mariozechner/pi-tui";
+import { formatTime } from "./lib/time.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,18 +102,6 @@ const dashboardReducer = (
   return agents === state.agents && lastSeenId === state.lastSeenId
     ? state
     : { agents, lastSeenId };
-};
-
-// ---------------------------------------------------------------------------
-// Time formatting
-// ---------------------------------------------------------------------------
-
-const formatTime = (unixSeconds: number): string => {
-  const d = new Date(unixSeconds * 1000);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -209,6 +199,7 @@ const OVERHEAD = 6; // top border, header, blank, blank, help, bottom border
 export const registerEventLogCommand = (
   pi: ExtensionAPI,
   db: DatabaseSync,
+  system: WorkerSystem,
 ): void => {
   pi.registerCommand("busytown-log", {
     description: "Show live Busytown event log",
@@ -218,7 +209,6 @@ export const registerEventLogCommand = (
           // State
           let showAll = false;
           let events = fetchFiltered(db, showAll);
-          let lastSeenId = latestId(events);
           const visibleRows = Math.max(
             8,
             Math.floor((process.stdout.rows ?? 30) * 0.6) - OVERHEAD,
@@ -231,26 +221,30 @@ export const registerEventLogCommand = (
           const maxScroll = (): number =>
             Math.max(0, events.length - visibleRows);
 
-          // Live polling
-          const poll = setInterval(() => {
-            const raw = getEventsSince(db, {
-              sinceId: lastSeenId,
-              limit: 200,
-            });
-            if (raw.length === 0) return;
-            const wasBottom = atBottom();
-            const filtered = showAll
-              ? raw
-              : raw.filter((e) => !isSysNoise(e.type));
-            events.push(...filtered);
-            lastSeenId = raw[raw.length - 1]!.id;
-            if (wasBottom) scrollOffset = maxScroll();
-            tui.requestRender();
-          }, 500);
+          // Live polling via hidden worker
+          const logWorkerId = `_log`;
+          updateCursor(db, logWorkerId, latestId(events));
+
+          const logWorker = worker({
+            id: logWorkerId,
+            listen: ["*"],
+            hidden: true,
+            ignoreSelf: true,
+            run: async (event) => {
+              const wasBottom = atBottom();
+              if (showAll || !isSysNoise(event.type)) {
+                events.push(event);
+              }
+              if (wasBottom) scrollOffset = maxScroll();
+              tui.requestRender();
+            },
+          });
+
+          system.spawn(logWorker);
 
           const reload = (): void => {
             events = fetchFiltered(db, showAll);
-            lastSeenId = latestId(events);
+            updateCursor(db, logWorkerId, latestId(events));
             scrollOffset = maxScroll();
           };
 
@@ -376,7 +370,7 @@ export const registerEventLogCommand = (
 
             handleInput(data: string): void {
               if (matchesKey(data, "escape")) {
-                clearInterval(poll);
+                system.kill(logWorkerId);
                 done(null);
                 return;
               }
