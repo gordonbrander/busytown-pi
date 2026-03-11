@@ -196,7 +196,7 @@ export default (pi: ExtensionAPI) => {
           updateAgentFrontmatter(agentFile, (frontmatter) => {
             const mb = frontmatter.memory_blocks ?? {};
             if (Object.hasOwn(mb, blockKey)) {
-              mb[blockKey].value = result.value;
+              mb[blockKey].value = result.text;
             }
             return { ...frontmatter, memory_blocks: mb };
           });
@@ -207,10 +207,10 @@ export default (pi: ExtensionAPI) => {
                 type: "text",
                 text: JSON.stringify({
                   blockKey,
-                  charCount: result.value.length,
+                  charCount: result.text.length,
                   charLimit: block.charLimit,
                   truncated: result.truncated,
-                  value: result.value,
+                  value: result.text,
                 }),
               },
             ],

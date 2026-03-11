@@ -1,38 +1,25 @@
 import type { MemoryBlockDef } from "./agent.ts";
 import * as Lines from "./lib/lines.ts";
-
-export type MemoryUpdateResult = {
-  value: string;
-  truncated: boolean;
-};
+import { truncate, type TruncationReceipt } from "./lib/truncate.ts";
 
 export const applyMemoryUpdate = (
   currentValue: string,
   charLimit: number,
   newText: string,
   oldText?: string,
-): MemoryUpdateResult => {
-  let value: string;
-
+): TruncationReceipt => {
   if (oldText !== undefined) {
     // Replace mode
     if (!currentValue.includes(oldText)) {
-      throw new Error(
+      throw new TypeError(
         `oldText not found in memory block. Current value:\n${currentValue}`,
       );
     }
-    value = currentValue.replace(oldText, newText);
+    return truncate(currentValue.replace(oldText, newText), charLimit);
   } else {
     // Append mode
-    value = currentValue ? currentValue + "\n" + newText : newText;
+    return truncate(Lines.join([currentValue, newText]).trim(), charLimit);
   }
-
-  const truncated = value.length > charLimit;
-  if (truncated) {
-    value = value.slice(0, charLimit);
-  }
-
-  return { value, truncated };
 };
 
 export const renderMemoryBlockEntry = (

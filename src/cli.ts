@@ -454,7 +454,7 @@ const updateMemoryCommand = defineCommand({
     updateAgentFrontmatter(agent.filePath, (frontmatter) => {
       const mb = frontmatter.memory_blocks ?? {};
       if (mb[args.block]) {
-        mb[args.block].value = result.value;
+        mb[args.block].value = result.text;
       }
       return { ...frontmatter, memory_blocks: mb };
     });
@@ -462,9 +462,9 @@ const updateMemoryCommand = defineCommand({
     console.log(
       JSON.stringify({
         blockKey: args.block,
-        usage: `${result.value.length}/${block.charLimit}`,
+        usage: `${result.text.length}/${block.charLimit}`,
         truncated: result.truncated,
-        value: result.value,
+        value: result.text,
       }),
     );
   },

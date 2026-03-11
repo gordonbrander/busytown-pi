@@ -9,7 +9,7 @@ import {
 describe("applyMemoryUpdate", () => {
   it("replaces old text with new text", () => {
     const result = applyMemoryUpdate("hello world", 2000, "universe", "world");
-    assert.equal(result.value, "hello universe");
+    assert.equal(result.text, "hello universe");
     assert.equal(result.truncated, false);
   });
 
@@ -22,31 +22,31 @@ describe("applyMemoryUpdate", () => {
 
   it("appends when oldText is undefined", () => {
     const result = applyMemoryUpdate("line one", 2000, "line two");
-    assert.equal(result.value, "line one\nline two");
+    assert.equal(result.text, "line one\nline two");
     assert.equal(result.truncated, false);
   });
 
   it("appends to empty string without leading newline", () => {
     const result = applyMemoryUpdate("", 2000, "first entry");
-    assert.equal(result.value, "first entry");
+    assert.equal(result.text, "first entry");
     assert.equal(result.truncated, false);
   });
 
   it("truncates when exceeding char limit", () => {
     const result = applyMemoryUpdate("", 10, "this is way too long");
-    assert.equal(result.value, "this is wa");
+    assert.equal(result.text, "this is w…");
     assert.equal(result.truncated, true);
   });
 
   it("truncates after replace", () => {
     const result = applyMemoryUpdate("ab", 5, "xyz123", "ab");
-    assert.equal(result.value, "xyz12");
+    assert.equal(result.text, "xyz1…");
     assert.equal(result.truncated, true);
   });
 
   it("does not truncate at exactly the limit", () => {
     const result = applyMemoryUpdate("", 5, "12345");
-    assert.equal(result.value, "12345");
+    assert.equal(result.text, "12345");
     assert.equal(result.truncated, false);
   });
 });
