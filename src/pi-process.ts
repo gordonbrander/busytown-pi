@@ -8,6 +8,7 @@ import type { AgentDef, PiAgentDef, ShellAgentDef } from "./agent.ts";
 import { pushEvent } from "./event-queue.ts";
 import { renderTemplate } from "./lib/template.ts";
 import { type Worker, worker } from "./worker.ts";
+import { logger } from "./lib/json-logger.ts";
 
 const buildSystemPrompt = (
   agent: PiAgentDef,
@@ -147,10 +148,25 @@ export const runPiAgent = ({
     child.stdin?.write(JSON.stringify(event));
     child.stdin?.end();
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      logger.error("Pi agent failed to spawn", {
+        agent: agent.id,
+        event_id: event.id,
+        error: err.message,
+      });
+      reject(err);
+    });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
-      resolve(code ?? 1);
+      const exitCode = code ?? 1;
+      if (exitCode !== 0) {
+        logger.warn("Pi agent exited with non-zero code", {
+          agent: agent.id,
+          event_id: event.id,
+          exitCode,
+        });
+      }
+      resolve(exitCode);
     });
   });
 };
@@ -204,12 +220,58 @@ export const runShellAgent = ({
       `sys.worker.${agent.id}.stderr`,
     );
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      logger.error("Shell agent failed to spawn", {
+        agent: agent.id,
+        event_id: event.id,
+        error: err.message,
+      });
+      reject(err);
+    });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
-      resolve(code ?? 1);
+      const exitCode = code ?? 1;
+      if (exitCode !== 0) {
+        logger.warn("Shell agent exited with non-zero code", {
+          agent: agent.id,
+          event_id: event.id,
+          exitCode,
+        });
+      }
+      resolve(exitCode);
     });
   });
+};
+
+export const runAgentWorker = async (
+  db: DatabaseSync,
+  agent: AgentDef,
+  event: Event,
+  projectRoot: string,
+  cliBin: string,
+  abortSignal?: AbortSignal,
+): Promise<number> => {
+  switch (agent.type) {
+    case "pi":
+      return await runPiAgent({
+        agent,
+        event,
+        db,
+        projectRoot,
+        cliBin,
+        abortSignal,
+      });
+    case "shell":
+      return await runShellAgent({
+        agent,
+        event,
+        db,
+        projectRoot,
+        abortSignal,
+      });
+    default:
+      throw new Error(`Unsupported agent type`);
+  }
 };
 
 export const makeAgentWorker = (
@@ -223,23 +285,16 @@ export const makeAgentWorker = (
       listen: agent.listen,
       ignoreSelf: agent.ignoreSelf,
       run: async (event, { abortSignal }) => {
-        if (agent.type === "pi") {
-          await runPiAgent({
-            agent,
-            event,
-            db,
-            projectRoot,
-            cliBin,
-            abortSignal,
-          });
-        } else {
-          await runShellAgent({
-            agent,
-            event,
-            db,
-            projectRoot,
-            abortSignal,
-          });
+        const exitCode = await runAgentWorker(
+          db,
+          agent,
+          event,
+          projectRoot,
+          cliBin,
+          abortSignal,
+        );
+        if (exitCode !== 0) {
+          throw new Error(`Agent "${agent.id}" exited with code ${exitCode}`);
         }
       },
     });
