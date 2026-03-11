@@ -44,8 +44,8 @@ export const renderMemoryBlockEntry = (
     ...Lines.indent([
       `<description>${block.description ?? ""}</description>`,
       `<metadata>`,
-      `- chars_current: ${block.value.length}`,
-      `- chars_limit: ${block.charLimit}`,
+      `- char_count: ${block.value.length}`,
+      `- char_limit: ${block.charLimit}`,
       `</metadata>`,
       `<value>${block.value}</value>`,
     ]),

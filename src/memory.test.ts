@@ -61,8 +61,8 @@ describe("renderMemoryBlockEntry", () => {
     assert.ok(output.includes("<agent>"));
     assert.ok(output.includes("</agent>"));
     assert.ok(output.includes("<description>Agent notes</description>"));
-    assert.ok(output.includes("chars_current: 9"));
-    assert.ok(output.includes("chars_limit: 2000"));
+    assert.ok(output.includes("char_count: 9"));
+    assert.ok(output.includes("char_limit: 2000"));
     assert.ok(output.includes("<value>some data</value>"));
   });
 
@@ -73,7 +73,7 @@ describe("renderMemoryBlockEntry", () => {
       charLimit: 1000,
     });
     assert.ok(output.includes("<description></description>"));
-    assert.ok(output.includes("chars_current: 0"));
+    assert.ok(output.includes("char_count: 0"));
   });
 });
 

@@ -195,20 +195,20 @@ export default (pi: ExtensionAPI) => {
           // Write back to agent file
           updateAgentFrontmatter(agentFile, (frontmatter) => {
             const mb = frontmatter.memory_blocks ?? {};
-            if (mb[blockKey]) {
+            if (Object.hasOwn(mb, blockKey)) {
               mb[blockKey].value = result.value;
             }
             return { ...frontmatter, memory_blocks: mb };
           });
 
-          const usage = `${result.value.length}/${block.charLimit}`;
           return {
             content: [
               {
                 type: "text",
                 text: JSON.stringify({
                   blockKey,
-                  usage,
+                  charCount: result.value.length,
+                  charLimit: block.charLimit,
                   truncated: result.truncated,
                   value: result.value,
                 }),
