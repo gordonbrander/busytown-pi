@@ -8,6 +8,7 @@ import {
   loadAgentDef,
   loadAllAgents,
   updateAgentFrontmatter,
+  isHookName,
 } from "./agent.ts";
 
 let tmpDir: string;
@@ -259,6 +260,119 @@ Body.
     assert.equal(data.custom_field, "hello");
     assert.equal(data.another, 42);
     assert.deepEqual(data.listen, ["foo.*"]);
+  });
+});
+
+describe("hooks", () => {
+  it("parses on_* frontmatter keys into hooks on PiAgentDef", () => {
+    const filePath = writeAgent(
+      "hooked.md",
+      `---
+listen:
+  - "*"
+on_session_start: echo session started
+on_turn_start: echo turn {{{turnIndex}}}
+on_tool_call: echo tool {{{toolName}}}
+---
+Agent with hooks.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "pi");
+    if (agent.type === "pi") {
+      assert.equal(agent.hooks.session_start, "echo session started");
+      assert.equal(agent.hooks.turn_start, "echo turn {{{turnIndex}}}");
+      assert.equal(agent.hooks.tool_call, "echo tool {{{toolName}}}");
+      assert.equal(agent.hooks.agent_end, undefined);
+    }
+  });
+
+  it("handles multiline hook values", () => {
+    const filePath = writeAgent(
+      "multiline-hook.md",
+      `---
+listen: []
+on_before_agent_start: |
+  echo "step 1"
+  echo "step 2"
+---
+Multi-line hooks.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    if (agent.type === "pi") {
+      assert.ok(agent.hooks.before_agent_start?.includes("step 1"));
+      assert.ok(agent.hooks.before_agent_start?.includes("step 2"));
+    }
+  });
+
+  it("returns empty hooks for agents without on_* keys", () => {
+    const filePath = writeAgent(
+      "no-hooks.md",
+      `---
+listen: []
+---
+No hooks here.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    if (agent.type === "pi") {
+      assert.deepEqual(agent.hooks, {});
+    }
+  });
+
+  it("skips null/missing hook values", () => {
+    const filePath = writeAgent(
+      "null-hook.md",
+      `---
+listen: []
+on_session_start: echo hello
+on_agent_end:
+---
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    if (agent.type === "pi") {
+      assert.equal(agent.hooks.session_start, "echo hello");
+      // on_agent_end with no value is parsed as null by yaml, should be skipped
+      assert.equal(agent.hooks.agent_end, undefined);
+    }
+  });
+
+  it("shell agents do not have hooks", () => {
+    const filePath = writeAgent(
+      "shell-no-hooks.md",
+      `---
+type: shell
+listen: []
+on_session_start: echo nope
+---
+echo hi
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "shell");
+    assert.equal("hooks" in agent, false);
+  });
+});
+
+describe("isHookName", () => {
+  it("returns true for valid hook names", () => {
+    assert.equal(isHookName("session_start"), true);
+    assert.equal(isHookName("before_agent_start"), true);
+    assert.equal(isHookName("tool_call"), true);
+    assert.equal(isHookName("model_select"), true);
+  });
+
+  it("returns false for invalid hook names", () => {
+    assert.equal(isHookName("not_a_hook"), false);
+    assert.equal(isHookName("on_session_start"), false);
+    assert.equal(isHookName(""), false);
   });
 });
 

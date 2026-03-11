@@ -14,6 +14,35 @@ export const MemoryBlockEntrySchema = Type.Object({
 
 export type MemoryBlockEntry = Static<typeof MemoryBlockEntrySchema>;
 
+export const HOOK_NAMES = [
+  "session_start",
+  "session_shutdown",
+  "session_before_switch",
+  "session_switch",
+  "session_before_fork",
+  "session_fork",
+  "session_before_compact",
+  "session_compact",
+  "session_before_tree",
+  "session_tree",
+  "before_agent_start",
+  "agent_start",
+  "agent_end",
+  "turn_start",
+  "turn_end",
+  "tool_call",
+  "tool_result",
+  "input",
+  "model_select",
+] as const;
+
+export type HookName = (typeof HOOK_NAMES)[number];
+
+export type Hooks = Partial<Record<HookName, string>>;
+
+export const isHookName = (name: string): name is HookName =>
+  (HOOK_NAMES as readonly string[]).includes(name);
+
 export const AgentFrontmatterSchema = Type.Object(
   {
     name: Type.Optional(Type.String()),
@@ -29,6 +58,25 @@ export const AgentFrontmatterSchema = Type.Object(
     memory_blocks: Type.Optional(
       Type.Record(Type.String(), MemoryBlockEntrySchema),
     ),
+    on_session_start: Type.Optional(Type.String()),
+    on_session_shutdown: Type.Optional(Type.String()),
+    on_session_before_switch: Type.Optional(Type.String()),
+    on_session_switch: Type.Optional(Type.String()),
+    on_session_before_fork: Type.Optional(Type.String()),
+    on_session_fork: Type.Optional(Type.String()),
+    on_session_before_compact: Type.Optional(Type.String()),
+    on_session_compact: Type.Optional(Type.String()),
+    on_session_before_tree: Type.Optional(Type.String()),
+    on_session_tree: Type.Optional(Type.String()),
+    on_before_agent_start: Type.Optional(Type.String()),
+    on_agent_start: Type.Optional(Type.String()),
+    on_agent_end: Type.Optional(Type.String()),
+    on_turn_start: Type.Optional(Type.String()),
+    on_turn_end: Type.Optional(Type.String()),
+    on_tool_call: Type.Optional(Type.String()),
+    on_tool_result: Type.Optional(Type.String()),
+    on_input: Type.Optional(Type.String()),
+    on_model_select: Type.Optional(Type.String()),
   },
   { additionalProperties: true },
 );
@@ -62,6 +110,11 @@ const parseMemoryBlocks = (raw: unknown): Record<string, MemoryBlockDef> => {
 const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
   Value.Default(AgentFrontmatterSchema, data);
   const d = data as Record<string, unknown>;
+  // Strip null on_* values (YAML `key:` with no value produces null)
+  for (const name of HOOK_NAMES) {
+    const key = `on_${name}`;
+    if (key in d && d[key] == null) delete d[key];
+  }
   parseMemoryBlocks(d.memory_blocks);
   if (!Value.Check(AgentFrontmatterSchema, data)) {
     const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
@@ -70,6 +123,17 @@ const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
     );
   }
   return data as AgentFrontmatter;
+};
+
+export const parseHooks = (fm: AgentFrontmatter): Hooks => {
+  const hooks: Hooks = {};
+  for (const name of HOOK_NAMES) {
+    const value = (fm as Record<string, unknown>)[`on_${name}`];
+    if (typeof value === "string") {
+      hooks[name] = value;
+    }
+  }
+  return hooks;
 };
 
 export type PiAgentDef = {
@@ -84,6 +148,7 @@ export type PiAgentDef = {
   body: string;
   model?: string;
   memoryBlocks: Record<string, MemoryBlockDef>;
+  hooks: Hooks;
 };
 
 export type ShellAgentDef = {
@@ -137,6 +202,7 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     body: content.trim(),
     model: fm.model,
     memoryBlocks,
+    hooks: parseHooks(fm),
   };
 };
 

@@ -2,7 +2,11 @@
  * Extension that is automatically loaded for all busytown Pi subagents.
  * @module
  */
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  ExecResult,
+} from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
   claimEvent,
@@ -11,10 +15,43 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAgentDef, updateAgentFrontmatter } from "./agent.ts";
+import {
+  loadAgentDef,
+  updateAgentFrontmatter,
+  type Hooks,
+  type HookName,
+} from "./agent.ts";
 import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import * as Lines from "./lib/lines.ts";
+import { renderTemplate } from "./lib/template.ts";
+
+const HOOK_TIMEOUT = 30_000;
+
+const buildHookContext = (
+  ctx: ExtensionContext,
+  extras: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+  cwd: ctx.cwd,
+  sessionFile: ctx.sessionManager.getSessionFile() ?? "",
+  model: ctx.model?.id ?? "",
+  provider: ctx.model?.provider ?? "",
+  timestamp: new Date().toISOString(),
+  ...extras,
+});
+
+const execHook = async (
+  pi: ExtensionAPI,
+  hooks: Hooks,
+  hookName: HookName,
+  ctx: ExtensionContext,
+  extras: Record<string, unknown> = {},
+): Promise<ExecResult | undefined> => {
+  const command = hooks[hookName];
+  if (!command) return undefined;
+  const rendered = renderTemplate(command, buildHookContext(ctx, extras));
+  return pi.exec("sh", ["-c", rendered], { timeout: HOOK_TIMEOUT });
+};
 
 export default (pi: ExtensionAPI) => {
   const dbPath = process.env.BUSYTOWN_DB_PATH;
@@ -27,7 +64,7 @@ export default (pi: ExtensionAPI) => {
   }
 
   // Build system prompt via before_agent_start
-  pi.on("before_agent_start", (event) => {
+  pi.on("before_agent_start", async (event, ctx) => {
     const agent = loadAgentDef(agentFile);
 
     const systemPrompt = Lines.join([
@@ -40,9 +77,31 @@ export default (pi: ExtensionAPI) => {
       renderMemoryBlocksPrompt(agent.memoryBlocks),
     ]);
 
-    return {
-      systemPrompt,
-    };
+    const result: {
+      systemPrompt: string;
+      message?: { customType: string; content: string; display: boolean };
+    } = { systemPrompt };
+
+    if (agent.type === "pi" && agent.hooks.before_agent_start) {
+      const hookResult = await execHook(
+        pi,
+        agent.hooks,
+        "before_agent_start",
+        ctx,
+        {
+          prompt: event.prompt,
+        },
+      );
+      if (hookResult && hookResult.code === 0 && hookResult.stdout.trim()) {
+        result.message = {
+          customType: "busytown-hook",
+          content: hookResult.stdout,
+          display: true,
+        };
+      }
+    }
+
+    return result;
   });
 
   // Register tools
@@ -137,8 +196,145 @@ export default (pi: ExtensionAPI) => {
     },
   });
 
-  // updateMemory tool — only register if agent has memory blocks
+  // Register lifecycle hooks
   const agent = loadAgentDef(agentFile);
+
+  if (agent.type === "pi") {
+    const { hooks } = agent;
+
+    // Fire-and-forget hooks
+    if (hooks.session_start) {
+      pi.on("session_start", async (_event, ctx) => {
+        await execHook(pi, hooks, "session_start", ctx);
+      });
+    }
+    if (hooks.session_shutdown) {
+      pi.on("session_shutdown", async (_event, ctx) => {
+        await execHook(pi, hooks, "session_shutdown", ctx);
+      });
+    }
+    if (hooks.session_switch) {
+      pi.on("session_switch", async (event, ctx) => {
+        await execHook(pi, hooks, "session_switch", ctx, {
+          reason: event.reason,
+          previousSessionFile: event.previousSessionFile ?? "",
+        });
+      });
+    }
+    if (hooks.session_fork) {
+      pi.on("session_fork", async (event, ctx) => {
+        await execHook(pi, hooks, "session_fork", ctx, {
+          previousSessionFile: event.previousSessionFile ?? "",
+        });
+      });
+    }
+    if (hooks.session_compact) {
+      pi.on("session_compact", async (_event, ctx) => {
+        await execHook(pi, hooks, "session_compact", ctx);
+      });
+    }
+    if (hooks.session_tree) {
+      pi.on("session_tree", async (_event, ctx) => {
+        await execHook(pi, hooks, "session_tree", ctx);
+      });
+    }
+    if (hooks.agent_start) {
+      pi.on("agent_start", async (_event, ctx) => {
+        await execHook(pi, hooks, "agent_start", ctx);
+      });
+    }
+    if (hooks.agent_end) {
+      pi.on("agent_end", async (_event, ctx) => {
+        await execHook(pi, hooks, "agent_end", ctx);
+      });
+    }
+    if (hooks.turn_start) {
+      pi.on("turn_start", async (event, ctx) => {
+        await execHook(pi, hooks, "turn_start", ctx, {
+          turnIndex: event.turnIndex,
+        });
+      });
+    }
+    if (hooks.turn_end) {
+      pi.on("turn_end", async (event, ctx) => {
+        await execHook(pi, hooks, "turn_end", ctx, {
+          turnIndex: event.turnIndex,
+        });
+      });
+    }
+    if (hooks.tool_result) {
+      pi.on("tool_result", async (event, ctx) => {
+        await execHook(pi, hooks, "tool_result", ctx, {
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+          isError: event.isError,
+        });
+      });
+    }
+    if (hooks.input) {
+      pi.on("input", async (event, ctx) => {
+        await execHook(pi, hooks, "input", ctx, {
+          text: event.text,
+          source: event.source,
+          prompt: event.text,
+        });
+      });
+    }
+    if (hooks.model_select) {
+      pi.on("model_select", async (event, ctx) => {
+        await execHook(pi, hooks, "model_select", ctx, {
+          source: event.source,
+          previousModel: event.previousModel?.id ?? "",
+          previousProvider: event.previousModel?.provider ?? "",
+        });
+      });
+    }
+
+    // Cancellation hooks — non-zero exit → cancel
+    if (hooks.session_before_switch) {
+      pi.on("session_before_switch", async (event, ctx) => {
+        const result = await execHook(pi, hooks, "session_before_switch", ctx, {
+          reason: event.reason,
+        });
+        if (result && result.code !== 0) return { cancel: true };
+      });
+    }
+    if (hooks.session_before_fork) {
+      pi.on("session_before_fork", async (event, ctx) => {
+        const result = await execHook(pi, hooks, "session_before_fork", ctx, {
+          entryId: event.entryId,
+        });
+        if (result && result.code !== 0) return { cancel: true };
+      });
+    }
+    if (hooks.session_before_compact) {
+      pi.on("session_before_compact", async (_event, ctx) => {
+        const result = await execHook(pi, hooks, "session_before_compact", ctx);
+        if (result && result.code !== 0) return { cancel: true };
+      });
+    }
+    if (hooks.session_before_tree) {
+      pi.on("session_before_tree", async (_event, ctx) => {
+        const result = await execHook(pi, hooks, "session_before_tree", ctx);
+        if (result && result.code !== 0) return { cancel: true };
+      });
+    }
+
+    // tool_call — non-zero exit → block with reason
+    if (hooks.tool_call) {
+      pi.on("tool_call", async (event, ctx) => {
+        const result = await execHook(pi, hooks, "tool_call", ctx, {
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+        });
+        if (result && result.code !== 0) {
+          return { block: true, reason: result.stderr || "Blocked by hook" };
+        }
+      });
+    }
+  }
+
+  // updateMemory tool — only register if agent has memory blocks
   if (Object.keys(agent.memoryBlocks).length > 0) {
     pi.registerTool({
       name: "updateMemory",
