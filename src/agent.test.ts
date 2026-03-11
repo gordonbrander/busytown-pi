@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import matter from "gray-matter";
 import {
   loadAgentDef,
   loadAllAgents,
@@ -231,6 +232,31 @@ Body content here.
     const updated = loadAgentDef(filePath);
     assert.equal(updated.memoryBlocks.agent.value, "new value");
     assert.ok(updated.body.includes("Body content here."));
+  });
+
+  it("preserves extra frontmatter keys not in schema", () => {
+    const filePath = writeAgent(
+      "extra-keys.md",
+      `---
+listen:
+  - "*"
+custom_field: hello
+another: 42
+---
+Body.
+`,
+    );
+
+    updateAgentFrontmatter(filePath, (fm) => ({
+      ...fm,
+      listen: ["foo.*"],
+    }));
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const { data } = matter(raw);
+    assert.equal(data.custom_field, "hello");
+    assert.equal(data.another, 42);
+    assert.deepEqual(data.listen, ["foo.*"]);
   });
 });
 

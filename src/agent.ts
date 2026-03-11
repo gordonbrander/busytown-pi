@@ -6,26 +6,33 @@ import path from "node:path";
 import { pathToSlug } from "./lib/slug.ts";
 import { logger } from "./lib/json-logger.ts";
 
-const AgentFrontmatterSchema = Type.Object({
-  name: Type.Optional(Type.String()),
-  type: Type.Optional(Type.Union([Type.Literal("pi"), Type.Literal("shell")])),
-  description: Type.Optional(Type.String()),
-  listen: Type.Optional(Type.Array(Type.String())),
-  ignore_self: Type.Optional(Type.Boolean()),
-  emits: Type.Optional(Type.Array(Type.String())),
-  tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
-  model: Type.Optional(Type.String()),
-  memory_blocks: Type.Optional(
-    Type.Record(
-      Type.String(),
-      Type.Object({
-        description: Type.Optional(Type.String()),
-        value: Type.Optional(Type.String()),
-        char_limit: Type.Optional(Type.Number()),
-      }),
+const AgentFrontmatterSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String()),
+    type: Type.Optional(
+      Type.Union([Type.Literal("pi"), Type.Literal("shell")]),
     ),
-  ),
-});
+    description: Type.Optional(Type.String()),
+    listen: Type.Optional(Type.Array(Type.String())),
+    ignore_self: Type.Optional(Type.Boolean()),
+    emits: Type.Optional(Type.Array(Type.String())),
+    tools: Type.Optional(
+      Type.Union([Type.String(), Type.Array(Type.String())]),
+    ),
+    model: Type.Optional(Type.String()),
+    memory_blocks: Type.Optional(
+      Type.Record(
+        Type.String(),
+        Type.Object({
+          description: Type.Optional(Type.String()),
+          value: Type.Optional(Type.String()),
+          char_limit: Type.Optional(Type.Number()),
+        }),
+      ),
+    ),
+  },
+  { additionalProperties: true },
+);
 
 export type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
 
@@ -146,14 +153,13 @@ export const updateAgentFrontmatter = (
 ): void => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
-  const cleaned = Value.Clean(AgentFrontmatterSchema, data);
-  if (!Value.Check(AgentFrontmatterSchema, cleaned)) {
-    const errors = [...Value.Errors(AgentFrontmatterSchema, cleaned)];
+  if (!Value.Check(AgentFrontmatterSchema, data)) {
+    const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
     throw new Error(
       `Invalid agent frontmatter in ${filePath}: ${errors.map((e) => e.message).join(", ")}`,
     );
   }
-  const updated = updater({ ...cleaned } as AgentFrontmatter);
+  const updated = updater({ ...data } as AgentFrontmatter);
   const output = matter.stringify(content, updated);
   fs.writeFileSync(filePath, output);
 };
