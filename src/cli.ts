@@ -10,7 +10,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAllAgents, updateAgentFile } from "./agent.ts";
+import { loadAllAgents, updateAgentFrontmatter } from "./agent.ts";
 import { applyMemoryUpdate } from "./memory.ts";
 import { createSystem, worker } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
@@ -451,11 +451,8 @@ const updateMemoryCommand = defineCommand({
       args["old-text"],
     );
 
-    updateAgentFile(agent.filePath, (frontmatter) => {
-      const mb = (frontmatter.memory_blocks ?? {}) as Record<
-        string,
-        { value?: string }
-      >;
+    updateAgentFrontmatter(agent.filePath, (frontmatter) => {
+      const mb = frontmatter.memory_blocks ?? {};
       if (mb[args.block]) {
         mb[args.block].value = result.value;
       }

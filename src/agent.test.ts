@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { loadAgentDef, loadAllAgents, updateAgentFile } from "./agent.ts";
+import {
+  loadAgentDef,
+  loadAllAgents,
+  updateAgentFrontmatter,
+} from "./agent.ts";
 
 let tmpDir: string;
 
@@ -201,7 +205,7 @@ memory_blocks:
   });
 });
 
-describe("updateAgentFile", () => {
+describe("updateAgentFrontmatter", () => {
   it("rewrites frontmatter while preserving body", () => {
     const filePath = writeAgent(
       "update-test.md",
@@ -218,9 +222,9 @@ Body content here.
 `,
     );
 
-    updateAgentFile(filePath, (fm) => {
-      const mb = fm.memory_blocks as Record<string, { value?: string }>;
-      mb.agent!.value = "new value";
+    updateAgentFrontmatter(filePath, (fm) => {
+      const mb = fm.memory_blocks ?? {};
+      if (mb.agent) mb.agent.value = "new value";
       return { ...fm, memory_blocks: mb };
     });
 

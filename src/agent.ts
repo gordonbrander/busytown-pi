@@ -27,7 +27,7 @@ const AgentFrontmatterSchema = Type.Object({
   ),
 });
 
-type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
+export type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
 
 export type MemoryBlockDef = {
   description: string;
@@ -139,13 +139,21 @@ export const loadAgentDef = (filePath: string): AgentDef => {
   };
 };
 
-export const updateAgentFile = (
+/** Updates the frontmatter of an agent file in-place. */
+export const updateAgentFrontmatter = (
   filePath: string,
-  updater: (frontmatter: Record<string, unknown>) => Record<string, unknown>,
+  updater: (frontmatter: AgentFrontmatter) => AgentFrontmatter,
 ): void => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
-  const updated = updater({ ...data });
+  const cleaned = Value.Clean(AgentFrontmatterSchema, data);
+  if (!Value.Check(AgentFrontmatterSchema, cleaned)) {
+    const errors = [...Value.Errors(AgentFrontmatterSchema, cleaned)];
+    throw new Error(
+      `Invalid agent frontmatter in ${filePath}: ${errors.map((e) => e.message).join(", ")}`,
+    );
+  }
+  const updated = updater({ ...cleaned } as AgentFrontmatter);
   const output = matter.stringify(content, updated);
   fs.writeFileSync(filePath, output);
 };

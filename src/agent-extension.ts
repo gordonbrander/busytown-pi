@@ -11,7 +11,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAgentDef, updateAgentFile } from "./agent.ts";
+import { loadAgentDef, updateAgentFrontmatter } from "./agent.ts";
 import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import * as Lines from "./lib/lines.ts";
@@ -193,11 +193,8 @@ export default (pi: ExtensionAPI) => {
           );
 
           // Write back to agent file
-          updateAgentFile(agentFile, (frontmatter) => {
-            const mb = (frontmatter.memory_blocks ?? {}) as Record<
-              string,
-              { value?: string }
-            >;
+          updateAgentFrontmatter(agentFile, (frontmatter) => {
+            const mb = frontmatter.memory_blocks ?? {};
             if (mb[blockKey]) {
               mb[blockKey].value = result.value;
             }
