@@ -66,13 +66,13 @@ describe("renderMemoryBlockEntry", () => {
     assert.ok(output.includes("<value>some data</value>"));
   });
 
-  it("omits description tag when description is empty", () => {
+  it("renders description tag even when description is empty", () => {
     const output = renderMemoryBlockEntry("notes", {
       description: "",
       value: "",
       charLimit: 1000,
     });
-    assert.ok(!output.includes("<description>"));
+    assert.ok(output.includes("<description></description>"));
     assert.ok(output.includes("chars_current: 0"));
   });
 });

@@ -17,6 +17,7 @@ import {
 } from "./agent.ts";
 import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
 import { nextTick } from "./lib/promise.ts";
+import * as Lines from "./lib/lines.ts";
 
 export default (pi: ExtensionAPI) => {
   const dbPath = process.env.BUSYTOWN_DB_PATH;
@@ -32,22 +33,18 @@ export default (pi: ExtensionAPI) => {
   pi.on("before_agent_start", (event) => {
     const agent = loadAgentDef(agentFile);
 
-    const systemParts: string[] = [
+    const systemPrompt = Lines.join([
       event.systemPrompt,
+      "",
       `You are the "${agent.id}" agent. ${agent.description}`,
-    ];
-
-    if (agent.body) {
-      systemParts.push(agent.body);
-    }
-
-    const memoryPrompt = renderMemoryBlocksPrompt(agent.memoryBlocks);
-    if (memoryPrompt) {
-      systemParts.push(memoryPrompt);
-    }
+      "",
+      agent.body,
+      "",
+      renderMemoryBlocksPrompt(agent.memoryBlocks),
+    ]);
 
     return {
-      systemPrompt: systemParts.join("\n\n"),
+      systemPrompt,
     };
   });
 

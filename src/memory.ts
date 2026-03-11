@@ -1,4 +1,5 @@
 import type { MemoryBlockDef } from "./agent.ts";
+import * as Lines from "./lib/lines.ts";
 
 export type MemoryUpdateResult = {
   value: string;
@@ -37,19 +38,19 @@ export const applyMemoryUpdate = (
 export const renderMemoryBlockEntry = (
   key: string,
   block: MemoryBlockDef,
-): string => {
-  const lines = [`  <${key}>`];
-  if (block.description) {
-    lines.push(`  <description>${block.description}</description>`);
-  }
-  lines.push(`  <metadata>`);
-  lines.push(`  - chars_current: ${block.value.length}`);
-  lines.push(`  - chars_limit: ${block.charLimit}`);
-  lines.push(`  </metadata>`);
-  lines.push(`  <value>${block.value}</value>`);
-  lines.push(`</${key}>`);
-  return lines.join("\n");
-};
+): string =>
+  Lines.join([
+    `<${key}>`,
+    ...Lines.indent([
+      `<description>${block.description ?? ""}</description>`,
+      `<metadata>`,
+      `- chars_current: ${block.value.length}`,
+      `- chars_limit: ${block.charLimit}`,
+      `</metadata>`,
+      `<value>${block.value}</value>`,
+    ]),
+    `</${key}>`,
+  ]);
 
 export const renderMemoryBlocksPrompt = (
   blocks: Record<string, MemoryBlockDef>,
@@ -57,7 +58,7 @@ export const renderMemoryBlocksPrompt = (
   const keys = Object.keys(blocks);
   if (keys.length === 0) return "";
 
-  const lines = [
+  return Lines.join([
     "",
     "## Memory",
     "",
@@ -66,12 +67,7 @@ export const renderMemoryBlocksPrompt = (
     "Review your memory blocks below and keep them up to date.",
     "",
     "<memory_blocks>",
-  ];
-
-  for (const key of keys) {
-    lines.push(renderMemoryBlockEntry(key, blocks[key]));
-  }
-
-  lines.push("</memory_blocks>");
-  return lines.join("\n");
+    ...keys.map((key) => renderMemoryBlockEntry(key, blocks[key])),
+    "</memory_blocks>",
+  ]);
 };
