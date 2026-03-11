@@ -107,7 +107,7 @@ const startCommand = defineCommand({
     const db = resolveDb(args.dir, args.db);
     const system = createSystem(db);
 
-    const spawnAll = (sys: typeof system): number => {
+    const spawnAll = (): number => {
       const agents = loadAllAgents(agentsDir);
       const toWorker = makeAgentWorker(db, projectRoot);
       let spawned = 0;
@@ -115,7 +115,7 @@ const startCommand = defineCommand({
       for (const agent of agents) {
         if (agent.listen.length === 0) continue;
         try {
-          sys.spawn(toWorker(agent));
+          system.spawn(toWorker(agent));
           spawned++;
           logger.info("Agent spawned", {
             agent: agent.id,
@@ -131,11 +131,11 @@ const startCommand = defineCommand({
 
       const reload = async () => {
         await system.stop();
-        const count = spawnAll(system);
+        const count = spawnAll();
         logger.info("Agents reloaded", { count });
       };
 
-      sys.spawn(
+      system.spawn(
         worker({
           id: "_sys_reload",
           listen: ["sys.reload"],
@@ -150,7 +150,7 @@ const startCommand = defineCommand({
       return spawned;
     };
 
-    const spawned = spawnAll(system);
+    const spawned = spawnAll();
     const stopFileWatcher = watchFiles(db, projectRoot);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
