@@ -225,10 +225,7 @@ export const runAgentWorker = async (
   }
 };
 
-export const makeAgentWorker = (
-  db: DatabaseSync,
-  projectRoot: string,
-) => {
+export const makeAgentWorker = (db: DatabaseSync, projectRoot: string) => {
   return (agent: AgentDef): Worker =>
     worker({
       id: agent.id,

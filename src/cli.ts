@@ -10,10 +10,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import {
-  loadAllAgents,
-  updateAgentFile,
-} from "./agent.ts";
+import { loadAllAgents, updateAgentFile } from "./agent.ts";
 import { applyMemoryUpdate } from "./memory.ts";
 import { createSystem, worker } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";

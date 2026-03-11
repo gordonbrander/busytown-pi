@@ -11,10 +11,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import {
-  loadAgentDef,
-  updateAgentFile,
-} from "./agent.ts";
+import { loadAgentDef, updateAgentFile } from "./agent.ts";
 import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import * as Lines from "./lib/lines.ts";
@@ -81,9 +78,7 @@ export default (pi: ExtensionAPI) => {
     label: "Busytown Events",
     description: "List recent events from the Busytown event queue",
     parameters: Type.Object({
-      type: Type.Optional(
-        Type.String({ description: "Filter by event type" }),
-      ),
+      type: Type.Optional(Type.String({ description: "Filter by event type" })),
       tail: Type.Optional(
         Type.Integer({
           description: "Number of recent events to show (default: 20)",

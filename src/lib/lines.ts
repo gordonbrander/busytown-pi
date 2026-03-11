@@ -15,4 +15,4 @@ export const indent = (lines: string[], prefix: string = "  "): string[] => {
     }
     return prefix + line;
   });
-}
+};
