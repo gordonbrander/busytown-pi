@@ -254,10 +254,7 @@ const statusCommand = defineCommand({
   },
 });
 
-const readPayload = (args: {
-  payload?: string;
-  msg?: string;
-}) => {
+const readPayload = (args: { payload?: string; msg?: string }) => {
   if (args.payload) {
     return JSON.parse(args.payload);
   }
