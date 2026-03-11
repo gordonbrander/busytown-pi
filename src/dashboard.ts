@@ -8,7 +8,7 @@ import type {
 import type { AgentDef } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
 import { getEventsSince } from "./event-queue.ts";
-import { worker, type WorkerSystem } from "./worker.ts";
+import { getDaemonStatus } from "./pidfile.ts";
 import { pushBuffer } from "./lib/buffer.ts";
 import { storeOf } from "./lib/store.ts";
 import {
@@ -30,13 +30,13 @@ type AgentState = {
 
 type DashboardState = {
   agents: Map<string, AgentState>;
+  daemonRunning: boolean;
   lastSeenId: number;
 };
 
-type DashboardAction = {
-  type: "events";
-  events: Event[];
-};
+type DashboardAction =
+  | { type: "events"; events: Event[] }
+  | { type: "daemon_status"; running: boolean };
 
 // ---------------------------------------------------------------------------
 // Event helpers
@@ -71,6 +71,12 @@ const dashboardReducer = (
   state: DashboardState,
   action: DashboardAction,
 ): DashboardState => {
+  if (action.type === "daemon_status") {
+    return action.running === state.daemonRunning
+      ? state
+      : { ...state, daemonRunning: action.running };
+  }
+
   let agents = state.agents;
 
   for (const event of action.events) {
@@ -97,7 +103,7 @@ const dashboardReducer = (
 
   return agents === state.agents && lastSeenId === state.lastSeenId
     ? state
-    : { agents, lastSeenId };
+    : { ...state, agents, lastSeenId };
 };
 
 // ---------------------------------------------------------------------------
@@ -105,9 +111,18 @@ const dashboardReducer = (
 // ---------------------------------------------------------------------------
 
 const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
-  if (state.agents.size === 0) return [];
-
   const parts: string[] = [];
+
+  // Daemon status indicator
+  if (state.daemonRunning) {
+    parts.push(
+      `${theme.fg("success", "▲")} ${theme.fg("success", "busytown")}`,
+    );
+  } else {
+    parts.push(`${theme.fg("error", "▼")} ${theme.fg("error", "busytown")}`);
+  }
+
+  // Agent status indicators
   for (const agent of state.agents.values()) {
     const name = theme.fg("text", agent.id);
     if (agent.status === "running") {
@@ -131,7 +146,7 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
 };
 
 /**
- * Start the busytown widget that shows agent states below the editor.
+ * Start the busytown widget that shows daemon + agent states below the editor.
  * Polls the DB every 500ms and re-renders on change.
  * Returns a cleanup function.
  */
@@ -139,6 +154,7 @@ export const startWidget = (
   db: DatabaseSync,
   agents: AgentDef[],
   ctx: ExtensionContext,
+  projectRoot: string,
 ): (() => void) => {
   const tip = getEventsSince(db, { tail: 1 });
   const initialLastSeenId = tip.length > 0 ? tip[0]!.id : 0;
@@ -149,6 +165,7 @@ export const startWidget = (
         .filter((a) => a.listen.length > 0)
         .map((a) => [a.id, { id: a.id, status: "idle" as const }]),
     ),
+    daemonRunning: getDaemonStatus(projectRoot).running,
     lastSeenId: initialLastSeenId,
   });
 
@@ -166,47 +183,59 @@ export const startWidget = (
   apply();
 
   const interval = setInterval(() => {
+    let changed = false;
+
+    // Check daemon status
+    const daemonRunning = getDaemonStatus(projectRoot).running;
+    if (daemonRunning !== store.value.daemonRunning) {
+      store.send({ type: "daemon_status", running: daemonRunning });
+      changed = true;
+    }
+
+    // Check for new events
     const events = getEventsSince(db, {
       sinceId: store.value.lastSeenId,
       limit: 200,
     });
-    if (events.length === 0) return;
-    const prev = store.value;
-    store.send({ type: "events", events });
-    if (store.value !== prev) apply();
+    if (events.length > 0) {
+      const prev = store.value;
+      store.send({ type: "events", events });
+      if (store.value !== prev) changed = true;
+    }
+
+    if (changed) apply();
   }, 500);
 
   return () => clearInterval(interval);
 };
 
 // ---------------------------------------------------------------------------
-// Event notifier (fire-and-forget TUI notifications for every event)
+// Event notifier (fire-and-forget TUI notifications via DB polling)
 // ---------------------------------------------------------------------------
 
 export const startNotifier = (
-  system: WorkerSystem,
+  db: DatabaseSync,
   ctx: ExtensionContext,
-): (() => Promise<void>) => {
-  const id = "_notify";
+): (() => void) => {
+  const tip = getEventsSince(db, { tail: 1 });
+  let lastSeenId = tip.length > 0 ? tip[0]!.id : 0;
 
-  system.spawn(
-    worker({
-      id,
-      listen: ["*"],
-      hidden: true,
-      run: async (event) => {
-        const payload = JSON.stringify(event.payload);
-        ctx.ui.notify(
-          `> ${event.type}\t@${event.worker_id}\t${payload}`,
-          "info",
-        );
-      },
-    }),
-  );
+  const interval = setInterval(() => {
+    const events = getEventsSince(db, {
+      sinceId: lastSeenId,
+      limit: 200,
+    });
+    if (events.length === 0) return;
 
-  return async () => {
-    await system.kill(id);
-  };
+    lastSeenId = events[events.length - 1]!.id;
+
+    for (const event of events) {
+      const payload = JSON.stringify(event.payload);
+      ctx.ui.notify(`> ${event.type}\t@${event.worker_id}\t${payload}`, "info");
+    }
+  }, 500);
+
+  return () => clearInterval(interval);
 };
 
 // ---------------------------------------------------------------------------
@@ -219,7 +248,7 @@ const OVERHEAD = 6; // top border, header, blank, blank, help, bottom border
 
 export const registerEventLogCommand = (
   pi: ExtensionAPI,
-  system: WorkerSystem,
+  db: DatabaseSync,
 ): void => {
   pi.registerCommand("busytown-console", {
     description: "Show live Busytown event log",
@@ -236,22 +265,32 @@ export const registerEventLogCommand = (
           const maxScroll = (): number =>
             Math.max(0, events.length - visibleRows);
 
-          // Stream events via hidden worker
-          const logWorkerId = "_log";
+          // Seed with recent events
+          const recent = getEventsSince(db, { tail: visibleRows });
+          for (const ev of recent) {
+            pushBuffer(events, ev, 500);
+          }
+          scrollOffset = maxScroll();
 
-          system.spawn(
-            worker({
-              id: logWorkerId,
-              listen: ["*"],
-              hidden: true,
-              run: async (event) => {
-                const wasBottom = scrollOffset >= maxScroll();
-                pushBuffer(events, event, 500);
-                if (wasBottom) scrollOffset = maxScroll();
-                tui.requestRender();
-              },
-            }),
-          );
+          // Poll DB for new events
+          let lastSeenId =
+            events.length > 0 ? events[events.length - 1]!.id : 0;
+
+          const pollInterval = setInterval(() => {
+            const newEvents = getEventsSince(db, {
+              sinceId: lastSeenId,
+              limit: 200,
+            });
+            if (newEvents.length === 0) return;
+            lastSeenId = newEvents[newEvents.length - 1]!.id;
+
+            const wasBottom = scrollOffset >= maxScroll();
+            for (const ev of newEvents) {
+              pushBuffer(events, ev, 500);
+            }
+            if (wasBottom) scrollOffset = maxScroll();
+            tui.requestRender();
+          }, 500);
 
           return {
             render(width: number): string[] {
@@ -368,7 +407,7 @@ export const registerEventLogCommand = (
 
             handleInput(data: string): void {
               if (matchesKey(data, "escape")) {
-                system.kill(logWorkerId);
+                clearInterval(pollInterval);
                 done(null);
                 return;
               }

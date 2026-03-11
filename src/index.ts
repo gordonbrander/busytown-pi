@@ -14,9 +14,6 @@ import {
 } from "./event-queue.ts";
 
 import { loadAllAgents } from "./agent.ts";
-import { getOrCreateSystem } from "./worker.ts";
-import { makeAgentWorker } from "./pi-process.ts";
-import { watchAgents } from "./agent-watcher.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
@@ -25,23 +22,14 @@ import {
   startNotifier,
   registerEventLogCommand,
 } from "./dashboard.ts";
+import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
 
-const resolveAgentsDir = (projectRoot: string): string =>
-  path.join(projectRoot, ".pi", "agents");
-
-const resolveCliBin = (): string => {
-  // Resolve the CLI binary path relative to this extension
-  return path.join(path.dirname(new URL(import.meta.url).pathname), "cli.ts");
-};
-
 export default (pi: ExtensionAPI) => {
   const projectRoot = process.cwd();
   const dbPath = resolveDbPath(projectRoot);
-  const agentsDir = resolveAgentsDir(projectRoot);
-  const cliBin = resolveCliBin();
   const sessionCleanup = cleanupGroupAsync();
 
   pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
@@ -53,41 +41,27 @@ export default (pi: ExtensionAPI) => {
       getOrOpenDb.cache.delete(dbPath);
     });
 
-    const system = getOrCreateSystem("pi", db, 1000);
-    sessionCleanup.add(async () => {
-      await system.stop();
-      getOrCreateSystem.cache.delete("pi");
-    });
-
-    // Load agents with listen fields and spawn workers
-    const agents = loadAllAgents(agentsDir);
-    const toWorker = makeAgentWorker(db, projectRoot, cliBin);
-
-    for (const agent of agents) {
-      if (agent.listen.length === 0) continue;
-      try {
-        system.spawn(toWorker(agent));
-      } catch (err) {
-        console.error(`Failed to spawn worker for agent "${agent.id}":`, err);
-      }
+    // Auto-start the daemon
+    const result = await spawnDaemon(projectRoot);
+    if (result.ok) {
+      ctx.ui.notify(`Busytown daemon running (pid ${result.pid})`, "info");
+    } else {
+      ctx.ui.notify("Busytown daemon failed to start", "error");
     }
 
-    // Start watching for agent file changes
-    const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
-    sessionCleanup.add(stopWatcher);
+    // Load agents for widget display (read-only, no spawning)
+    const agents = loadAllAgents(path.join(projectRoot, ".pi", "agents"));
 
-    pushEvent(db, "sys", "sys.lifecycle.start");
-
-    // Start the dashboard widget (agent status below editor)
-    const stopWidget = startWidget(db, agents, ctx);
+    // Start the dashboard widget (agent status + daemon indicator)
+    const stopWidget = startWidget(db, agents, ctx, projectRoot);
     sessionCleanup.add(stopWidget);
 
-    // Fire-and-forget TUI notification for every event
-    const stopNotifier = startNotifier(system, ctx);
+    // Fire-and-forget TUI notification for every event (polls DB)
+    const stopNotifier = startNotifier(db, ctx);
     sessionCleanup.add(stopNotifier);
 
     // Register /busytown overlay command
-    registerEventLogCommand(pi, system);
+    registerEventLogCommand(pi, db);
 
     // Register tools
     pi.registerTool({
@@ -296,11 +270,48 @@ export default (pi: ExtensionAPI) => {
         );
       },
     });
+
+    // /busytown-start — idempotent daemon start
+    pi.registerCommand("busytown-start", {
+      description: "Start the Busytown daemon (idempotent)",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const status = getDaemonStatus(projectRoot);
+        if (status.running) {
+          ctx.ui.notify(
+            `Busytown daemon already running (pid ${status.pid})`,
+            "info",
+          );
+          return;
+        }
+        const res = await spawnDaemon(projectRoot);
+        if (res.ok) {
+          ctx.ui.notify(`Busytown daemon started (pid ${res.pid})`, "info");
+        } else {
+          ctx.ui.notify("Busytown daemon failed to start", "error");
+        }
+      },
+    });
+
+    // /busytown-stop — idempotent daemon stop
+    pi.registerCommand("busytown-stop", {
+      description: "Stop the Busytown daemon",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const res = await stopDaemon(projectRoot);
+        if (!res.wasRunning) {
+          ctx.ui.notify("Busytown daemon is not running", "info");
+        } else if (res.ok) {
+          ctx.ui.notify("Busytown daemon stopped", "info");
+        } else {
+          ctx.ui.notify("Busytown daemon did not stop within 5s", "error");
+        }
+      },
+    });
   });
 
   pi.on("session_shutdown", async () => {
-    const db = getOrOpenDb(dbPath);
-    pushEvent(db, "sys", "sys.lifecycle.finish");
+    // Don't stop the daemon on pi exit — it's intentionally independent
     await sessionCleanup();
   });
 };
