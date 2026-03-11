@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import path from "node:path";
 import { defineCommand, runMain } from "citty";
 import {
@@ -14,6 +15,13 @@ import { createSystem } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
 import { watchAgents } from "./agent-watcher.ts";
 import { forever } from "./lib/promise.ts";
+import {
+  getDaemonStatus,
+  writePidfile,
+  removePidfile,
+  isProcessAlive,
+} from "./pidfile.ts";
+import { logger } from "./lib/json-logger.ts";
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -55,7 +63,7 @@ const resolveDb = (dir?: string, db?: string) =>
 const startCommand = defineCommand({
   meta: {
     name: "start",
-    description: "Start the worker system (long-running)",
+    description: "Start the worker system (long-running daemon)",
   },
   args: {
     ...globalArgs,
@@ -63,13 +71,43 @@ const startCommand = defineCommand({
       type: "string",
       description: "Agent definitions directory (default: <dir>/.pi/agents)",
     },
+    log: {
+      type: "string",
+      description:
+        "Path to log file for stdout/stderr (default: log to stdout)",
+    },
   },
   run: async ({ args }) => {
     const projectRoot = resolveProjectRoot(args.dir);
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
     const cliBin = resolveCliBin();
-    const db = resolveDb(args.dir, args.db);
 
+    // Check for existing daemon
+    const status = getDaemonStatus(projectRoot);
+    if (status.running) {
+      console.error(
+        `Busytown daemon already running (pid ${status.pid}). Use 'busytown stop' first.`,
+      );
+      process.exit(1);
+    }
+
+    if (args.log) {
+      const logPath = path.resolve(args.log);
+      fs.mkdirSync(path.dirname(logPath), { recursive: true });
+      const logFd = fs.openSync(logPath, "a");
+      const logStream = fs.createWriteStream("", { fd: logFd });
+      process.stdout.write = logStream.write.bind(
+        logStream,
+      ) as typeof process.stdout.write;
+      process.stderr.write = logStream.write.bind(
+        logStream,
+      ) as typeof process.stderr.write;
+    }
+
+    // Write pidfile
+    writePidfile(projectRoot);
+
+    const db = resolveDb(args.dir, args.db);
     const system = createSystem(db);
 
     const agents = loadAllAgents(agentsDir);
@@ -81,29 +119,32 @@ const startCommand = defineCommand({
       try {
         system.spawn(toWorker(agent));
         spawned++;
-        console.log(
-          `  ✓ ${agent.id} listening for [${agent.listen.join(", ")}]`,
-        );
+        logger.info("Agent spawned", {
+          agent: agent.id,
+          listen: agent.listen,
+        });
       } catch (err) {
-        console.error(
-          `  ✗ ${agent.id}: ${err instanceof Error ? err.message : err}`,
-        );
+        logger.error("Agent spawn failed", {
+          agent: agent.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
     const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
-    console.log(
-      `\nBusytown started (${spawned} agent${spawned === 1 ? "" : "s"})`,
-    );
-    console.log(`  db:     ${db.location()}`);
-    console.log(`  agents: ${agentsDir}`);
-    console.log(`\nWatching for agent changes. Press Ctrl+C to stop.\n`);
+    logger.info("Busytown daemon started", {
+      pid: process.pid,
+      agents: spawned,
+      db: db.location(),
+      agents_dir: agentsDir,
+    });
 
     const shutdown = async () => {
-      console.log("\nShutting down...");
+      logger.info("Shutting down");
       pushEvent(db, "sys", "sys.lifecycle.finish");
+      removePidfile(projectRoot);
       await stopWatcher();
       await system.stop();
       db.close();
@@ -114,6 +155,81 @@ const startCommand = defineCommand({
     process.on("SIGTERM", shutdown);
 
     await forever();
+  },
+});
+
+const stopCommand = defineCommand({
+  meta: {
+    name: "stop",
+    description: "Stop the running Busytown daemon",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: async ({ args }) => {
+    const projectRoot = resolveProjectRoot(args.dir);
+    const status = getDaemonStatus(projectRoot);
+
+    if (!status.running) {
+      console.log("Busytown daemon is not running.");
+      return;
+    }
+
+    console.log(`Sending SIGTERM to daemon (pid ${status.pid})...`);
+    process.kill(status.pid!, "SIGTERM");
+
+    // Poll for process exit (up to ~5s)
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (!isProcessAlive(status.pid!)) {
+        removePidfile(projectRoot);
+        console.log("Busytown daemon stopped.");
+        return;
+      }
+    }
+
+    console.error(
+      `Daemon (pid ${status.pid}) did not exit within 5s. You may need to kill it manually.`,
+    );
+    process.exit(1);
+  },
+});
+
+const statusCommand = defineCommand({
+  meta: {
+    name: "status",
+    description: "Check if the Busytown daemon is running",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: ({ args }) => {
+    const projectRoot = resolveProjectRoot(args.dir);
+    const status = getDaemonStatus(projectRoot);
+
+    if (!status.running) {
+      console.log("Busytown daemon is not running.");
+      return;
+    }
+
+    console.log(`Busytown daemon is running (pid ${status.pid}).`);
+
+    // Show some info from the DB
+    try {
+      const db = resolveDb(args.dir, args.db);
+      const tip = getEventsSince(db, { tail: 1 });
+      if (tip.length > 0) {
+        console.log(`  last event: #${tip[0]!.id} (${tip[0]!.type})`);
+      }
+      const agentsDir = resolveAgentsDir(args.dir);
+      const agents = loadAllAgents(agentsDir);
+      const listening = agents.filter((a) => a.listen.length > 0);
+      console.log(`  agents:     ${listening.length} listening`);
+      db.close();
+    } catch {
+      // DB might not exist yet, that's fine
+    }
   },
 });
 
@@ -269,6 +385,8 @@ const main = defineCommand({
   },
   subCommands: {
     start: startCommand,
+    stop: stopCommand,
+    status: statusCommand,
     push: pushCommand,
     events: eventsCommand,
     agents: agentsCommand,

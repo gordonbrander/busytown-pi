@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToSlug } from "./lib/slug.ts";
+import { logger } from "./lib/json-logger.ts";
 
 const AgentFrontmatterSchema = Type.Object({
   name: Type.Optional(Type.String()),
@@ -113,7 +114,10 @@ export const loadAllAgents = (agentsDir: string): AgentDef[] => {
     try {
       agents.push(loadAgentDef(path.join(agentsDir, entry.name)));
     } catch (err) {
-      console.error(`Failed to load agent ${entry.name}:`, err);
+      logger.error("Failed to load agent", {
+        file: entry.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
   return agents;

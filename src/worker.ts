@@ -10,6 +10,7 @@ import {
 import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { memoize } from "./lib/memoize.ts";
 import { type Result } from "./lib/result.ts";
+import { logger } from "./lib/json-logger.ts";
 
 export type EffectContext = {
   abortSignal: AbortSignal;
@@ -159,6 +160,7 @@ export const createSystem = (
     handle.abortController.abort();
     await handle.fork;
     workers.delete(id);
+    logger.info("Worker killed", { id });
     return true;
   };
 
