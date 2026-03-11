@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { loadAgentDef, loadAllAgents } from "./agent.ts";
+import matter from "gray-matter";
+import {
+  loadAgentDef,
+  loadAllAgents,
+  updateAgentFrontmatter,
+} from "./agent.ts";
 
 let tmpDir: string;
 
@@ -34,7 +39,9 @@ listen:
 ignore_self: false
 emits:
   - plan.complete
-tools: read,bash
+tools:
+  - read
+  - bash
 model: claude-sonnet
 ---
 You are a planner agent.
@@ -131,6 +138,127 @@ listen: []
     if (agent.type === "pi") {
       assert.deepEqual(agent.tools, ["read", "bash", "edit"]);
     }
+  });
+});
+
+describe("memory_blocks", () => {
+  it("loads an agent with memory_blocks", () => {
+    const filePath = writeAgent(
+      "with-memory.md",
+      `---
+listen:
+  - "*"
+memory_blocks:
+  agent:
+    description: Agent notes
+    value: some data
+    char_limit: 1000
+  project:
+    description: Project facts
+---
+Hello
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.deepEqual(agent.memoryBlocks, {
+      agent: {
+        description: "Agent notes",
+        value: "some data",
+        charLimit: 1000,
+      },
+      project: {
+        description: "Project facts",
+        value: "",
+        charLimit: 2000,
+      },
+    });
+  });
+
+  it("defaults to empty memoryBlocks when not specified", () => {
+    const filePath = writeAgent(
+      "no-memory.md",
+      `---
+listen: []
+---
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.deepEqual(agent.memoryBlocks, {});
+  });
+
+  it("applies defaults for missing fields", () => {
+    const filePath = writeAgent(
+      "partial-memory.md",
+      `---
+listen: []
+memory_blocks:
+  notes: {}
+---
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.deepEqual(agent.memoryBlocks.notes, {
+      description: "",
+      value: "",
+      charLimit: 2000,
+    });
+  });
+});
+
+describe("updateAgentFrontmatter", () => {
+  it("rewrites frontmatter while preserving body", () => {
+    const filePath = writeAgent(
+      "update-test.md",
+      `---
+listen:
+  - "*"
+memory_blocks:
+  agent:
+    description: Agent notes
+    value: old value
+    char_limit: 2000
+---
+Body content here.
+`,
+    );
+
+    updateAgentFrontmatter(filePath, (fm) => {
+      const mb = fm.memory_blocks ?? {};
+      if (mb.agent) mb.agent.value = "new value";
+      return { ...fm, memory_blocks: mb };
+    });
+
+    const updated = loadAgentDef(filePath);
+    assert.equal(updated.memoryBlocks.agent.value, "new value");
+    assert.ok(updated.body.includes("Body content here."));
+  });
+
+  it("preserves extra frontmatter keys not in schema", () => {
+    const filePath = writeAgent(
+      "extra-keys.md",
+      `---
+listen:
+  - "*"
+custom_field: hello
+another: 42
+---
+Body.
+`,
+    );
+
+    updateAgentFrontmatter(filePath, (fm) => ({
+      ...fm,
+      listen: ["foo.*"],
+    }));
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const { data } = matter(raw);
+    assert.equal(data.custom_field, "hello");
+    assert.equal(data.another, 42);
+    assert.deepEqual(data.listen, ["foo.*"]);
   });
 });
 
