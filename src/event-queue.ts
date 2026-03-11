@@ -62,9 +62,9 @@ export const pushEvent = (
        RETURNING id, timestamp`,
     )
     .get(type, workerId, JSON.stringify(payload)) as {
-    id: number;
-    timestamp: number;
-  };
+      id: number;
+      timestamp: number;
+    };
 
   return {
     id: row.id,
@@ -139,17 +139,15 @@ export type GetEventsSinceOpts = {
 
 export const getEventsSince = (
   db: DatabaseSync,
-  opts: GetEventsSinceOpts = {},
-): Event[] => {
-  const {
+  {
     sinceId = 0,
     limit = 100,
     omitWorkerId,
     filterWorkerId,
     filterType,
     tail,
-  } = opts;
-
+  }: GetEventsSinceOpts = {},
+): Event[] => {
   const conditions: string[] = ["id > ?"];
   const params: SQLInputValue[] = [sinceId];
 
