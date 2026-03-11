@@ -58,7 +58,7 @@ export const createSystem = (
 ): WorkerSystem => {
   const workers = new Map<string, WorkerHandle>();
   const runningEffects = new Set<Promise<Result<void, string>>>();
-  const systemAbortController = new AbortController();
+  let systemAbortController = new AbortController();
 
   const runEffect = async (
     worker: Worker,
@@ -169,6 +169,7 @@ export const createSystem = (
     await Promise.all([...workers.values()].map((h) => h.fork));
     await Promise.all([...runningEffects]);
     workers.clear();
+    systemAbortController = new AbortController();
   };
 
   return { spawn, kill, stop };

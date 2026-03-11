@@ -11,13 +11,13 @@ import {
   pushEvent,
 } from "./event-queue.ts";
 import {
-  loadAgentDef,
   loadAllAgents,
   updateAgentFile,
 } from "./agent.ts";
 import { applyMemoryUpdate } from "./memory.ts";
-import { createSystem, worker as makeWorker } from "./worker.ts";
+import { createSystem, worker } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
+import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
@@ -110,7 +110,7 @@ const startCommand = defineCommand({
     const db = resolveDb(args.dir, args.db);
     const system = createSystem(db);
 
-    const spawnAgents = (): number => {
+    const spawnAll = (sys: typeof system): number => {
       const agents = loadAllAgents(agentsDir);
       const toWorker = makeAgentWorker(db, projectRoot);
       let spawned = 0;
@@ -118,7 +118,7 @@ const startCommand = defineCommand({
       for (const agent of agents) {
         if (agent.listen.length === 0) continue;
         try {
-          system.spawn(toWorker(agent));
+          sys.spawn(toWorker(agent));
           spawned++;
           logger.info("Agent spawned", {
             agent: agent.id,
@@ -131,51 +131,30 @@ const startCommand = defineCommand({
           });
         }
       }
+
+      const reload = async () => {
+        await system.stop();
+        const count = spawnAll(system);
+        logger.info("Agents reloaded", { count });
+      };
+
+      sys.spawn(
+        worker({
+          id: "_sys_reload",
+          listen: ["sys.reload"],
+          hidden: true,
+          ignoreSelf: true,
+          run: async () => {
+            void reload();
+          },
+        }),
+      );
+
       return spawned;
     };
 
-    const spawned = spawnAgents();
-
-    // Built-in reload worker: listens for sys.reload, re-reads agents
-    system.spawn(
-      makeWorker({
-        id: "sys.reload",
-        listen: ["sys.reload"],
-        hidden: true,
-        ignoreSelf: true,
-        run: async () => {
-          logger.info("Reloading agents");
-          const currentAgents = loadAllAgents(agentsDir);
-          const currentIds = new Set(currentAgents.map((a) => a.id));
-          const toWorker = makeAgentWorker(db, projectRoot);
-
-          // Kill all existing agent workers (not sys.reload itself)
-          for (const agent of currentAgents) {
-            await system.kill(agent.id);
-          }
-
-          // Re-spawn
-          let reloaded = 0;
-          for (const agent of currentAgents) {
-            if (agent.listen.length === 0) continue;
-            try {
-              system.spawn(toWorker(agent));
-              reloaded++;
-              pushEvent(db, "sys", "sys.agent.reload", {
-                agent_id: agent.id,
-              });
-            } catch (err) {
-              logger.error("Agent reload failed", {
-                agent: agent.id,
-                error: err instanceof Error ? err.message : String(err),
-              });
-            }
-          }
-
-          logger.info("Agents reloaded", { count: reloaded });
-        },
-      }),
-    );
+    const spawned = spawnAll(system);
+    const stopFileWatcher = watchFiles(db, projectRoot);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
     logger.info("Busytown daemon started", {
@@ -189,6 +168,7 @@ const startCommand = defineCommand({
       logger.info("Shutting down");
       pushEvent(db, "sys", "sys.lifecycle.finish");
       removePidfile(projectRoot);
+      await stopFileWatcher();
       await system.stop();
       db.close();
       process.exit(0);
