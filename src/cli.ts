@@ -10,10 +10,14 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAllAgents } from "./agent.ts";
-import { createSystem } from "./worker.ts";
+import {
+  loadAgentDef,
+  loadAllAgents,
+  updateAgentFile,
+} from "./agent.ts";
+import { applyMemoryUpdate } from "./memory.ts";
+import { createSystem, worker as makeWorker } from "./worker.ts";
 import { makeAgentWorker } from "./pi-process.ts";
-import { watchAgents } from "./agent-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
@@ -52,9 +56,6 @@ const resolveAgentsDir = (dir?: string, agentsDir?: string): string => {
 
 const resolveProjectRoot = (dir?: string): string => dir ?? process.cwd();
 
-const resolveCliBin = (): string =>
-  path.join(path.dirname(new URL(import.meta.url).pathname), "cli.ts");
-
 const resolveDb = (dir?: string, db?: string) =>
   getOrOpenDb(resolveDbPath(dir, db));
 
@@ -80,7 +81,6 @@ const startCommand = defineCommand({
   run: async ({ args }) => {
     const projectRoot = resolveProjectRoot(args.dir);
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const cliBin = resolveCliBin();
 
     // Check for existing daemon
     const status = getDaemonStatus(projectRoot);
@@ -110,28 +110,72 @@ const startCommand = defineCommand({
     const db = resolveDb(args.dir, args.db);
     const system = createSystem(db);
 
-    const agents = loadAllAgents(agentsDir);
-    const toWorker = makeAgentWorker(db, projectRoot, cliBin);
-    let spawned = 0;
+    const spawnAgents = (): number => {
+      const agents = loadAllAgents(agentsDir);
+      const toWorker = makeAgentWorker(db, projectRoot);
+      let spawned = 0;
 
-    for (const agent of agents) {
-      if (agent.listen.length === 0) continue;
-      try {
-        system.spawn(toWorker(agent));
-        spawned++;
-        logger.info("Agent spawned", {
-          agent: agent.id,
-          listen: agent.listen,
-        });
-      } catch (err) {
-        logger.error("Agent spawn failed", {
-          agent: agent.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      for (const agent of agents) {
+        if (agent.listen.length === 0) continue;
+        try {
+          system.spawn(toWorker(agent));
+          spawned++;
+          logger.info("Agent spawned", {
+            agent: agent.id,
+            listen: agent.listen,
+          });
+        } catch (err) {
+          logger.error("Agent spawn failed", {
+            agent: agent.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-    }
+      return spawned;
+    };
 
-    const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
+    const spawned = spawnAgents();
+
+    // Built-in reload worker: listens for sys.reload, re-reads agents
+    system.spawn(
+      makeWorker({
+        id: "sys.reload",
+        listen: ["sys.reload"],
+        hidden: true,
+        ignoreSelf: true,
+        run: async () => {
+          logger.info("Reloading agents");
+          const currentAgents = loadAllAgents(agentsDir);
+          const currentIds = new Set(currentAgents.map((a) => a.id));
+          const toWorker = makeAgentWorker(db, projectRoot);
+
+          // Kill all existing agent workers (not sys.reload itself)
+          for (const agent of currentAgents) {
+            await system.kill(agent.id);
+          }
+
+          // Re-spawn
+          let reloaded = 0;
+          for (const agent of currentAgents) {
+            if (agent.listen.length === 0) continue;
+            try {
+              system.spawn(toWorker(agent));
+              reloaded++;
+              pushEvent(db, "sys", "sys.agent.reload", {
+                agent_id: agent.id,
+              });
+            } catch (err) {
+              logger.error("Agent reload failed", {
+                agent: agent.id,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+
+          logger.info("Agents reloaded", { count: reloaded });
+        },
+      }),
+    );
 
     pushEvent(db, "sys", "sys.lifecycle.start");
     logger.info("Busytown daemon started", {
@@ -145,7 +189,6 @@ const startCommand = defineCommand({
       logger.info("Shutting down");
       pushEvent(db, "sys", "sys.lifecycle.finish");
       removePidfile(projectRoot);
-      await stopWatcher();
       await system.stop();
       db.close();
       process.exit(0);
@@ -375,6 +418,103 @@ const checkClaimCommand = defineCommand({
   },
 });
 
+const updateMemoryCommand = defineCommand({
+  meta: {
+    name: "update-memory",
+    description: "Update a memory block in an agent file",
+  },
+  args: {
+    ...globalArgs,
+    "agents-dir": {
+      type: "string",
+      description: "Agent definitions directory (default: <dir>/.pi/agents)",
+    },
+    agent: {
+      type: "string",
+      description: "Agent ID (matches filename or name field)",
+      required: true,
+    },
+    block: {
+      type: "string",
+      description: "Memory block key",
+      required: true,
+    },
+    "new-text": {
+      type: "string",
+      description: "New text (replacement or append)",
+      required: true,
+    },
+    "old-text": {
+      type: "string",
+      description: "Text to find and replace (omit to append)",
+    },
+  },
+  run: ({ args }) => {
+    const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
+    const agents = loadAllAgents(agentsDir);
+    const agent = agents.find((a) => a.id === args.agent);
+    if (!agent) {
+      console.error(`Agent "${args.agent}" not found in ${agentsDir}`);
+      process.exit(1);
+    }
+
+    const block = agent.memoryBlocks[args.block];
+    if (!block) {
+      const available = Object.keys(agent.memoryBlocks).join(", ");
+      console.error(
+        `Block "${args.block}" not found. Available: ${available || "(none)"}`,
+      );
+      process.exit(1);
+    }
+
+    const result = applyMemoryUpdate(
+      block.value,
+      block.charLimit,
+      args["new-text"],
+      args["old-text"],
+    );
+
+    updateAgentFile(agent.filePath, (frontmatter) => {
+      const mb = (frontmatter.memory_blocks ?? {}) as Record<
+        string,
+        { value?: string }
+      >;
+      if (mb[args.block]) {
+        mb[args.block].value = result.value;
+      }
+      return { ...frontmatter, memory_blocks: mb };
+    });
+
+    console.log(
+      JSON.stringify({
+        blockKey: args.block,
+        usage: `${result.value.length}/${block.charLimit}`,
+        truncated: result.truncated,
+        value: result.value,
+      }),
+    );
+  },
+});
+
+const reloadCommand = defineCommand({
+  meta: {
+    name: "reload",
+    description: "Reload agent definitions (sends sys.reload event)",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: ({ args }) => {
+    const db = resolveDb(args.dir, args.db);
+    try {
+      const event = pushEvent(db, "sys", "sys.reload");
+      console.log(JSON.stringify(event));
+    } finally {
+      db.close();
+    }
+  },
+});
+
 // -- Main command ------------------------------------------------------------
 
 const main = defineCommand({
@@ -392,6 +532,8 @@ const main = defineCommand({
     agents: agentsCommand,
     claim: claimCommand,
     "check-claim": checkClaimCommand,
+    "update-memory": updateMemoryCommand,
+    reload: reloadCommand,
   },
 });
 

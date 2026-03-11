@@ -15,9 +15,40 @@ const AgentFrontmatterSchema = Type.Object({
   emits: Type.Optional(Type.Array(Type.String())),
   tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
   model: Type.Optional(Type.String()),
+  memory_blocks: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Object({
+        description: Type.Optional(Type.String()),
+        value: Type.Optional(Type.String()),
+        char_limit: Type.Optional(Type.Number()),
+      }),
+    ),
+  ),
 });
 
 type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
+
+export type MemoryBlockDef = {
+  description: string;
+  value: string;
+  charLimit: number;
+};
+
+const parseMemoryBlocks = (
+  raw: AgentFrontmatter["memory_blocks"],
+): Record<string, MemoryBlockDef> => {
+  if (!raw) return {};
+  const result: Record<string, MemoryBlockDef> = {};
+  for (const [key, block] of Object.entries(raw)) {
+    result[key] = {
+      description: block.description ?? "",
+      value: block.value ?? "",
+      charLimit: block.char_limit ?? 2000,
+    };
+  }
+  return result;
+};
 
 const applyDefaults = (raw: AgentFrontmatter) => ({
   name: raw.name,
@@ -31,10 +62,12 @@ const applyDefaults = (raw: AgentFrontmatter) => ({
       ? raw.tools.split(",").map((s) => s.trim())
       : (raw.tools ?? []),
   model: raw.model,
+  memoryBlocks: parseMemoryBlocks(raw.memory_blocks),
 });
 
 export type PiAgentDef = {
   id: string;
+  filePath: string;
   type: "pi";
   description: string;
   listen: string[];
@@ -43,16 +76,19 @@ export type PiAgentDef = {
   tools: string[];
   body: string;
   model?: string;
+  memoryBlocks: Record<string, MemoryBlockDef>;
 };
 
 export type ShellAgentDef = {
   id: string;
+  filePath: string;
   type: "shell";
   description: string;
   listen: string[];
   ignoreSelf: boolean;
   emits: string[];
   body: string;
+  memoryBlocks: Record<string, MemoryBlockDef>;
 };
 
 export type AgentDef = PiAgentDef | ShellAgentDef;
@@ -77,17 +113,20 @@ export const loadAgentDef = (filePath: string): AgentDef => {
   if (frontmatter.type === "shell") {
     return {
       id,
+      filePath,
       type: "shell",
       description: frontmatter.description,
       listen: frontmatter.listen,
       ignoreSelf: frontmatter.ignore_self,
       emits: frontmatter.emits,
       body: content,
+      memoryBlocks: frontmatter.memoryBlocks,
     };
   }
 
   return {
     id,
+    filePath,
     type: "pi",
     description: frontmatter.description,
     listen: frontmatter.listen,
@@ -96,7 +135,19 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     tools: frontmatter.tools,
     body: content.trim(),
     model: frontmatter.model,
+    memoryBlocks: frontmatter.memoryBlocks,
   };
+};
+
+export const updateAgentFile = (
+  filePath: string,
+  updater: (frontmatter: Record<string, unknown>) => Record<string, unknown>,
+): void => {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const { data, content } = matter(raw);
+  const updated = updater({ ...data });
+  const output = matter.stringify(content, updated);
+  fs.writeFileSync(filePath, output);
 };
 
 export const loadAllAgents = (agentsDir: string): AgentDef[] => {

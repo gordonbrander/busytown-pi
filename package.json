@@ -10,7 +10,6 @@
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.56.1",
     "@sinclair/typebox": "^0.34.48",
-    "chokidar": "^4.0.0",
     "citty": "^0.2.1",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1"
