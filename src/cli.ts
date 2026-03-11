@@ -21,6 +21,7 @@ import {
   removePidfile,
   isProcessAlive,
 } from "./pidfile.ts";
+import { logger } from "./lib/json-logger.ts";
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -90,7 +91,6 @@ const startCommand = defineCommand({
       process.exit(1);
     }
 
-    // Redirect stdout/stderr to log file if --log is set
     if (args.log) {
       const logPath = path.resolve(args.log);
       fs.mkdirSync(path.dirname(logPath), { recursive: true });
@@ -119,28 +119,30 @@ const startCommand = defineCommand({
       try {
         system.spawn(toWorker(agent));
         spawned++;
-        console.log(
-          `  ✓ ${agent.id} listening for [${agent.listen.join(", ")}]`,
-        );
+        logger.info("Agent spawned", {
+          agent: agent.id,
+          listen: agent.listen,
+        });
       } catch (err) {
-        console.error(
-          `  ✗ ${agent.id}: ${err instanceof Error ? err.message : err}`,
-        );
+        logger.error("Agent spawn failed", {
+          agent: agent.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
     const stopWatcher = watchAgents(db, agentsDir, system, projectRoot, cliBin);
 
     pushEvent(db, "sys", "sys.lifecycle.start");
-    console.log(
-      `\nBusytown daemon started (pid ${process.pid}, ${spawned} agent${spawned === 1 ? "" : "s"})`,
-    );
-    console.log(`  db:     ${db.location()}`);
-    console.log(`  agents: ${agentsDir}`);
-    console.log(`\nWatching for agent changes. Press Ctrl+C to stop.\n`);
+    logger.info("Busytown daemon started", {
+      pid: process.pid,
+      agents: spawned,
+      db: db.location(),
+      agents_dir: agentsDir,
+    });
 
     const shutdown = async () => {
-      console.log("\nShutting down...");
+      logger.info("Shutting down");
       pushEvent(db, "sys", "sys.lifecycle.finish");
       removePidfile(projectRoot);
       await stopWatcher();
