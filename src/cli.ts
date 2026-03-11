@@ -29,6 +29,7 @@ import { logger } from "./lib/json-logger.ts";
 const globalArgs = {
   dir: {
     type: "string" as const,
+    alias: "d",
     description: "Project root directory (default: cwd)",
   },
   db: {
@@ -253,29 +254,47 @@ const statusCommand = defineCommand({
   },
 });
 
+const readPayload = (args: { payload?: string; msg?: string }) => {
+  if (args.payload) {
+    return JSON.parse(args.payload);
+  }
+  if (args.msg) {
+    return { msg: args.msg };
+  }
+  return {};
+};
+
 const pushCommand = defineCommand({
   meta: { name: "push", description: "Push an event to the queue" },
   args: {
     ...globalArgs,
     worker: {
+      alias: "w",
       type: "string",
       description: "Worker ID",
       required: true,
     },
     type: {
       type: "string",
+      alias: "t",
       description: "Event type",
       required: true,
     },
     payload: {
       type: "string",
+      alias: "p",
       description: "Event payload as JSON (default: {})",
+    },
+    msg: {
+      type: "string",
+      alias: "m",
+      description: 'Shorthand for --payload \'{"msg":"..."}\'',
     },
   },
   run: ({ args }) => {
     const db = resolveDb(args.dir, args.db);
     try {
-      const payload = args.payload ? JSON.parse(args.payload) : {};
+      const payload = readPayload(args);
       const event = pushEvent(db, args.worker, args.type, payload);
       console.log(JSON.stringify(event));
     } finally {
