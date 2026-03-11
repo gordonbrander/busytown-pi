@@ -39,7 +39,9 @@ listen:
 ignore_self: false
 emits:
   - plan.complete
-tools: read,bash
+tools:
+  - read
+  - bash
 model: claude-sonnet
 ---
 You are a planner agent.
