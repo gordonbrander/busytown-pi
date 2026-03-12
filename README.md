@@ -282,6 +282,34 @@ You can manually call these tools, plus a few additional commands, from the Pi c
 | `/busytown-stop`    | Stop the daemon                                                 |
 | `/busytown-reload`  | Reload agent definitions (sends `sys.reload` event)             |
 
+## Interactive agent mode
+
+You can boot Pi as a specific agent persona using the `--agent` flag:
+
+```bash
+pi --agent code
+```
+
+This loads the agent definition from `.pi/agents/code.md` and:
+
+- **Injects the agent's system prompt** (body + memory blocks) on every turn
+- **Switches the model** to the agent's configured model (e.g. `sonnet`)
+- **Registers the `update-memory` tool** if the agent has memory blocks
+- **Wires up lifecycle hooks** defined in the agent's frontmatter
+- **Shows a status indicator** (`🤖 code`) so you know which persona is active
+
+All standard Pi tools remain available alongside the busytown tools. This is
+useful for debugging an agent interactively, or for working as a specific
+persona with its own memory and system prompt.
+
+```bash
+# Work as the plan agent
+pi --agent plan
+
+# Work as the review agent
+pi --agent review
+```
+
 ## Standalone CLI
 
 Busytown also includes a standalone CLI. This lets you drive Busytown outside of Pi. You can use the CLI to script agent factories via cron, email, git hooks, etc.
