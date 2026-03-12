@@ -130,14 +130,14 @@ Then push a `task.summarized` event.
 
 | Field         | Type                | Default  | Description                                          |
 | ------------- | ------------------- | -------- | ---------------------------------------------------- |
-| `name`        | string              | filename | Override the agent ID                                |
 | `type`        | `"pi"` \| `"shell"` | `"pi"`   | Agent type                                           |
-| `description` | string              | `""`     | What this agent does                                 |
-| `listen`      | string[]            | `[]`     | Event patterns to listen for                         |
-| `ignore_self` | boolean             | `true`   | Ignore events this agent emitted                     |
-| `emits`       | string[]            | `[]`     | Event types this agent can emit (documentation only) |
-| `tools`       | string \| string[]  | `[]`     | Pi tools available to the agent                      |
-| `model`       | string              | —        | Model override (e.g., `"opus"`, `"sonnet"`)          |
+| `name`        | `string`            | ""       | Name of the agent                                    |
+| `description` | `string`            | `""`     | What this agent does                                 |
+| `listen`      | `string[]`          | `[]`     | Event patterns to listen for                         |
+| `emits`       | `string[]`          | `[]`     | Event types this agent can emit (documentation only) |
+| `ignore_self` | `boolean`           | `true`   | Ignore events this agent emitted                     |
+| `tools`       | `string[]`          | `[]`     | Pi tools available to the agent                      |
+| `model`       | `string`            | —        | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
 
 ### Agent types
 
