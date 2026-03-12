@@ -5,7 +5,7 @@ listen:
   - "code.review"
 emits:
   - "review.created"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "edit"

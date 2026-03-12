@@ -5,7 +5,7 @@ listen:
   - "plan.created"
 emits:
   - "code.review"
-allowed_tools:
+tools:
   - "read"
   - "edit"
   - "write"

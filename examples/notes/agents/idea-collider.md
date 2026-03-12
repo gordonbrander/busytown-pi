@@ -4,7 +4,7 @@ listen:
   - "collider.request"
 emits:
   - "collider.created"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "bash"

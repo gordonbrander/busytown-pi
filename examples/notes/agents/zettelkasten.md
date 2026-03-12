@@ -4,7 +4,7 @@ listen:
   - "capture.request"
 emits:
   - "capture.ingested"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "edit"

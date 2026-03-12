@@ -4,7 +4,7 @@ listen:
   - "breadcrumb.created"
 emits:
   - "questions.created"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "bash"
