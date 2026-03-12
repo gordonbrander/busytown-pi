@@ -165,11 +165,11 @@ The `listen` field supports:
 
 Busytown registers several additional tools for agents:
 
-| Tool               | Description                         |
-| ------------------ | ----------------------------------- |
-| `busytown-push`    | Push an event to the queue          |
-| `busytown-events`  | List recent events (with filtering) |
-| `busytown-claim`   | Claim an event for exclusive access |
+| Tool              | Description                         |
+| ----------------- | ----------------------------------- |
+| `busytown-push`   | Push an event to the queue          |
+| `busytown-events` | List recent events (with filtering) |
+| `busytown-claim`  | Claim an event for exclusive access |
 
 You can manually call these tools, plus a few additional commands, from the Pi console.
 
