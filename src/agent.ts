@@ -46,9 +46,10 @@ export const isHookName = (name: string): name is HookName =>
 export const AgentFrontmatterSchema = Type.Object(
   {
     name: Type.Optional(Type.String()),
-    type: Type.Union([Type.Literal("pi"), Type.Literal("shell")], {
-      default: "pi",
-    }),
+    type: Type.Union(
+      [Type.Literal("pi"), Type.Literal("shell"), Type.Literal("claude")],
+      { default: "pi" },
+    ),
     description: Type.String({ default: "" }),
     listen: Type.Array(Type.String(), { default: [] }),
     ignore_self: Type.Boolean({ default: true }),
@@ -144,7 +145,21 @@ export type ShellAgentDef = {
   memoryBlocks: Record<string, MemoryBlockDef>;
 };
 
-export type AgentDef = PiAgentDef | ShellAgentDef;
+export type ClaudeAgentDef = {
+  id: string;
+  filePath: string;
+  type: "claude";
+  description: string;
+  listen: string[];
+  ignoreSelf: boolean;
+  emits: string[];
+  tools: string[];
+  body: string;
+  model?: string;
+  memoryBlocks: Record<string, MemoryBlockDef>;
+};
+
+export type AgentDef = PiAgentDef | ShellAgentDef | ClaudeAgentDef;
 
 export const loadAgentDef = (filePath: string): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
@@ -167,6 +182,22 @@ export const loadAgentDef = (filePath: string): AgentDef => {
       ignoreSelf: fm.ignore_self,
       emits: fm.emits,
       body: content,
+      memoryBlocks,
+    };
+  }
+
+  if (fm.type === "claude") {
+    return {
+      id,
+      filePath,
+      type: "claude",
+      description: fm.description,
+      listen: fm.listen,
+      ignoreSelf: fm.ignore_self,
+      emits: fm.emits,
+      tools: fm.tools,
+      body: content.trim(),
+      model: fm.model,
       memoryBlocks,
     };
   }

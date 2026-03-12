@@ -41,6 +41,7 @@ export const renderMemoryBlockEntry = (
 
 export const renderMemoryBlocksPrompt = (
   blocks: Record<string, MemoryBlockDef>,
+  updateInstruction = "Use the `updateMemory` tool to store important information you learn.",
 ): string => {
   const keys = Object.keys(blocks);
   if (keys.length === 0) return "";
@@ -50,7 +51,7 @@ export const renderMemoryBlocksPrompt = (
     "## Memory",
     "",
     "You have persistent memory blocks that survive across agent invocations.",
-    "Use the updateMemory tool to store important information you learn.",
+    updateInstruction,
     "Review your memory blocks below and keep them up to date.",
     "",
     "<memory_blocks>",
