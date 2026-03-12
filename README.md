@@ -128,16 +128,16 @@ Then push a `task.summarized` event.
 
 ### Frontmatter fields
 
-| Field         | Type                | Default  | Description                                          |
-| ------------- | ------------------- | -------- | ---------------------------------------------------- |
-| `type`        | `"pi"` \| `"shell"` | `"pi"`   | Agent type                                           |
-| `name`        | `string`            | ""       | Name of the agent                                    |
-| `description` | `string`            | `""`     | What this agent does                                 |
-| `listen`      | `string[]`          | `[]`     | Event patterns to listen for                         |
-| `emits`       | `string[]`          | `[]`     | Event types this agent can emit (documentation only) |
-| `ignore_self` | `boolean`           | `true`   | Ignore events this agent emitted                     |
-| `tools`       | `string[]`          | `[]`     | Pi tools available to the agent                      |
-| `model`       | `string`            | —        | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
+| Field         | Type                | Default | Description                                          |
+| ------------- | ------------------- | ------- | ---------------------------------------------------- |
+| `type`        | `"pi"` \| `"shell"` | `"pi"`  | Agent type                                           |
+| `name`        | `string`            | ""      | Name of the agent                                    |
+| `description` | `string`            | `""`    | What this agent does                                 |
+| `listen`      | `string[]`          | `[]`    | Event patterns to listen for                         |
+| `emits`       | `string[]`          | `[]`    | Event types this agent can emit (documentation only) |
+| `ignore_self` | `boolean`           | `true`  | Ignore events this agent emitted                     |
+| `tools`       | `string[]`          | `[]`    | Pi tools available to the agent                      |
+| `model`       | `string`            | —       | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
 
 ### Agent types
 
