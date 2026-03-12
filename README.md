@@ -4,7 +4,7 @@ _A town full of busy little guys who do things_
 
 **busytown** is a multi-agent factory built around a SQLite event queue. It can be used standalone, or as a [Pi](https://github.com/nichochar/pi-coding-agent) extension.
 
-Agents listen for events, react to them, and push new events, forming an asynchronous assembly line. Agents don't need to know about other agents, just about events.
+Agents listen for events, react to them, and push new events, forming asynchronous assembly lines. Agents don't need to know about other agents, just about events.
 
 <p><img src="./busytown.png" src="A town full of busy little guys who do things" /></p>
 
@@ -106,7 +106,7 @@ Push a "plan.request" message with payload '{"prd_path": "docs/add-auth.md"}'
 
 This triggers the ralph loop: plan → code → review → plan... repeat until approved.
 
-## Writing your own agents
+### Writing your own agents
 
 An agent is just a markdown file in `.pi/agents/`. The filename becomes the agent's
 ID (e.g., `summarizer.md` → agent ID `summarizer`).
