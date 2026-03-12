@@ -4,9 +4,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
 import type { Event } from "./lib/event.ts";
-import type { AgentDef, PiAgentDef, ShellAgentDef } from "./agent.ts";
+import type {
+  AgentDef,
+  ClaudeAgentDef,
+  PiAgentDef,
+  ShellAgentDef,
+} from "./agent.ts";
 import { pushEvent } from "./event-queue.ts";
 import { renderTemplate } from "./lib/template.ts";
+import { renderMemoryBlocksPrompt } from "./memory.ts";
+import * as Lines from "./lib/lines.ts";
 import { type Agent, agent } from "./agent-system.ts";
 import { logger } from "./lib/json-logger.ts";
 
@@ -196,6 +203,134 @@ export const runShellAgent = ({
   });
 };
 
+const BUSYTOWN_CLI_GUIDE = (agentId: string): string =>
+  Lines.join([
+    "## Busytown event queue",
+    "",
+    `Use the Bash tool to interact with the event queue. Your agent ID is \`${agentId}\`.`,
+    "",
+    "Push an event:",
+    `  busytown push --agent ${agentId} --type <event-type> [--payload '<json>']`,
+    "",
+    "List recent events:",
+    "  busytown events [--type <filter>] [--tail <n>]",
+    "",
+    "Claim an event (prevents other agents from processing it):",
+    `  busytown claim --agent ${agentId} --event <event-id>`,
+    "",
+    "Check who claimed an event:",
+    "  busytown check-claim --event <event-id>",
+    "",
+    "Update a memory block:",
+    `  busytown update-memory --agent ${agentId} --block <key> \\`,
+    "    --new-text '<text>' [--old-text '<old-text>']",
+  ]);
+
+export const buildClaudeSystemPrompt = (agent: ClaudeAgentDef): string => {
+  const memoryInstruction = `Use the Bash tool to update memory: busytown update-memory --agent ${agent.id} --block <key> --new-text '<text>' [--old-text '<old-text>']`;
+  const memorySection = renderMemoryBlocksPrompt(
+    agent.memoryBlocks,
+    memoryInstruction,
+  );
+  return Lines.join(
+    [agent.body, memorySection, "", BUSYTOWN_CLI_GUIDE(agent.id)].filter(
+      Boolean,
+    ),
+  );
+};
+
+type RunClaudeAgentArgs = {
+  agent: ClaudeAgentDef;
+  event: Event;
+  db: DatabaseSync;
+  projectRoot: string;
+  abortSignal?: AbortSignal;
+};
+
+export const runClaudeAgent = ({
+  agent,
+  event,
+  db,
+  projectRoot,
+  abortSignal,
+}: RunClaudeAgentArgs): Promise<number> => {
+  const systemPrompt = buildClaudeSystemPrompt(agent);
+
+  const args = [
+    "--print",
+    "--system-prompt",
+    systemPrompt,
+    "--output-format",
+    "text",
+  ];
+
+  if (agent.tools.length > 0) {
+    args.push("--allowedTools", ...agent.tools);
+  }
+
+  if (agent.model) {
+    args.push("--model", agent.model);
+  }
+
+  return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      resolve(1);
+      return;
+    }
+
+    const child = spawn("claude", args, {
+      cwd: projectRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    const onAbort = (): void => {
+      child.kill("SIGTERM");
+    };
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    pipeLinesToEvents(
+      child,
+      "stdout",
+      db,
+      agent.id,
+      `sys.agent.${agent.id}.stdout`,
+    );
+    pipeLinesToEvents(
+      child,
+      "stderr",
+      db,
+      agent.id,
+      `sys.agent.${agent.id}.stderr`,
+    );
+
+    // Write event JSON as the user prompt on stdin
+    child.stdin?.write(JSON.stringify(event));
+    child.stdin?.end();
+
+    child.on("error", (err) => {
+      logger.error("Claude agent failed to spawn", {
+        agent: agent.id,
+        event_id: event.id,
+        error: err.message,
+      });
+      reject(err);
+    });
+    child.on("close", (code) => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      const exitCode = code ?? 1;
+      if (exitCode !== 0) {
+        logger.warn("Claude agent exited with non-zero code", {
+          agent: agent.id,
+          event_id: event.id,
+          exitCode,
+        });
+      }
+      resolve(exitCode);
+    });
+  });
+};
+
 export const runAgent = async (
   db: DatabaseSync,
   agentDef: AgentDef,
@@ -214,6 +349,14 @@ export const runAgent = async (
       });
     case "shell":
       return await runShellAgent({
+        agent: agentDef,
+        event,
+        db,
+        projectRoot,
+        abortSignal,
+      });
+    case "claude":
+      return await runClaudeAgent({
         agent: agentDef,
         event,
         db,

@@ -425,6 +425,106 @@ describe("isHookName", () => {
   });
 });
 
+describe("claude agent", () => {
+  it("loads a claude agent with all frontmatter fields", () => {
+    const filePath = writeAgent(
+      "coder.md",
+      `---
+type: claude
+description: Writes code
+listen:
+  - code.request
+emits:
+  - code.complete
+tools:
+  - Bash
+  - Read
+  - Write
+model: claude-opus-4-5
+---
+You are a coding agent.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "claude");
+    assert.equal(agent.id, "coder");
+    assert.equal(agent.description, "Writes code");
+    assert.deepEqual(agent.listen, ["code.request"]);
+    assert.deepEqual(agent.emits, ["code.complete"]);
+    if (agent.type === "claude") {
+      assert.deepEqual(agent.tools, ["Bash", "Read", "Write"]);
+      assert.equal(agent.model, "claude-opus-4-5");
+      assert.equal(agent.body, "You are a coding agent.");
+    }
+  });
+
+  it("defaults tools to empty array for claude agent", () => {
+    const filePath = writeAgent(
+      "no-tools.md",
+      `---
+type: claude
+listen:
+  - "*"
+---
+No tools agent.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "claude");
+    if (agent.type === "claude") {
+      assert.deepEqual(agent.tools, []);
+    }
+  });
+
+  it("claude agent does not have hooks", () => {
+    const filePath = writeAgent(
+      "claude-no-hooks.md",
+      `---
+type: claude
+listen: []
+hooks:
+  session_start: echo nope
+---
+Claude agent.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "claude");
+    assert.equal("hooks" in agent, false);
+  });
+
+  it("claude agent loads memory_blocks", () => {
+    const filePath = writeAgent(
+      "claude-memory.md",
+      `---
+type: claude
+listen:
+  - "*"
+memory_blocks:
+  context:
+    description: Project context
+    value: some context
+    char_limit: 1000
+---
+Agent with memory.
+`,
+    );
+
+    const agent = loadAgentDef(filePath);
+    assert.equal(agent.type, "claude");
+    assert.deepEqual(agent.memoryBlocks, {
+      context: {
+        description: "Project context",
+        value: "some context",
+        charLimit: 1000,
+      },
+    });
+  });
+});
+
 describe("loadAllAgents", () => {
   it("loads all .md files from directory", () => {
     writeAgent(

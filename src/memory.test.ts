@@ -104,4 +104,21 @@ describe("renderMemoryBlocksPrompt", () => {
     assert.ok(output.includes("</project>"));
     assert.ok(output.includes("updateMemory"));
   });
+
+  it("uses custom updateInstruction when provided", () => {
+    const customInstruction =
+      "Use busytown update-memory --agent foo --block bar --new-text '<text>'";
+    const output = renderMemoryBlocksPrompt(
+      {
+        agent: {
+          description: "Agent memory",
+          value: "hello",
+          charLimit: 2000,
+        },
+      },
+      customInstruction,
+    );
+    assert.ok(output.includes(customInstruction));
+    assert.ok(!output.includes("updateMemory tool"));
+  });
 });

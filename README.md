@@ -154,6 +154,10 @@ event:
 - `{{{event.payload.path}}}` — raw value (no escaping)
 - Dot paths walk nested objects. Missing keys resolve to empty string.
 
+**Claude agents** (`type: "claude"`) spawn the `claude` CLI in headless mode.
+The agent's markdown body becomes the system prompt, and the triggering event JSON is
+passed as the user prompt on stdin. Tools are allow-listed through the `tools` field, just like with Pi agents, but use the Claude tool set and tool name conventions (uppercase tool names).
+
 ### Event patterns
 
 The `listen` field supports:
