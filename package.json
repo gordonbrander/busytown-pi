@@ -28,10 +28,12 @@
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.56.3",
     "@sinclair/typebox": "^0.34.48",
+    "@types/picomatch": "^4.0.2",
     "chokidar": "^4.0.0",
     "citty": "^0.2.1",
     "gray-matter": "^4.0.3",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "picomatch": "^4.0.3"
   },
   "scripts": {
     "check": "tsc --noEmit",

@@ -1,16 +1,28 @@
 import { watch } from "chokidar";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import picomatch from "picomatch";
 import { pushEvent } from "./event-queue.ts";
 
-export type FileWatcherCleanup = () => Promise<void>;
+/**
+ * Returns a predicate that tests whether a path matches the given glob pattern.
+ */
+export const glob = (glob: string) => picomatch(glob);
 
-const DEFAULT_IGNORED = [
+/** Combines predicate functions */
+export const any =
+  (predicates: Array<(path: string) => boolean>) =>
+  (path: string): boolean =>
+    predicates.some((predicate) => predicate(path));
+
+export const DEFAULT_IGNORED = [
   "**/node_modules/**",
   "**/.git/**",
   "**/.busytown/**",
   "**/.DS_Store",
 ];
+
+export type FileWatcherCleanup = () => Promise<void>;
 
 /**
  * Watch the project directory for file changes and push file events.
@@ -25,11 +37,14 @@ const DEFAULT_IGNORED = [
 export const watchFiles = (
   db: DatabaseSync,
   projectRoot: string,
-  ignored: string[] = DEFAULT_IGNORED,
+  ignored = DEFAULT_IGNORED,
 ): FileWatcherCleanup => {
+  // Compile the ignored patterns into a predicate function
+  const isIgnored = any(ignored.map(glob));
+
   const watcher = watch(projectRoot, {
     ignoreInitial: true,
-    ignored,
+    ignored: isIgnored,
     awaitWriteFinish: { stabilityThreshold: 300 },
   });
 
