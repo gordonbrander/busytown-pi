@@ -181,6 +181,7 @@ You can manually call these tools, plus a few additional commands, from the Pi c
 | `/busytown-console` | Display the event console                                       |
 | `/busytown-start`   | Start the daemon (run automatically when Pi starts)             |
 | `/busytown-stop`    | Stop the daemon                                                 |
+| `/busytown-reload`  | Reload agent definitions (sends `sys.reload` event)             |
 
 ## Standalone CLI
 
