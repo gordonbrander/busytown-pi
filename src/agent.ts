@@ -88,18 +88,24 @@ const parseMemoryBlocks = (raw: unknown): Record<string, MemoryBlockDef> => {
   return result;
 };
 
+/** Normalize a raw hooks record: strip nulls, keep only valid hook names. */
+export const parseHooks = (raw: unknown): Hooks => {
+  if (!raw || typeof raw !== "object") return {};
+  const hooks: Hooks = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string" && isHookName(key)) {
+      hooks[key] = value;
+    }
+  }
+  return hooks;
+};
+
 /** Apply defaults, validate, and return typed frontmatter. Throws on invalid input. */
 const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
   Value.Default(AgentFrontmatterSchema, data);
   const d = data as Record<string, unknown>;
 
-  // Strip null hook values (YAML `key:` with no value produces null)
-  if (d.hooks && typeof d.hooks === "object") {
-    const hooks = d.hooks as Record<string, unknown>;
-    for (const [key, value] of Object.entries(hooks)) {
-      if (value == null) delete hooks[key];
-    }
-  }
+  d.hooks = parseHooks(d.hooks);
 
   parseMemoryBlocks(d.memory_blocks);
   if (!Value.Check(AgentFrontmatterSchema, data)) {
@@ -109,17 +115,6 @@ const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
     );
   }
   return data as AgentFrontmatter;
-};
-
-export const parseHooks = (fm: AgentFrontmatter): Hooks => {
-  const hooks: Hooks = {};
-  if (!fm.hooks) return hooks;
-  for (const [key, value] of Object.entries(fm.hooks)) {
-    if (isHookName(key)) {
-      hooks[key] = value;
-    }
-  }
-  return hooks;
 };
 
 export type PiAgentDef = {
@@ -188,7 +183,7 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     body: content.trim(),
     model: fm.model,
     memoryBlocks,
-    hooks: parseHooks(fm),
+    hooks: fm.hooks ?? {},
   };
 };
 

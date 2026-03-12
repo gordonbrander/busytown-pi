@@ -9,6 +9,7 @@ import {
   loadAllAgents,
   updateAgentFrontmatter,
   isHookName,
+  parseHooks,
 } from "./agent.ts";
 
 let tmpDir: string;
@@ -362,6 +363,50 @@ echo hi
     const agent = loadAgentDef(filePath);
     assert.equal(agent.type, "shell");
     assert.equal("hooks" in agent, false);
+  });
+});
+
+describe("parseHooks", () => {
+  it("extracts valid hook names from a record", () => {
+    const hooks = parseHooks({
+      session_start: "echo start",
+      turn_end: "echo end",
+    });
+    assert.deepEqual(hooks, {
+      session_start: "echo start",
+      turn_end: "echo end",
+    });
+  });
+
+  it("filters out invalid hook names", () => {
+    const hooks = parseHooks({
+      session_start: "echo start",
+      not_a_hook: "echo nope",
+      on_turn_end: "echo prefixed",
+    });
+    assert.deepEqual(hooks, { session_start: "echo start" });
+  });
+
+  it("strips null and non-string values", () => {
+    const hooks = parseHooks({
+      session_start: "echo start",
+      agent_end: null,
+      turn_start: 42,
+      tool_call: undefined,
+    });
+    assert.deepEqual(hooks, { session_start: "echo start" });
+  });
+
+  it("returns empty hooks for undefined input", () => {
+    assert.deepEqual(parseHooks(undefined), {});
+  });
+
+  it("returns empty hooks for null input", () => {
+    assert.deepEqual(parseHooks(null), {});
+  });
+
+  it("returns empty hooks for non-object input", () => {
+    assert.deepEqual(parseHooks("not an object"), {});
   });
 });
 
