@@ -218,6 +218,48 @@ access to context like `cwd`, `model`, `timestamp`, and hook-specific extras
 All hooks share a base set of template variables: `cwd`, `sessionFile`, `model`,
 `provider`, and `timestamp`.
 
+### Memory blocks
+
+Agents can have [Letta-style](https://docs.letta.com/guides/core-concepts/memory/memory-blocks/) memory blocks that persist across invocations. This lets the agent learn and grow a personality over time. Memory blocks are defined in agent frontmatter and updates are written back directly to the agent file.
+
+You can define any number of custom memory blocks. Two common blocks are `user` and `agent`, which help the agent learn about the user and grow a personality:
+
+```markdown
+---
+name: "wintermute"
+listen:
+  - "task.*"
+memory_blocks:
+  user:
+    description: "Key facts about the user and their preferences"
+    char_limit: 2000
+    value: "Name: Lady 3Jane. Lives in Freeside. Third clone of original Jane."
+  agent:
+    description: "Your role, personality, and preferences"
+    char_limit: 4000
+    value: "I try to plan, but that isn’t my basic mode really. I improvise. It’s my greatest talent. I prefer situations to plans."
+---
+
+You are an AI at Tessier-Ashpool...
+```
+
+Memory block fields:
+
+| Field         | Type     | Default | Description                            |
+| ------------- | -------- | ------- | -------------------------------------- |
+| `description` | `string` | `""`    | What this block is for                 |
+| `value`       | `string` | `""`    | Current contents of the block          |
+| `char_limit`  | `number` | `2000`  | Maximum characters stored in the block |
+
+Pi agents update their memory blocks automatically, using an `update-memory` tool that is registered by the agent extension. Shell agents and external scripts can use the CLI:
+
+```bash
+busytown update-memory \
+  --agent my-agent \
+  --block context \
+  --new-text "Switched to PostgreSQL for persistence"
+```
+
 ## Tools & commands
 
 Busytown registers several additional tools for agents:
@@ -262,6 +304,9 @@ busytown claim --worker my-agent --event 42
 
 # Check who claimed an event
 busytown check-claim --event 42
+
+# Update an agent's memory block
+busytown update-memory --agent my-agent --block context --new-text "new info"
 ```
 
 ## Key concepts
