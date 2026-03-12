@@ -79,7 +79,7 @@ When you receive a `capture.request` event:
 5. **Push the completion event** — after processing all atomic ideas from the
    captured content, push a `capture.ingested` event:
    ```
-   busytown events push --worker zettelkasten --type capture.ingested --payload '{"notes_created":["file1.md","file2.md"],"notes_updated":["existing.md"],"summary":"Decomposed transcript into N new notes and updated M existing notes"}'
+   busytown events push --agent zettelkasten --type capture.ingested --payload '{"notes_created":["file1.md","file2.md"],"notes_updated":["existing.md"],"summary":"Decomposed transcript into N new notes and updated M existing notes"}'
    ```
    Replace `N` and `M` with actual counts, and list all created/updated
    filenames without the directory path (just `note-name.md`).
@@ -148,5 +148,5 @@ Processing:
 
 4. Push event:
    ```
-   busytown events push --worker zettelkasten --type capture.ingested --payload '{"notes_created":["spaced-repetition-zettelkasten-connection.md","understanding-is-web-of-relationships.md"],"notes_updated":[],"summary":"Decomposed transcript into 2 new notes"}'
+   busytown events push --agent zettelkasten --type capture.ingested --payload '{"notes_created":["spaced-repetition-zettelkasten-connection.md","understanding-is-web-of-relationships.md"],"notes_updated":[],"summary":"Decomposed transcript into 2 new notes"}'
    ```

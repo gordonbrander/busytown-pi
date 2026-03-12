@@ -28,7 +28,7 @@ When the user invokes this skill:
    etc.)
 3. Push the event using:
    ```bash
-   busytown events push --worker user --type capture.request --payload '{"content":"<escaped text>"}'
+   busytown events push --agent user --type capture.request --payload '{"content":"<escaped text>"}'
    ```
 4. Confirm to the user that the capture was submitted
 5. Mention they can watch progress with `busytown events list --tail 10`
@@ -44,7 +44,7 @@ User input:
 Action:
 
 ```bash
-busytown events push --worker user --type capture.request --payload '{"content":"I was thinking about how spaced repetition and the Zettelkasten method share a common principle."}'
+busytown events push --agent user --type capture.request --payload '{"content":"I was thinking about how spaced repetition and the Zettelkasten method share a common principle."}'
 ```
 
 Response:

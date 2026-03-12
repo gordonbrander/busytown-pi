@@ -84,7 +84,7 @@ patterns that sparked the question.>
 
 7. **Push a completion event**:
    ```bash
-   busytown events push --worker questions --type questions.created --payload '{"questions":["questions/question-file-1.md","questions/question-file-2.md"],"summary":"Generated N questions from recent changes"}'
+   busytown events push --agent questions --type questions.created --payload '{"questions":["questions/question-file-1.md","questions/question-file-2.md"],"summary":"Generated N questions from recent changes"}'
    ```
 
 ## Guidelines

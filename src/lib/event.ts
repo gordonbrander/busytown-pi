@@ -2,7 +2,7 @@ export type Event = {
   id: number;
   timestamp: number;
   type: string;
-  worker_id: string;
+  agent_id: string;
   payload: unknown;
 };
 
@@ -10,7 +10,7 @@ export type RawEventRow = {
   id: number;
   timestamp: number;
   type: string;
-  worker_id: string;
+  agent_id: string;
   payload: string;
 };
 

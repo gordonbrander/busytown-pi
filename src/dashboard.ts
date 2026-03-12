@@ -42,9 +42,9 @@ type DashboardAction =
 // Event helpers
 // ---------------------------------------------------------------------------
 
-const WORKER_EVENT_RE = /^sys\.worker\.(.+)\.(start|finish|error)$/;
+const AGENT_EVENT_RE = /^sys\.agent\.(.+)\.(start|finish|error)$/;
 
-const applyWorkerEvent = (
+const applyAgentEvent = (
   agent: AgentState,
   action: string,
   payload: unknown,
@@ -80,16 +80,12 @@ const dashboardReducer = (
   let agents = state.agents;
 
   for (const event of action.events) {
-    const match = event.type.match(WORKER_EVENT_RE);
+    const match = event.type.match(AGENT_EVENT_RE);
     if (match) {
-      const [, agentId, workerAction] = match;
+      const [, agentId, agentAction] = match;
       const existing = agents.get(agentId!);
       if (existing) {
-        const updated = applyWorkerEvent(
-          existing,
-          workerAction!,
-          event.payload,
-        );
+        const updated = applyAgentEvent(existing, agentAction!, event.payload);
         if (updated !== existing) {
           // Copy-on-first-write
           if (agents === state.agents) agents = new Map(state.agents);
@@ -231,7 +227,7 @@ export const startNotifier = (
 
     for (const event of events) {
       const payload = JSON.stringify(event.payload);
-      ctx.ui.notify(`> ${event.type}\t@${event.worker_id}\t${payload}`, "info");
+      ctx.ui.notify(`> ${event.type}\t@${event.agent_id}\t${payload}`, "info");
     }
   }, 500);
 
@@ -243,7 +239,7 @@ export const startNotifier = (
 // ---------------------------------------------------------------------------
 
 const COL_TIME = 10;
-const COL_WORKER = 14;
+const COL_AGENT = 14;
 const OVERHEAD = 6; // top border, header, blank, blank, help, bottom border
 
 export const registerEventLogCommand = (
@@ -327,14 +323,14 @@ export const registerEventLogCommand = (
               );
 
               // --- column sizing ---
-              const availForType = innerW - COL_TIME - COL_WORKER - 4;
+              const availForType = innerW - COL_TIME - COL_AGENT - 4;
               const colType = Math.min(
                 36,
                 Math.max(20, Math.floor(availForType * 0.6)),
               );
               const colPayload = Math.max(
                 8,
-                innerW - COL_TIME - colType - COL_WORKER - 2,
+                innerW - COL_TIME - colType - COL_AGENT - 2,
               );
 
               // --- header ---
@@ -342,7 +338,7 @@ export const registerEventLogCommand = (
                 row(
                   theme.fg("muted", pad("TIME", COL_TIME)) +
                     theme.fg("muted", pad("TYPE", colType)) +
-                    theme.fg("muted", pad("WORKER", COL_WORKER)) +
+                    theme.fg("muted", pad("AGENT", COL_AGENT)) +
                     theme.fg("muted", "PAYLOAD"),
                 ),
               );
@@ -361,7 +357,7 @@ export const registerEventLogCommand = (
                   typeColor(ev.type),
                   pad(truncateToWidth(ev.type, colType - 1), colType),
                 );
-                const wkr = theme.fg("muted", pad(ev.worker_id, COL_WORKER));
+                const wkr = theme.fg("muted", pad(ev.agent_id, COL_AGENT));
                 const pStr = JSON.stringify(ev.payload);
                 const payload =
                   pStr === "{}"
@@ -453,7 +449,7 @@ export const registerEventLogCommand = (
 type FgColor = Parameters<Theme["fg"]>[0];
 
 const typeColor = (type: string): FgColor => {
-  if (type.startsWith("sys.worker.")) {
+  if (type.startsWith("sys.agent.")) {
     if (type.endsWith(".error")) return "error";
     if (type.endsWith(".start")) return "accent";
     if (type.endsWith(".finish")) return "success";

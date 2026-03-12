@@ -173,16 +173,16 @@ export default (pi: ExtensionAPI) => {
     description: "Claim an event so no other agent processes it",
     parameters: Type.Object({
       event_id: Type.Integer({ description: "Event ID to claim" }),
-      worker: Type.Optional(
+      agent: Type.Optional(
         Type.String({
-          description: `Worker ID claiming the event (default: "${agentId}")`,
+          description: `Agent ID claiming the event (default: "${agentId}")`,
         }),
       ),
     }),
     async execute(_toolCallId, params) {
       await nextTick();
-      const worker = (params.worker as string) ?? agentId;
-      const claimed = claimEvent(db, worker, params.event_id as number);
+      const claimingAgent = (params.agent as string) ?? agentId;
+      const claimed = claimEvent(db, claimingAgent, params.event_id as number);
       const claimant = getClaimant(db, params.event_id as number);
       return {
         content: [

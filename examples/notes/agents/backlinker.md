@@ -94,7 +94,7 @@ When you find a genuine conceptual connection between two notes:
 After processing all notes and adding links, push a `links.updated` event:
 
 ```bash
-busytown events push --worker backlinker --type links.updated --payload '{"notes_modified":["note1.md","note2.md"],"links_added":5,"summary":"Added 5 backlinks across 2 notes"}'
+busytown events push --agent backlinker --type links.updated --payload '{"notes_modified":["note1.md","note2.md"],"links_added":5,"summary":"Added 5 backlinks across 2 notes"}'
 ```
 
 Include:

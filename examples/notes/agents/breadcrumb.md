@@ -123,7 +123,7 @@ fully explored?>
 After writing the breadcrumb file:
 
 ```bash
-busytown events push --worker breadcrumb --type breadcrumb.created --payload '{"breadcrumb_path":"breadcrumbs/<filename>.md","notes_modified":["note1.md","note2.md"],"summary":"<brief description>"}'
+busytown events push --agent breadcrumb --type breadcrumb.created --payload '{"breadcrumb_path":"breadcrumbs/<filename>.md","notes_modified":["note1.md","note2.md"],"summary":"<brief description>"}'
 ```
 
 Include:

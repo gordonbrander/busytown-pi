@@ -132,13 +132,13 @@ export default (pi: ExtensionAPI) => {
       description: "Claim an event so no other agent processes it",
       parameters: Type.Object({
         event_id: Type.Integer({ description: "Event ID to claim" }),
-        worker: Type.String({ description: "Worker ID claiming the event" }),
+        agent: Type.String({ description: "Agent ID claiming the event" }),
       }),
       async execute(_toolCallId, params) {
         await nextTick();
         const claimed = claimEvent(
           db,
-          params.worker as string,
+          params.agent as string,
           params.event_id as number,
         );
         const claimant = getClaimant(db, params.event_id as number);
@@ -158,7 +158,7 @@ export default (pi: ExtensionAPI) => {
 
     pi.registerCommand("busytown-push", {
       description:
-        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json] [--worker name]",
+        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json] [--agent name]",
       handler: async (raw, ctx) => {
         await nextTick();
         const args = parseArgs(shellSplit(raw ?? ""), {
@@ -167,10 +167,10 @@ export default (pi: ExtensionAPI) => {
             description: "Event type",
             required: true,
           },
-          worker: {
+          agent: {
             type: "string" as const,
-            alias: "w",
-            description: "Worker ID (default: user)",
+            alias: "a",
+            description: "Agent ID (default: pi)",
             default: "pi",
           },
           payload: {
@@ -181,14 +181,14 @@ export default (pi: ExtensionAPI) => {
         });
         if (!args.type) {
           ctx.ui.notify(
-            "Usage: /busytown-push <type> [--worker name] [payload-json]",
+            "Usage: /busytown-push <type> [--agent name] [payload-json]",
             "warning",
           );
           return;
         }
         try {
           const payload = JSON.parse(args.payload);
-          const event = pushEvent(db, args.worker, args.type, payload);
+          const event = pushEvent(db, args.agent, args.type, payload);
           ctx.ui.notify(`Pushed event #${event.id} (${event.type})`, "info");
         } catch (err) {
           ctx.ui.notify(`Invalid payload JSON: ${err}`, "error");
@@ -237,7 +237,7 @@ export default (pi: ExtensionAPI) => {
 
     pi.registerCommand("busytown-claim", {
       description:
-        "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <worker-id>",
+        "Claim an event so no other agent processes it. Usage: /busytown-claim <event-id> <agent-id>",
       handler: async (raw, ctx) => {
         await nextTick();
         const args = parseArgs(shellSplit(raw ?? ""), {
@@ -246,21 +246,21 @@ export default (pi: ExtensionAPI) => {
             description: "Event ID",
             required: true,
           },
-          worker: {
+          agent: {
             type: "positional" as const,
-            description: "Worker ID",
+            description: "Agent ID",
             required: true,
           },
         });
         const eventId = parseInt(args.event, 10);
-        if (isNaN(eventId) || !args.worker) {
+        if (isNaN(eventId) || !args.agent) {
           ctx.ui.notify(
-            "Usage: /busytown-claim <event-id> <worker-id>",
+            "Usage: /busytown-claim <event-id> <agent-id>",
             "warning",
           );
           return;
         }
-        const claimed = claimEvent(db, args.worker, eventId);
+        const claimed = claimEvent(db, args.agent, eventId);
         const claimant = getClaimant(db, eventId);
         ctx.ui.notify(
           claimed
