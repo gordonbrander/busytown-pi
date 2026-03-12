@@ -305,12 +305,10 @@ export const registerAgentHooks = (
  * from the registry. Uses fuzzy matching: exact id > partial id/name match.
  * Returns the model object directly so it can be passed to `pi.setModel()`.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const resolveAgentModel = (
   modelPattern: string,
   modelRegistry: ModelRegistry,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): any | undefined => {
+): ReturnType<ModelRegistry["getAvailable"]>[number] | undefined => {
   const models = modelRegistry.getAvailable();
 
   // Exact id match (case-insensitive)

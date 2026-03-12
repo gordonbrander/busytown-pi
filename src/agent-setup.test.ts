@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildAgentSystemPrompt, resolveAgentModel } from "./agent-setup.ts";
 import type { AgentDef } from "./agent.ts";
+import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 describe("buildAgentSystemPrompt", () => {
   const makeAgent = (overrides: Partial<AgentDef> = {}): AgentDef => ({
@@ -48,22 +49,17 @@ describe("buildAgentSystemPrompt", () => {
 });
 
 describe("resolveAgentModel", () => {
-  // Create a minimal mock ModelRegistry
   const makeRegistry = (
     models: Array<{ id: string; name?: string; provider: string }>,
-  ) => ({
-    getAvailable: () => models,
-  });
+  ): ModelRegistry =>
+    ({ getAvailable: () => models }) as unknown as ModelRegistry;
 
   it("returns exact match by id (case-insensitive)", () => {
     const registry = makeRegistry([
       { id: "claude-sonnet-4-20250514", provider: "anthropic" },
       { id: "gpt-4o", provider: "openai" },
     ]);
-    const result = resolveAgentModel(
-      "claude-sonnet-4-20250514",
-      registry as any,
-    );
+    const result = resolveAgentModel("claude-sonnet-4-20250514", registry);
     assert.equal(result?.id, "claude-sonnet-4-20250514");
   });
 
@@ -80,7 +76,7 @@ describe("resolveAgentModel", () => {
         provider: "anthropic",
       },
     ]);
-    const result = resolveAgentModel("sonnet", registry as any);
+    const result = resolveAgentModel("sonnet", registry);
     assert.equal(result?.id, "claude-sonnet-4-20250514");
   });
 
@@ -91,15 +87,19 @@ describe("resolveAgentModel", () => {
         name: "Claude 4 Sonnet (dated)",
         provider: "anthropic",
       },
-      { id: "claude-sonnet-4", name: "Claude 4 Sonnet", provider: "anthropic" },
+      {
+        id: "claude-sonnet-4",
+        name: "Claude 4 Sonnet",
+        provider: "anthropic",
+      },
     ]);
-    const result = resolveAgentModel("sonnet", registry as any);
+    const result = resolveAgentModel("sonnet", registry);
     assert.equal(result?.id, "claude-sonnet-4");
   });
 
   it("returns undefined when no match", () => {
     const registry = makeRegistry([{ id: "gpt-4o", provider: "openai" }]);
-    const result = resolveAgentModel("sonnet", registry as any);
+    const result = resolveAgentModel("sonnet", registry);
     assert.equal(result, undefined);
   });
 
@@ -111,7 +111,7 @@ describe("resolveAgentModel", () => {
         provider: "anthropic",
       },
     ]);
-    const result = resolveAgentModel("sonnet", registry as any);
+    const result = resolveAgentModel("sonnet", registry);
     assert.equal(result?.id, "some-model-id");
   });
 });
