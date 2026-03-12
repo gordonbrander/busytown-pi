@@ -115,10 +115,8 @@ foraging":
 title: Forgetting as Composting
 date: 2026-02-13
 tags: [idea-collider]
-source_notes: [
-  spaced-repetition-strengthens-memory.md,
-  urban-foraging-practices.md,
-]
+source_notes:
+  [spaced-repetition-strengthens-memory.md, urban-foraging-practices.md]
 ---
 
 What if forgetting isn't loss but decomposition — a necessary process where old

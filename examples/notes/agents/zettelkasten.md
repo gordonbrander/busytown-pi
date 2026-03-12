@@ -58,6 +58,7 @@ When you receive a `capture.request` event:
 
    d. **Note format** — whether creating or updating, ensure notes follow this
    structure:
+
    ```
    ---
    title: <Descriptive Title in Title Case>
