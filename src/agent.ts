@@ -58,25 +58,7 @@ export const AgentFrontmatterSchema = Type.Object(
     memory_blocks: Type.Optional(
       Type.Record(Type.String(), MemoryBlockEntrySchema),
     ),
-    on_session_start: Type.Optional(Type.String()),
-    on_session_shutdown: Type.Optional(Type.String()),
-    on_session_before_switch: Type.Optional(Type.String()),
-    on_session_switch: Type.Optional(Type.String()),
-    on_session_before_fork: Type.Optional(Type.String()),
-    on_session_fork: Type.Optional(Type.String()),
-    on_session_before_compact: Type.Optional(Type.String()),
-    on_session_compact: Type.Optional(Type.String()),
-    on_session_before_tree: Type.Optional(Type.String()),
-    on_session_tree: Type.Optional(Type.String()),
-    on_before_agent_start: Type.Optional(Type.String()),
-    on_agent_start: Type.Optional(Type.String()),
-    on_agent_end: Type.Optional(Type.String()),
-    on_turn_start: Type.Optional(Type.String()),
-    on_turn_end: Type.Optional(Type.String()),
-    on_tool_call: Type.Optional(Type.String()),
-    on_tool_result: Type.Optional(Type.String()),
-    on_input: Type.Optional(Type.String()),
-    on_model_select: Type.Optional(Type.String()),
+    hooks: Type.Optional(Type.Record(Type.String(), Type.String())),
   },
   { additionalProperties: true },
 );
@@ -110,11 +92,15 @@ const parseMemoryBlocks = (raw: unknown): Record<string, MemoryBlockDef> => {
 const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
   Value.Default(AgentFrontmatterSchema, data);
   const d = data as Record<string, unknown>;
-  // Strip null on_* values (YAML `key:` with no value produces null)
-  for (const name of HOOK_NAMES) {
-    const key = `on_${name}`;
-    if (key in d && d[key] == null) delete d[key];
+
+  // Strip null hook values (YAML `key:` with no value produces null)
+  if (d.hooks && typeof d.hooks === "object") {
+    const hooks = d.hooks as Record<string, unknown>;
+    for (const [key, value] of Object.entries(hooks)) {
+      if (value == null) delete hooks[key];
+    }
   }
+
   parseMemoryBlocks(d.memory_blocks);
   if (!Value.Check(AgentFrontmatterSchema, data)) {
     const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
@@ -127,10 +113,10 @@ const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
 
 export const parseHooks = (fm: AgentFrontmatter): Hooks => {
   const hooks: Hooks = {};
-  for (const name of HOOK_NAMES) {
-    const value = (fm as Record<string, unknown>)[`on_${name}`];
-    if (typeof value === "string") {
-      hooks[name] = value;
+  if (!fm.hooks) return hooks;
+  for (const [key, value] of Object.entries(fm.hooks)) {
+    if (isHookName(key)) {
+      hooks[key] = value;
     }
   }
   return hooks;

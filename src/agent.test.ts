@@ -264,15 +264,16 @@ Body.
 });
 
 describe("hooks", () => {
-  it("parses on_* frontmatter keys into hooks on PiAgentDef", () => {
+  it("parses hooks frontmatter into hooks on PiAgentDef", () => {
     const filePath = writeAgent(
       "hooked.md",
       `---
 listen:
   - "*"
-on_session_start: echo session started
-on_turn_start: echo turn {{{turnIndex}}}
-on_tool_call: echo tool {{{toolName}}}
+hooks:
+  session_start: echo session started
+  turn_start: echo turn {{{turnIndex}}}
+  tool_call: echo tool {{{toolName}}}
 ---
 Agent with hooks.
 `,
@@ -293,9 +294,10 @@ Agent with hooks.
       "multiline-hook.md",
       `---
 listen: []
-on_before_agent_start: |
-  echo "step 1"
-  echo "step 2"
+hooks:
+  before_agent_start: |
+    echo "step 1"
+    echo "step 2"
 ---
 Multi-line hooks.
 `,
@@ -329,8 +331,9 @@ No hooks here.
       "null-hook.md",
       `---
 listen: []
-on_session_start: echo hello
-on_agent_end:
+hooks:
+  session_start: echo hello
+  agent_end:
 ---
 `,
     );
@@ -338,7 +341,7 @@ on_agent_end:
     const agent = loadAgentDef(filePath);
     if (agent.type === "pi") {
       assert.equal(agent.hooks.session_start, "echo hello");
-      // on_agent_end with no value is parsed as null by yaml, should be skipped
+      // agent_end with no value is parsed as null by yaml, should be skipped
       assert.equal(agent.hooks.agent_end, undefined);
     }
   });
@@ -349,7 +352,8 @@ on_agent_end:
       `---
 type: shell
 listen: []
-on_session_start: echo nope
+hooks:
+  session_start: echo nope
 ---
 echo hi
 `,
