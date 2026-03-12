@@ -128,16 +128,17 @@ Then push a `task.summarized` event.
 
 ### Frontmatter fields
 
-| Field         | Type                | Default | Description                                          |
-| ------------- | ------------------- | ------- | ---------------------------------------------------- |
-| `type`        | `"pi"` \| `"shell"` | `"pi"`  | Agent type                                           |
-| `name`        | `string`            | ""      | Name of the agent                                    |
-| `description` | `string`            | `""`    | What this agent does                                 |
-| `listen`      | `string[]`          | `[]`    | Event patterns to listen for                         |
-| `emits`       | `string[]`          | `[]`    | Event types this agent can emit (documentation only) |
-| `ignore_self` | `boolean`           | `true`  | Ignore events this agent emitted                     |
-| `tools`       | `string[]`          | `[]`    | Pi tools available to the agent                      |
-| `model`       | `string`            | —       | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
+| Field         | Type                     | Default | Description                                          |
+| ------------- | ------------------------ | ------- | ---------------------------------------------------- |
+| `type`        | `"pi"` \| `"shell"`      | `"pi"`  | Agent type                                           |
+| `name`        | `string`                 | ""      | Name of the agent                                    |
+| `description` | `string`                 | `""`    | What this agent does                                 |
+| `listen`      | `string[]`               | `[]`    | Event patterns to listen for                         |
+| `emits`       | `string[]`               | `[]`    | Event types this agent can emit (documentation only) |
+| `ignore_self` | `boolean`                | `true`  | Ignore events this agent emitted                     |
+| `tools`       | `string[]`               | `[]`    | Pi tools available to the agent                      |
+| `model`       | `string`                 | —       | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
+| `hooks`       | `Record<string, string>` | —       | Shell scripts to run during pi lifecycle events      |
 
 ### Agent types
 
@@ -160,6 +161,62 @@ The `listen` field supports:
 - `"task.created"` — exact match
 - `"task.*"` — prefix match (matches `task.created`, `task.updated`, etc.)
 - `"*"` — match all events
+
+### Hooks
+
+Pi agents can run shell commands at specific points in the Pi lifecycle. Add a
+`hooks` map to the agent's frontmatter, keyed by the lifecycle event name:
+
+```markdown
+---
+listen:
+  - "task.*"
+hooks:
+  session_start: echo "session started at $(date)"
+  before_agent_start: cat context.json
+  tool_call: |
+    if [ "{{{toolName}}}" = "bash" ]; then
+      echo "blocked" >&2; exit 1
+    fi
+---
+```
+
+Hook values are shell commands executed via `sh -c`. They support Mustache-style
+template variables (`{{{var}}}` for raw, `{{var}}` for shell-escaped) with
+access to context like `cwd`, `model`, `timestamp`, and hook-specific extras
+(e.g., `turnIndex`, `toolName`, `prompt`).
+
+| Hook                     | Behavior        | Extras                                        |
+| ------------------------ | --------------- | --------------------------------------------- |
+| `session_start`          | fire-and-forget |                                               |
+| `session_shutdown`       | fire-and-forget |                                               |
+| `session_before_switch`  | cancellation    | `reason`                                      |
+| `session_switch`         | fire-and-forget | `reason`, `previousSessionFile`               |
+| `session_before_fork`    | cancellation    | `entryId`                                     |
+| `session_fork`           | fire-and-forget | `previousSessionFile`                         |
+| `session_before_compact` | cancellation    |                                               |
+| `session_compact`        | fire-and-forget |                                               |
+| `session_before_tree`    | cancellation    |                                               |
+| `session_tree`           | fire-and-forget |                                               |
+| `before_agent_start`     | inject message  | `prompt`                                      |
+| `agent_start`            | fire-and-forget |                                               |
+| `agent_end`              | fire-and-forget |                                               |
+| `turn_start`             | fire-and-forget | `turnIndex`                                   |
+| `turn_end`               | fire-and-forget | `turnIndex`                                   |
+| `tool_call`              | blocking        | `toolName`, `toolCallId`                      |
+| `tool_result`            | fire-and-forget | `toolName`, `toolCallId`, `isError`           |
+| `input`                  | fire-and-forget | `text`, `source`, `prompt`                    |
+| `model_select`           | fire-and-forget | `source`, `previousModel`, `previousProvider` |
+
+- **fire-and-forget** — The command runs; its exit code is ignored.
+- **cancellation** — A non-zero exit code cancels the operation.
+- **blocking** — A non-zero exit code blocks the tool call. The stderr output
+  is returned as the block reason.
+- **inject message** — If the command exits 0, its stdout is injected as a
+  custom message into the conversation.
+
+All hooks share a base set of template variables: `cwd`, `sessionFile`, `model`,
+`provider`, and `timestamp`.
 
 ## Tools & commands
 
