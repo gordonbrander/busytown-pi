@@ -1,14 +1,32 @@
 {
   "name": "busytown-pi",
   "version": "0.1.0",
-  "description": "Busytown event queue as a Pi extension",
+  "description": "Multi-agent factories over a SQLite event queue",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
     "busytown": "src/cli.ts"
   },
+  "keywords": [
+    "pi-package",
+    "multi-agent",
+    "event-queue",
+    "orchestration"
+  ],
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "examples",
+    "README.md",
+    "LICENSE-MIT"
+  ],
+  "pi": {
+    "extensions": [
+      "src/index.ts"
+    ]
+  },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.56.1",
+    "@mariozechner/pi-coding-agent": "^0.56.3",
     "@sinclair/typebox": "^0.34.48",
     "chokidar": "^4.0.0",
     "citty": "^0.2.1",
