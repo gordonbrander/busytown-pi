@@ -6,7 +6,7 @@ A self-gardening Zettelkasten note vault powered by busytown agents.
 
 1. Start the agent runner: `busytown run` (or `busytown start` for daemon mode)
 2. Capture text: `/quick-capture <your text here>` Or manually:
-   `busytown events push --worker user --type capture.request --payload '{"content":"your text"}'`
+   `busytown events push --agent user --type capture.request --payload '{"content":"your text"}'`
 3. Watch the pipeline process your text into atomic notes, add backlinks, and
    generate questions.
 

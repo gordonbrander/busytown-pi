@@ -13,19 +13,19 @@ const SCHEMA = `
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
     type      TEXT    NOT NULL,
-    worker_id TEXT    NOT NULL,
+    agent_id  TEXT    NOT NULL,
     payload   TEXT    NOT NULL DEFAULT '{}'
   );
 
-  CREATE TABLE IF NOT EXISTS worker_cursors (
-    worker_id TEXT    PRIMARY KEY,
+  CREATE TABLE IF NOT EXISTS agent_cursors (
+    agent_id  TEXT    PRIMARY KEY,
     since     INTEGER NOT NULL DEFAULT 0,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch())
   );
 
   CREATE TABLE IF NOT EXISTS claims (
     event_id   INTEGER PRIMARY KEY,
-    worker_id  TEXT    NOT NULL,
+    agent_id   TEXT    NOT NULL,
     claimed_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
 `;
@@ -51,17 +51,17 @@ const parseEvent = (row: RawEventRow): Event => ({
 
 export const pushEvent = (
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
   type: string,
   payload: unknown = {},
 ): Event => {
   const row = db
     .prepare(
-      `INSERT INTO events (type, worker_id, payload)
+      `INSERT INTO events (type, agent_id, payload)
        VALUES (?, ?, ?)
        RETURNING id, timestamp`,
     )
-    .get(type, workerId, JSON.stringify(payload)) as {
+    .get(type, agentId, JSON.stringify(payload)) as {
     id: number;
     timestamp: number;
   };
@@ -70,37 +70,37 @@ export const pushEvent = (
     id: row.id,
     timestamp: row.timestamp,
     type,
-    worker_id: workerId,
+    agent_id: agentId,
     payload,
   };
 };
 
-export const getCursor = (db: DatabaseSync, workerId: string): number => {
+export const getCursor = (db: DatabaseSync, agentId: string): number => {
   const row = db
-    .prepare(`SELECT since FROM worker_cursors WHERE worker_id = ?`)
-    .get(workerId) as { since: number } | undefined;
+    .prepare(`SELECT since FROM agent_cursors WHERE agent_id = ?`)
+    .get(agentId) as { since: number } | undefined;
   return row?.since ?? 0;
 };
 
 export const updateCursor = (
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
   sinceId: number,
 ): void => {
   db.prepare(
-    `INSERT INTO worker_cursors (worker_id, since)
+    `INSERT INTO agent_cursors (agent_id, since)
      VALUES (?, ?)
-     ON CONFLICT(worker_id) DO UPDATE SET since = excluded.since, timestamp = unixepoch()`,
-  ).run(workerId, sinceId);
+     ON CONFLICT(agent_id) DO UPDATE SET since = excluded.since, timestamp = unixepoch()`,
+  ).run(agentId, sinceId);
 };
 
 export const getOrCreateCursor = (
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
 ): number => {
   db.exec("BEGIN");
   try {
-    const existing = getCursor(db, workerId);
+    const existing = getCursor(db, agentId);
     if (existing > 0) {
       db.exec("COMMIT");
       return existing;
@@ -108,18 +108,18 @@ export const getOrCreateCursor = (
 
     // Check if cursor row exists with since=0
     const row = db
-      .prepare(`SELECT since FROM worker_cursors WHERE worker_id = ?`)
-      .get(workerId) as { since: number } | undefined;
+      .prepare(`SELECT since FROM agent_cursors WHERE agent_id = ?`)
+      .get(agentId) as { since: number } | undefined;
     if (row) {
       db.exec("COMMIT");
       return row.since;
     }
 
-    // New worker: push cursor creation event, set cursor to that ID
-    const event = pushEvent(db, workerId, "sys.cursor.create", {
-      worker_id: workerId,
+    // New agent: push cursor creation event, set cursor to that ID
+    const event = pushEvent(db, agentId, "sys.cursor.create", {
+      agent_id: agentId,
     });
-    updateCursor(db, workerId, event.id);
+    updateCursor(db, agentId, event.id);
     db.exec("COMMIT");
     return event.id;
   } catch (err) {
@@ -131,8 +131,8 @@ export const getOrCreateCursor = (
 export type GetEventsSinceOpts = {
   sinceId?: number;
   limit?: number;
-  omitWorkerId?: string;
-  filterWorkerId?: string;
+  omitAgentId?: string;
+  filterAgentId?: string;
   filterType?: string;
   tail?: number;
 };
@@ -142,8 +142,8 @@ export const getEventsSince = (
   {
     sinceId = 0,
     limit = 100,
-    omitWorkerId,
-    filterWorkerId,
+    omitAgentId,
+    filterAgentId,
     filterType,
     tail,
   }: GetEventsSinceOpts = {},
@@ -151,13 +151,13 @@ export const getEventsSince = (
   const conditions: string[] = ["id > ?"];
   const params: SQLInputValue[] = [sinceId];
 
-  if (omitWorkerId) {
-    conditions.push("worker_id != ?");
-    params.push(omitWorkerId);
+  if (omitAgentId) {
+    conditions.push("agent_id != ?");
+    params.push(omitAgentId);
   }
-  if (filterWorkerId) {
-    conditions.push("worker_id = ?");
-    params.push(filterWorkerId);
+  if (filterAgentId) {
+    conditions.push("agent_id = ?");
+    params.push(filterAgentId);
   }
   if (filterType && filterType !== "*") {
     conditions.push("type = ?");
@@ -189,35 +189,35 @@ export const getNextEvent = (
 
 export const pollEvents = (
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
   limit?: number,
-  omitWorkerId?: string,
+  omitAgentId?: string,
 ): Event[] => {
-  const sinceId = getOrCreateCursor(db, workerId);
-  const events = getEventsSince(db, { sinceId, limit, omitWorkerId });
+  const sinceId = getOrCreateCursor(db, agentId);
+  const events = getEventsSince(db, { sinceId, limit, omitAgentId });
   if (events.length > 0) {
-    updateCursor(db, workerId, events[events.length - 1].id);
+    updateCursor(db, agentId, events[events.length - 1].id);
   }
   return events;
 };
 
 export const claimEvent = (
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
   eventId: number,
 ): boolean => {
   db.exec("BEGIN");
   try {
     db.prepare(
-      `INSERT OR IGNORE INTO claims (event_id, worker_id) VALUES (?, ?)`,
-    ).run(eventId, workerId);
+      `INSERT OR IGNORE INTO claims (event_id, agent_id) VALUES (?, ?)`,
+    ).run(eventId, agentId);
 
     const row = db
-      .prepare(`SELECT worker_id FROM claims WHERE event_id = ?`)
-      .get(eventId) as { worker_id: string } | undefined;
+      .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
+      .get(eventId) as { agent_id: string } | undefined;
 
-    if (row?.worker_id === workerId) {
-      pushEvent(db, workerId, "sys.claim.create", { event_id: eventId });
+    if (row?.agent_id === agentId) {
+      pushEvent(db, agentId, "sys.claim.create", { event_id: eventId });
       db.exec("COMMIT");
       return true;
     }
@@ -232,8 +232,8 @@ export const claimEvent = (
 export const getClaimant = (
   db: DatabaseSync,
   eventId: number,
-): { worker_id: string; claimed_at: number } | undefined => {
+): { agent_id: string; claimed_at: number } | undefined => {
   return db
-    .prepare(`SELECT worker_id, claimed_at FROM claims WHERE event_id = ?`)
-    .get(eventId) as { worker_id: string; claimed_at: number } | undefined;
+    .prepare(`SELECT agent_id, claimed_at FROM claims WHERE event_id = ?`)
+    .get(eventId) as { agent_id: string; claimed_at: number } | undefined;
 };

@@ -12,8 +12,8 @@ import {
 } from "./event-queue.ts";
 import { loadAllAgents, updateAgentFrontmatter } from "./agent.ts";
 import { applyMemoryUpdate } from "./memory.ts";
-import { createSystem, worker } from "./worker.ts";
-import { makeAgentWorker } from "./pi-process.ts";
+import { createAgentSystem, agent } from "./agent-system.ts";
+import { makeAgentRunner } from "./pi-process.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {
@@ -62,7 +62,7 @@ const resolveDb = (dir?: string, db?: string) =>
 const startCommand = defineCommand({
   meta: {
     name: "start",
-    description: "Start the worker system (long-running daemon)",
+    description: "Start the agent system (long-running daemon)",
   },
   args: {
     ...globalArgs,
@@ -106,25 +106,25 @@ const startCommand = defineCommand({
     writePidfile(projectRoot);
 
     const db = resolveDb(args.dir, args.db);
-    const system = createSystem(db);
+    const system = createAgentSystem(db);
 
     const spawnAll = (): number => {
       const agents = loadAllAgents(agentsDir);
-      const toWorker = makeAgentWorker(db, projectRoot);
+      const toAgent = makeAgentRunner(db, projectRoot);
       let spawned = 0;
 
-      for (const agent of agents) {
-        if (agent.listen.length === 0) continue;
+      for (const a of agents) {
+        if (a.listen.length === 0) continue;
         try {
-          system.spawn(toWorker(agent));
+          system.spawn(toAgent(a));
           spawned++;
           logger.info("Agent spawned", {
-            agent: agent.id,
-            listen: agent.listen,
+            agent: a.id,
+            listen: a.listen,
           });
         } catch (err) {
           logger.error("Agent spawn failed", {
-            agent: agent.id,
+            agent: a.id,
             error: err instanceof Error ? err.message : String(err),
           });
         }
@@ -137,7 +137,7 @@ const startCommand = defineCommand({
       };
 
       system.spawn(
-        worker({
+        agent({
           id: "_sys_reload",
           listen: ["sys.reload"],
           hidden: true,
@@ -268,10 +268,10 @@ const pushCommand = defineCommand({
   meta: { name: "push", description: "Push an event to the queue" },
   args: {
     ...globalArgs,
-    worker: {
-      alias: "w",
+    agent: {
+      alias: "a",
       type: "string",
-      description: "Worker ID",
+      description: "Agent ID",
       required: true,
     },
     type: {
@@ -295,7 +295,7 @@ const pushCommand = defineCommand({
     const db = resolveDb(args.dir, args.db);
     try {
       const payload = readPayload(args);
-      const event = pushEvent(db, args.worker, args.type, payload);
+      const event = pushEvent(db, args.agent, args.type, payload);
       console.log(JSON.stringify(event));
     } finally {
       db.close();
@@ -370,9 +370,9 @@ const claimCommand = defineCommand({
   meta: { name: "claim", description: "Claim an event" },
   args: {
     ...globalArgs,
-    worker: {
+    agent: {
       type: "string",
-      description: "Worker ID",
+      description: "Agent ID",
       required: true,
     },
     event: {
@@ -384,7 +384,7 @@ const claimCommand = defineCommand({
   run: ({ args }) => {
     const db = resolveDb(args.dir, args.db);
     try {
-      const claimed = claimEvent(db, args.worker, parseInt(args.event, 10));
+      const claimed = claimEvent(db, args.agent, parseInt(args.event, 10));
       const claimant = getClaimant(db, parseInt(args.event, 10));
       console.log(JSON.stringify({ claimed, claimant }));
     } finally {

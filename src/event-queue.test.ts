@@ -19,9 +19,9 @@ const createTestDb = (): DatabaseSync => openDb(":memory:");
 describe("pushEvent", () => {
   it("inserts an event and returns it with an id", () => {
     const db = createTestDb();
-    const event = pushEvent(db, "worker-1", "plan.request", { key: "val" });
+    const event = pushEvent(db, "agent-1", "plan.request", { key: "val" });
     assert.equal(event.type, "plan.request");
-    assert.equal(event.worker_id, "worker-1");
+    assert.equal(event.agent_id, "agent-1");
     assert.deepEqual(event.payload, { key: "val" });
     assert.equal(typeof event.id, "number");
     assert.equal(typeof event.timestamp, "number");
@@ -45,7 +45,7 @@ describe("pushEvent", () => {
 });
 
 describe("getCursor / updateCursor", () => {
-  it("returns 0 for unknown worker", () => {
+  it("returns 0 for unknown agent", () => {
     const db = createTestDb();
     assert.equal(getCursor(db, "unknown"), 0);
     db.close();
@@ -68,16 +68,16 @@ describe("getCursor / updateCursor", () => {
 });
 
 describe("getOrCreateCursor", () => {
-  it("creates cursor at first event for new worker", () => {
+  it("creates cursor at first event for new agent", () => {
     const db = createTestDb();
-    const cursor = getOrCreateCursor(db, "new-worker");
+    const cursor = getOrCreateCursor(db, "new-agent");
     // Should have pushed a sys.cursor.create event and set cursor to that id
     assert.ok(cursor > 0);
-    assert.equal(getCursor(db, "new-worker"), cursor);
+    assert.equal(getCursor(db, "new-agent"), cursor);
     db.close();
   });
 
-  it("returns existing cursor for known worker", () => {
+  it("returns existing cursor for known agent", () => {
     const db = createTestDb();
     updateCursor(db, "w1", 5);
     assert.equal(getOrCreateCursor(db, "w1"), 5);
@@ -110,27 +110,27 @@ describe("getEventsSince", () => {
     db.close();
   });
 
-  it("filters by omitWorkerId", () => {
+  it("filters by omitAgentId", () => {
     const db = createTestDb();
     pushEvent(db, "w1", "a");
     pushEvent(db, "w2", "b");
     pushEvent(db, "w1", "c");
 
-    const events = getEventsSince(db, { omitWorkerId: "w1" });
+    const events = getEventsSince(db, { omitAgentId: "w1" });
     assert.equal(events.length, 1);
-    assert.equal(events[0].worker_id, "w2");
+    assert.equal(events[0].agent_id, "w2");
     db.close();
   });
 
-  it("filters by filterWorkerId", () => {
+  it("filters by filterAgentId", () => {
     const db = createTestDb();
     pushEvent(db, "w1", "a");
     pushEvent(db, "w2", "b");
     pushEvent(db, "w1", "c");
 
-    const events = getEventsSince(db, { filterWorkerId: "w1" });
+    const events = getEventsSince(db, { filterAgentId: "w1" });
     assert.equal(events.length, 2);
-    assert.ok(events.every((e) => e.worker_id === "w1"));
+    assert.ok(events.every((e) => e.agent_id === "w1"));
     db.close();
   });
 
@@ -242,7 +242,7 @@ describe("claimEvent / getClaimant", () => {
     db.close();
   });
 
-  it("returns false when event already claimed by another worker", () => {
+  it("returns false when event already claimed by another agent", () => {
     const db = createTestDb();
     const event = pushEvent(db, "w", "task");
 
@@ -252,7 +252,7 @@ describe("claimEvent / getClaimant", () => {
     db.close();
   });
 
-  it("returns true when same worker claims again", () => {
+  it("returns true when same agent claims again", () => {
     const db = createTestDb();
     const event = pushEvent(db, "w", "task");
 
@@ -268,7 +268,7 @@ describe("claimEvent / getClaimant", () => {
 
     claimEvent(db, "claimer", event.id);
     const claimant = getClaimant(db, event.id);
-    assert.equal(claimant?.worker_id, "claimer");
+    assert.equal(claimant?.agent_id, "claimer");
     assert.equal(typeof claimant?.claimed_at, "number");
     db.close();
   });

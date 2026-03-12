@@ -7,7 +7,7 @@ import type { Event } from "./lib/event.ts";
 import type { AgentDef, PiAgentDef, ShellAgentDef } from "./agent.ts";
 import { pushEvent } from "./event-queue.ts";
 import { renderTemplate } from "./lib/template.ts";
-import { type Worker, worker } from "./worker.ts";
+import { type Agent, agent } from "./agent-system.ts";
 import { logger } from "./lib/json-logger.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,14 +17,14 @@ const pipeLinesToEvents = (
   child: ChildProcess,
   stream: "stdout" | "stderr",
   db: DatabaseSync,
-  workerId: string,
+  agentId: string,
   eventType: string,
 ): void => {
   const readable = child[stream];
   if (!readable) return;
   const rl = createInterface({ input: readable });
   rl.on("line", (line) => {
-    pushEvent(db, workerId, eventType, { line });
+    pushEvent(db, agentId, eventType, { line });
   });
 };
 
@@ -87,14 +87,14 @@ export const runPiAgent = ({
       "stdout",
       db,
       agent.id,
-      `sys.worker.${agent.id}.stdout`,
+      `sys.agent.${agent.id}.stdout`,
     );
     pipeLinesToEvents(
       child,
       "stderr",
       db,
       agent.id,
-      `sys.worker.${agent.id}.stderr`,
+      `sys.agent.${agent.id}.stderr`,
     );
 
     // Write event JSON as the task prompt on stdin
@@ -163,14 +163,14 @@ export const runShellAgent = ({
       "stdout",
       db,
       agent.id,
-      `sys.worker.${agent.id}.stdout`,
+      `sys.agent.${agent.id}.stdout`,
     );
     pipeLinesToEvents(
       child,
       "stderr",
       db,
       agent.id,
-      `sys.worker.${agent.id}.stderr`,
+      `sys.agent.${agent.id}.stderr`,
     );
 
     child.on("error", (err) => {
@@ -196,17 +196,17 @@ export const runShellAgent = ({
   });
 };
 
-export const runAgentWorker = async (
+export const runAgent = async (
   db: DatabaseSync,
-  agent: AgentDef,
+  agentDef: AgentDef,
   event: Event,
   projectRoot: string,
   abortSignal?: AbortSignal,
 ): Promise<number> => {
-  switch (agent.type) {
+  switch (agentDef.type) {
     case "pi":
       return await runPiAgent({
-        agent,
+        agent: agentDef,
         event,
         db,
         projectRoot,
@@ -214,7 +214,7 @@ export const runAgentWorker = async (
       });
     case "shell":
       return await runShellAgent({
-        agent,
+        agent: agentDef,
         event,
         db,
         projectRoot,
@@ -225,22 +225,24 @@ export const runAgentWorker = async (
   }
 };
 
-export const makeAgentWorker = (db: DatabaseSync, projectRoot: string) => {
-  return (agent: AgentDef): Worker =>
-    worker({
-      id: agent.id,
-      listen: agent.listen,
-      ignoreSelf: agent.ignoreSelf,
+export const makeAgentRunner = (db: DatabaseSync, projectRoot: string) => {
+  return (agentDef: AgentDef): Agent =>
+    agent({
+      id: agentDef.id,
+      listen: agentDef.listen,
+      ignoreSelf: agentDef.ignoreSelf,
       run: async (event, { abortSignal }) => {
-        const exitCode = await runAgentWorker(
+        const exitCode = await runAgent(
           db,
-          agent,
+          agentDef,
           event,
           projectRoot,
           abortSignal,
         );
         if (exitCode !== 0) {
-          throw new Error(`Agent "${agent.id}" exited with code ${exitCode}`);
+          throw new Error(
+            `Agent "${agentDef.id}" exited with code ${exitCode}`,
+          );
         }
       },
     });

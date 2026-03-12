@@ -6,7 +6,7 @@ const makeEvent = (type: string): Event => ({
   id: 1,
   timestamp: 0,
   type,
-  worker_id: "test",
+  agent_id: "test",
   payload: {},
 });
 

@@ -24,7 +24,7 @@ When the user invokes this skill:
 
 1. Push the event using:
    ```bash
-   busytown events push --worker user --type collider.request --payload '{}'
+   busytown events push --agent user --type collider.request --payload '{}'
    ```
 2. Confirm to the user that the collision was triggered
 3. Mention they can watch progress with `busytown events list --tail 10`
@@ -40,7 +40,7 @@ User input:
 Action:
 
 ```bash
-busytown events push --worker user --type collider.request --payload '{}'
+busytown events push --agent user --type collider.request --payload '{}'
 ```
 
 Response:

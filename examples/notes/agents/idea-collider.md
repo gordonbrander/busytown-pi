@@ -81,7 +81,7 @@ idea. What tension, analogy, or inversion sparked it?>
 
 6. **Push a completion event**:
    ```bash
-   busytown events push --worker idea-collider --type collider.created --payload '{"ideas":["idea-collider/idea-1.md","idea-collider/idea-2.md","idea-collider/idea-3.md"],"source_notes":["note-a.md","note-b.md"],"summary":"Collided note-a and note-b into 3 new ideas"}'
+   busytown events push --agent idea-collider --type collider.created --payload '{"ideas":["idea-collider/idea-1.md","idea-collider/idea-2.md","idea-collider/idea-3.md"],"source_notes":["note-a.md","note-b.md"],"summary":"Collided note-a and note-b into 3 new ideas"}'
    ```
 
 ## Guidelines

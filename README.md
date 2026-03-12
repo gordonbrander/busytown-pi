@@ -18,12 +18,12 @@ Events are simple JSON objects:
   "id": 1,
   "type": "plan.request",
   "timestamp": 1709568000,
-  "worker_id": "user",
+  "agent_id": "user",
   "payload": { "prd_path": "docs/feature.md" }
 }
 ```
 
-The worker system polls the queue and dispatches events to matching agents.
+The agent system polls the queue and dispatches events to matching agents.
 Agents run in parallel, processesing the events they care about, one at a time,
 in order. Each agent:
 
@@ -40,7 +40,7 @@ in order. Each agent:
 │  CLI     │             │  Queue          │ ◂───────────── └───────────┘
 └──────────┘             │                 │    push new
                          │  events table   │    events
-                         │  worker_cursors │
+                         │  agent_cursors  │
                          │  claims         │
                          └─────────────────┘
                                  ▲ │
@@ -276,7 +276,7 @@ You can manually call these tools, plus a few additional commands, from the Pi c
 | ------------------- | --------------------------------------------------------------- |
 | `/busytown-push`    | `/busytown-push plan.request '{"prd_path": "docs/feature.md"}'` |
 | `/busytown-events`  | `/busytown-events --tail 10 --type plan.*`                      |
-| `/busytown-claim`   | `/busytown-claim 42 my-worker`                                  |
+| `/busytown-claim`   | `/busytown-claim 42 my-agent`                                   |
 | `/busytown-console` | Display the event console                                       |
 | `/busytown-start`   | Start the daemon (run automatically when Pi starts)             |
 | `/busytown-stop`    | Stop the daemon                                                 |
@@ -287,11 +287,11 @@ You can manually call these tools, plus a few additional commands, from the Pi c
 Busytown also includes a standalone CLI. This lets you drive Busytown outside of Pi. You can use the CLI to script agent factories via cron, email, git hooks, etc.
 
 ```bash
-# Start the worker system (daemon)
+# Start the agent system (daemon)
 busytown start
 
 # Push an event
-busytown push --worker my-script --type plan.request --payload '{"key":"value"}'
+busytown push --agent my-script --type plan.request --payload '{"key":"value"}'
 
 # List events
 busytown events --tail 10 --type plan.*
@@ -300,7 +300,7 @@ busytown events --tail 10 --type plan.*
 busytown agents
 
 # Claim an event
-busytown claim --worker my-agent --event 42
+busytown claim --agent my-agent --event 42
 
 # Check who claimed an event
 busytown check-claim --event 42
@@ -311,7 +311,7 @@ busytown update-memory --agent my-agent --block context --new-text "new info"
 
 ## Key concepts
 
-- **Cursor-based delivery** — Each worker maintains its own cursor. The cursor
+- **Cursor-based delivery** — Each agent maintains its own cursor. The cursor
   advances before processing, giving at-most-once delivery.
 - **First-claim-wins** — When multiple agents listen for the same event type,
   `claimEvent()` ensures only one processes a given event.

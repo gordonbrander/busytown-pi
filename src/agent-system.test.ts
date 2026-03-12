@@ -1,63 +1,63 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { openDb, pushEvent } from "./event-queue.ts";
-import { createSystem, worker } from "./worker.ts";
+import { createAgentSystem, agent } from "./agent-system.ts";
 import type { Event } from "./lib/event.ts";
 
 const createTestDb = () => openDb(":memory:");
 
-describe("worker", () => {
-  it("creates a worker with defaults", () => {
-    const w = worker({
+describe("agent", () => {
+  it("creates an agent with defaults", () => {
+    const a = agent({
       id: "test",
       listen: ["*"],
       run: async () => {},
     });
-    assert.equal(w.id, "test");
-    assert.deepEqual(w.listen, ["*"]);
-    assert.equal(w.hidden, false);
-    assert.equal(w.ignoreSelf, true);
+    assert.equal(a.id, "test");
+    assert.deepEqual(a.listen, ["*"]);
+    assert.equal(a.hidden, false);
+    assert.equal(a.ignoreSelf, true);
   });
 
   it("respects explicit hidden and ignoreSelf", () => {
-    const w = worker({
+    const a = agent({
       id: "test",
       listen: ["*"],
       hidden: true,
       ignoreSelf: false,
       run: async () => {},
     });
-    assert.equal(w.hidden, true);
-    assert.equal(w.ignoreSelf, false);
+    assert.equal(a.hidden, true);
+    assert.equal(a.ignoreSelf, false);
   });
 });
 
-describe("createSystem", () => {
-  it("spawn throws on duplicate worker id", () => {
+describe("createAgentSystem", () => {
+  it("spawn throws on duplicate agent id", () => {
     const db = createTestDb();
-    const system = createSystem(db, 10);
-    const w = worker({ id: "dup", listen: ["*"], run: async () => {} });
-    system.spawn(w);
-    assert.throws(() => system.spawn(w), /already exists/);
+    const system = createAgentSystem(db, 10);
+    const a = agent({ id: "dup", listen: ["*"], run: async () => {} });
+    system.spawn(a);
+    assert.throws(() => system.spawn(a), /already exists/);
     system.stop();
     db.close();
   });
 
-  it("kill returns false for unknown worker", async () => {
+  it("kill returns false for unknown agent", async () => {
     const db = createTestDb();
-    const system = createSystem(db, 10);
+    const system = createAgentSystem(db, 10);
     const result = await system.kill("nonexistent");
     assert.equal(result, false);
     await system.stop();
     db.close();
   });
 
-  it("worker processes matching events", async () => {
+  it("agent processes matching events", async () => {
     const db = createTestDb();
-    const system = createSystem(db, 10);
+    const system = createAgentSystem(db, 10);
     const processed: Event[] = [];
 
-    const w = worker({
+    const a = agent({
       id: "processor",
       listen: ["task.*"],
       hidden: true,
@@ -66,14 +66,14 @@ describe("createSystem", () => {
       },
     });
 
-    system.spawn(w);
+    system.spawn(a);
 
-    // Push events from a different worker
+    // Push events from a different agent
     pushEvent(db, "external", "task.created", { name: "test" });
     pushEvent(db, "external", "other.event");
     pushEvent(db, "external", "task.updated", { name: "test2" });
 
-    // Give the worker time to process
+    // Give the agent time to process
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     await system.stop();
@@ -84,12 +84,12 @@ describe("createSystem", () => {
     db.close();
   });
 
-  it("worker ignores own events by default", async () => {
+  it("agent ignores own events by default", async () => {
     const db = createTestDb();
-    const system = createSystem(db, 10);
+    const system = createAgentSystem(db, 10);
     const processed: Event[] = [];
 
-    const w = worker({
+    const a = agent({
       id: "self-ignorer",
       listen: ["*"],
       hidden: true,
@@ -98,11 +98,11 @@ describe("createSystem", () => {
       },
     });
 
-    system.spawn(w);
+    system.spawn(a);
 
-    // Push event from the worker itself
+    // Push event from the agent itself
     pushEvent(db, "self-ignorer", "task.created");
-    // Push event from another worker
+    // Push event from another agent
     pushEvent(db, "other", "task.created");
 
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -110,18 +110,18 @@ describe("createSystem", () => {
 
     // Should only process the event from "other"
     assert.ok(
-      processed.every((e) => e.worker_id !== "self-ignorer"),
+      processed.every((e) => e.agent_id !== "self-ignorer"),
       "Should not process own events",
     );
     db.close();
   });
 
-  it("kill stops a running worker", async () => {
+  it("kill stops a running agent", async () => {
     const db = createTestDb();
-    const system = createSystem(db, 10);
+    const system = createAgentSystem(db, 10);
     const processed: Event[] = [];
 
-    const w = worker({
+    const a = agent({
       id: "killable",
       listen: ["*"],
       hidden: true,
@@ -130,7 +130,7 @@ describe("createSystem", () => {
       },
     });
 
-    system.spawn(w);
+    system.spawn(a);
     const killed = await system.kill("killable");
     assert.equal(killed, true);
 
