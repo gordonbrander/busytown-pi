@@ -81,7 +81,7 @@ export default (pi: ExtensionAPI) => {
         const payload = params.payload
           ? JSON.parse(params.payload as string)
           : {};
-        const event = pushEvent(db, "host", params.type as string, payload);
+        const event = pushEvent(db, "pi", params.type as string, payload);
         return {
           content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
           details: {},
@@ -171,7 +171,7 @@ export default (pi: ExtensionAPI) => {
             type: "string" as const,
             alias: "w",
             description: "Worker ID (default: user)",
-            default: "user",
+            default: "pi",
           },
           payload: {
             type: "positional" as const,
@@ -306,6 +306,19 @@ export default (pi: ExtensionAPI) => {
         } else {
           ctx.ui.notify("Busytown daemon did not stop within 5s", "error");
         }
+      },
+    });
+
+    // /busytown-reload — reload agent definitions
+    pi.registerCommand("busytown-reload", {
+      description: "Reload agent definitions (sends sys.reload event)",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const event = pushEvent(db, "pi", "sys.reload");
+        ctx.ui.notify(
+          `Pushed sys.reload event #${event.id}`,
+          "info",
+        );
       },
     });
   });
