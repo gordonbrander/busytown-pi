@@ -14,6 +14,35 @@ export const MemoryBlockEntrySchema = Type.Object({
 
 export type MemoryBlockEntry = Static<typeof MemoryBlockEntrySchema>;
 
+export const HOOK_NAMES = [
+  "session_start",
+  "session_shutdown",
+  "session_before_switch",
+  "session_switch",
+  "session_before_fork",
+  "session_fork",
+  "session_before_compact",
+  "session_compact",
+  "session_before_tree",
+  "session_tree",
+  "before_agent_start",
+  "agent_start",
+  "agent_end",
+  "turn_start",
+  "turn_end",
+  "tool_call",
+  "tool_result",
+  "input",
+  "model_select",
+] as const;
+
+export type HookName = (typeof HOOK_NAMES)[number];
+
+export type Hooks = Partial<Record<HookName, string>>;
+
+export const isHookName = (name: string): name is HookName =>
+  (HOOK_NAMES as readonly string[]).includes(name);
+
 export const AgentFrontmatterSchema = Type.Object(
   {
     name: Type.Optional(Type.String()),
@@ -29,6 +58,7 @@ export const AgentFrontmatterSchema = Type.Object(
     memory_blocks: Type.Optional(
       Type.Record(Type.String(), MemoryBlockEntrySchema),
     ),
+    hooks: Type.Optional(Type.Record(Type.String(), Type.String())),
   },
   { additionalProperties: true },
 );
@@ -58,10 +88,25 @@ const parseMemoryBlocks = (raw: unknown): Record<string, MemoryBlockDef> => {
   return result;
 };
 
+/** Normalize a raw hooks record: strip nulls, keep only valid hook names. */
+export const parseHooks = (raw: unknown): Hooks => {
+  if (!raw || typeof raw !== "object") return {};
+  const hooks: Hooks = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string" && isHookName(key)) {
+      hooks[key] = value;
+    }
+  }
+  return hooks;
+};
+
 /** Apply defaults, validate, and return typed frontmatter. Throws on invalid input. */
 const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
   Value.Default(AgentFrontmatterSchema, data);
   const d = data as Record<string, unknown>;
+
+  d.hooks = parseHooks(d.hooks);
+
   parseMemoryBlocks(d.memory_blocks);
   if (!Value.Check(AgentFrontmatterSchema, data)) {
     const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
@@ -84,6 +129,7 @@ export type PiAgentDef = {
   body: string;
   model?: string;
   memoryBlocks: Record<string, MemoryBlockDef>;
+  hooks: Hooks;
 };
 
 export type ShellAgentDef = {
@@ -137,6 +183,7 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     body: content.trim(),
     model: fm.model,
     memoryBlocks,
+    hooks: fm.hooks ?? {},
   };
 };
 
