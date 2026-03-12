@@ -86,10 +86,10 @@ your-project/
 
 The Busytown package comes with a handful of agent factories in the `examples` directory.
 
-To get started with the plan → code → review ralph loop example, copy the agents from `examples/ralph/` to `.pi/agents/`:
+To get started with the plan → code → review ralph loop example, copy the agents from `examples/ralph/agents` to `.pi/agents/`:
 
 ```bash
-cp -r node_modules/busytown-pi/examples/ralph .pi/agents
+cp -r node_modules/busytown-pi/examples/ralph/agents .pi/agents
 ```
 
 Then open Pi. You'll see your agents listed above the input field.
