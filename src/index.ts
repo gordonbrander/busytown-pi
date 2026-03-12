@@ -315,10 +315,7 @@ export default (pi: ExtensionAPI) => {
       handler: async (_raw, ctx) => {
         await nextTick();
         const event = pushEvent(db, "pi", "sys.reload");
-        ctx.ui.notify(
-          `Pushed sys.reload event #${event.id}`,
-          "info",
-        );
+        ctx.ui.notify(`Pushed sys.reload event #${event.id}`, "info");
       },
     });
   });
