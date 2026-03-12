@@ -7,7 +7,7 @@ listen:
 emits:
   - "plan.created"
   - "plan.complete"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "edit"

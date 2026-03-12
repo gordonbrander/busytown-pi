@@ -5,17 +5,11 @@ listen:
   - "plan.created"
 emits:
   - "code.review"
-allowed_tools:
-  - "Read"
-  - "Grep"
-  - "Glob"
-  - "Edit"
-  - "Write"
-  - "Skill"
-  - "Bash(git:*)"
-  - "Bash(npm:*)"
-  - "Bash(npx:*)"
-  - "Bash(deno:*)"
+tools:
+  - "read"
+  - "edit"
+  - "write"
+  - "bash"
 ---
 
 # Code Agent

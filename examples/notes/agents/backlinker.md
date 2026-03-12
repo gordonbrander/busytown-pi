@@ -4,7 +4,7 @@ listen:
   - "capture.ingested"
 emits:
   - "links.updated"
-allowed_tools:
+tools:
   - "read"
   - "edit"
   - "bash"

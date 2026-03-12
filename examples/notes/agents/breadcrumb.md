@@ -4,7 +4,7 @@ listen:
   - "links.updated"
 emits:
   - "breadcrumb.created"
-allowed_tools:
+tools:
   - "read"
   - "write"
   - "bash"
