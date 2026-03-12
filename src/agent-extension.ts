@@ -337,7 +337,7 @@ export default (pi: ExtensionAPI) => {
   // updateMemory tool — only register if agent has memory blocks
   if (Object.keys(agent.memoryBlocks).length > 0) {
     pi.registerTool({
-      name: "updateMemory",
+      name: "update-memory",
       label: "Update Memory",
       description:
         "Update a persistent memory block. If oldText is provided, it is replaced with newText. " +
