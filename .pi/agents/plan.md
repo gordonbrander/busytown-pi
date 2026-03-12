@@ -7,12 +7,10 @@ listen:
 emits:
   - "plan.created"
   - "plan.complete"
-allowed_tools:
-  - "Read"
-  - "Grep"
-  - "Glob"
-  - "Write"
-  - "Skill"
+tools:
+  - "read"
+  - "write"
+  - "edit"
 ---
 
 # Plan Agent

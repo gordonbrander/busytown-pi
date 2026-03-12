@@ -5,13 +5,11 @@ listen:
   - "code.review"
 emits:
   - "review.created"
-allowed_tools:
-  - "Read"
-  - "Grep"
-  - "Glob"
-  - "Skill"
-  - "Bash(git:*)"
-  - "Write"
+tools:
+  - "read"
+  - "write"
+  - "edit"
+  - "bash"
 ---
 
 # Review Agent

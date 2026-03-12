@@ -13,7 +13,7 @@ import {
   pushEvent,
 } from "./event-queue.ts";
 
-import { loadAllAgents } from "./agent.ts";
+import { loadAgentDef, loadAllAgents } from "./agent.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
@@ -23,6 +23,12 @@ import {
   registerEventLogCommand,
 } from "./dashboard.ts";
 import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
+import {
+  buildAgentSystemPrompt,
+  registerAgentMemoryTool,
+  registerAgentHooks,
+  resolveAgentModel,
+} from "./agent-setup.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -31,6 +37,13 @@ export default (pi: ExtensionAPI) => {
   const projectRoot = process.cwd();
   const dbPath = resolveDbPath(projectRoot);
   const sessionCleanup = cleanupGroupAsync();
+
+  // Register --agent flag
+  pi.registerFlag("agent", {
+    description: "Boot as a busytown agent (e.g. --agent code)",
+    type: "string",
+    default: "",
+  });
 
   pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
     await nextTick();
@@ -318,6 +331,51 @@ export default (pi: ExtensionAPI) => {
         ctx.ui.notify(`Pushed sys.reload event #${event.id}`, "info");
       },
     });
+
+    // --agent flag: boot as a busytown agent persona
+    const agentName = pi.getFlag("agent") as string;
+    if (agentName) {
+      const agentsDir = path.join(projectRoot, ".pi", "agents");
+      const agentFile = path.join(agentsDir, `${agentName}.md`);
+      const agent = loadAgentDef(agentFile);
+
+      // Inject agent system prompt on every turn
+      pi.on("before_agent_start", async (event) => {
+        const currentAgent = loadAgentDef(agentFile);
+        return {
+          systemPrompt: buildAgentSystemPrompt(
+            event.systemPrompt,
+            currentAgent,
+          ),
+        };
+      });
+
+      // Set the model if the agent defines one
+      if (agent.type === "pi" && agent.model) {
+        const model = resolveAgentModel(agent.model, ctx.modelRegistry);
+        if (model) {
+          await pi.setModel(model);
+        } else {
+          ctx.ui.notify(
+            `Agent "${agent.id}": model "${agent.model}" not found`,
+            "warning",
+          );
+        }
+      }
+
+      // Register the update-memory tool if agent has memory blocks
+      if (Object.keys(agent.memoryBlocks).length > 0) {
+        registerAgentMemoryTool(pi, agentFile);
+      }
+
+      // Register lifecycle hooks for pi agents
+      if (agent.type === "pi") {
+        registerAgentHooks(pi, agent);
+      }
+
+      // Show agent persona in status bar
+      ctx.ui.setStatus("agent", `🤖 ${agent.id}`);
+    }
   });
 
   pi.on("session_shutdown", async () => {
