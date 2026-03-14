@@ -26,6 +26,7 @@ type AgentState = {
   id: string;
   status: "idle" | "running" | "error";
   eventType?: string;
+  progressChars?: number;
 };
 
 type DashboardState = {
@@ -42,7 +43,7 @@ type DashboardAction =
 // Event helpers
 // ---------------------------------------------------------------------------
 
-const AGENT_EVENT_RE = /^sys\.agent\.(.+)\.(start|finish|error)$/;
+const AGENT_EVENT_RE = /^sys\.agent\.(.+)\.(start|finish|error|progress)$/;
 
 const applyAgentEvent = (
   agent: AgentState,
@@ -56,13 +57,20 @@ const applyAgentEvent = (
       eventType: (payload as Record<string, unknown>)?.event_type as
         | string
         | undefined,
+      progressChars: undefined,
     };
   }
+  if (action === "progress") {
+    const chars = (payload as Record<string, unknown>)?.chars as
+      | number
+      | undefined;
+    return { ...agent, progressChars: chars };
+  }
   if (action === "finish") {
-    return { ...agent, status: "idle", eventType: undefined };
+    return { ...agent, status: "idle", eventType: undefined, progressChars: undefined };
   }
   if (action === "error") {
-    return { ...agent, status: "error" };
+    return { ...agent, status: "error", progressChars: undefined };
   }
   return agent;
 };
@@ -123,10 +131,13 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
     const name = theme.fg("text", agent.id);
     if (agent.status === "running") {
       const icon = theme.fg("accent", "●");
+      const progress = agent.progressChars != null
+        ? ` ${theme.fg("dim", formatChars(agent.progressChars))}`
+        : "";
       const detail = agent.eventType
         ? theme.fg("muted", `(${agent.eventType})`)
         : theme.fg("muted", "(running)");
-      parts.push(`${icon} ${name} ${detail}`);
+      parts.push(`${icon} ${name} ${detail}${progress}`);
     } else if (agent.status === "error") {
       parts.push(
         `${theme.fg("error", "●")} ${name} ${theme.fg("error", "(error)")}`,
@@ -445,6 +456,12 @@ export const registerEventLogCommand = (
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const formatChars = (chars: number): string => {
+  if (chars < 1000) return `${chars}B`;
+  if (chars < 1_000_000) return `${(chars / 1000).toFixed(1)}kB`;
+  return `${(chars / 1_000_000).toFixed(1)}MB`;
+};
 
 type FgColor = Parameters<Theme["fg"]>[0];
 
