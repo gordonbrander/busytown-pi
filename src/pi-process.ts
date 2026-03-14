@@ -48,8 +48,9 @@ const startProgressReporter = (
 ): (() => void) => {
   let prevChars = 0;
   const interval = setInterval(() => {
-    const chars = stdoutLines.reduce((n, l) => n + l.length, 0)
-      + stderrLines.reduce((n, l) => n + l.length, 0);
+    const chars =
+      stdoutLines.reduce((n, l) => n + l.length, 0) +
+      stderrLines.reduce((n, l) => n + l.length, 0);
     if (chars === prevChars) return;
     prevChars = chars;
     pushEvent(db, agentId, `sys.agent.${agentId}.progress`, {
@@ -136,7 +137,12 @@ export const runPiAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(db, agent.id, stdoutLines, stderrLines);
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     // Write event JSON as the task prompt on stdin
     child.stdin?.write(JSON.stringify(event));
@@ -154,8 +160,18 @@ export const runPiAgent = ({
     child.on("close", (code) => {
       stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Pi agent exited with non-zero code", {
@@ -205,7 +221,12 @@ export const runShellAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(db, agent.id, stdoutLines, stderrLines);
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     child.on("error", (err) => {
       stopProgress();
@@ -219,8 +240,18 @@ export const runShellAgent = ({
     child.on("close", (code) => {
       stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Shell agent exited with non-zero code", {
@@ -322,7 +353,12 @@ export const runClaudeAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(db, agent.id, stdoutLines, stderrLines);
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     // Write event JSON as the user prompt on stdin
     child.stdin?.write(JSON.stringify(event));
@@ -340,8 +376,18 @@ export const runClaudeAgent = ({
     child.on("close", (code) => {
       stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Claude agent exited with non-zero code", {

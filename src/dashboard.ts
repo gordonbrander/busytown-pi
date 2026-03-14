@@ -67,7 +67,12 @@ const applyAgentEvent = (
     return { ...agent, progressChars: chars };
   }
   if (action === "finish") {
-    return { ...agent, status: "idle", eventType: undefined, progressChars: undefined };
+    return {
+      ...agent,
+      status: "idle",
+      eventType: undefined,
+      progressChars: undefined,
+    };
   }
   if (action === "error") {
     return { ...agent, status: "error", progressChars: undefined };
@@ -131,9 +136,10 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
     const name = theme.fg("text", agent.id);
     if (agent.status === "running") {
       const icon = theme.fg("accent", "●");
-      const progress = agent.progressChars != null
-        ? ` ${theme.fg("dim", formatChars(agent.progressChars))}`
-        : "";
+      const progress =
+        agent.progressChars != null
+          ? ` ${theme.fg("dim", formatChars(agent.progressChars))}`
+          : "";
       const detail = agent.eventType
         ? theme.fg("muted", `(${agent.eventType})`)
         : theme.fg("muted", "(running)");
