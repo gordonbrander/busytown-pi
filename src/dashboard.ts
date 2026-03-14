@@ -15,6 +15,7 @@ import {
   matchesKey,
   truncateToWidth,
   visibleWidth,
+  wrapTextWithAnsi,
 } from "@mariozechner/pi-tui";
 import { formatTime } from "./lib/time.ts";
 
@@ -172,7 +173,7 @@ export const startWidget = (
         const lines = buildWidgetLines(store.value, theme);
         return {
           render: (width: number) =>
-            lines.map((line) => truncateToWidth(line, width)),
+            lines.flatMap((line) => wrapTextWithAnsi(line, width)),
           invalidate: () => {},
         };
       },
