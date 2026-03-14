@@ -237,6 +237,7 @@ export const startNotifier = (
     lastSeenId = events[events.length - 1]!.id;
 
     for (const event of events) {
+      if (event.type.endsWith(".progress")) continue;
       const payload = JSON.stringify(event.payload);
       ctx.ui.notify(`> ${event.type}\t@${event.agent_id}\t${payload}`, "info");
     }
