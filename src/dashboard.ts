@@ -15,6 +15,7 @@ import {
   matchesKey,
   truncateToWidth,
   visibleWidth,
+  wrapTextWithAnsi,
 } from "@mariozechner/pi-tui";
 import { formatTime } from "./lib/time.ts";
 
@@ -170,7 +171,11 @@ export const startWidget = (
       "busytown",
       (_tui: unknown, theme: Theme) => {
         const lines = buildWidgetLines(store.value, theme);
-        return { render: () => lines, invalidate: () => {} };
+        return {
+          render: (width: number) =>
+            lines.flatMap((line) => wrapTextWithAnsi(line, width)),
+          invalidate: () => {},
+        };
       },
       { placement: "aboveEditor" },
     );
@@ -299,11 +304,12 @@ export const registerEventLogCommand = (
               };
 
               const row = (content: string): string => {
-                const vis = visibleWidth(content);
+                const safe = truncateToWidth(content, innerW);
+                const vis = visibleWidth(safe);
                 const fill = Math.max(0, innerW - vis);
                 return (
                   theme.fg("border", "│") +
-                  content +
+                  safe +
                   " ".repeat(fill) +
                   theme.fg("border", "│")
                 );
