@@ -128,8 +128,18 @@ export const runPiAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Pi agent exited with non-zero code", {
@@ -190,8 +200,18 @@ export const runShellAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Shell agent exited with non-zero code", {
@@ -308,8 +328,18 @@ export const runClaudeAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
-      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stdout`,
+        stdoutLines,
+      );
+      pushOutputEvent(
+        db,
+        agent.id,
+        `sys.agent.${agent.id}.stderr`,
+        stderrLines,
+      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Claude agent exited with non-zero code", {
