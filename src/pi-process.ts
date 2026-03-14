@@ -37,6 +37,30 @@ const collectOutput = (
   return lines;
 };
 
+const PROGRESS_INTERVAL_MS = 2000;
+
+/** Push periodic progress events while a child process is running. */
+const startProgressReporter = (
+  db: DatabaseSync,
+  agentId: string,
+  stdoutLines: string[],
+  stderrLines: string[],
+): (() => void) => {
+  let prevChars = 0;
+  const interval = setInterval(() => {
+    const chars =
+      stdoutLines.reduce((n, l) => n + l.length, 0) +
+      stderrLines.reduce((n, l) => n + l.length, 0);
+    if (chars === prevChars) return;
+    prevChars = chars;
+    pushEvent(db, agentId, `sys.agent.${agentId}.progress`, {
+      chars,
+      lines: stdoutLines.length + stderrLines.length,
+    });
+  }, PROGRESS_INTERVAL_MS);
+  return () => clearInterval(interval);
+};
+
 /** Push buffered output as a single summary event. */
 const pushOutputEvent = (
   db: DatabaseSync,
@@ -113,12 +137,19 @@ export const runPiAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     // Write event JSON as the task prompt on stdin
     child.stdin?.write(JSON.stringify(event));
     child.stdin?.end();
 
     child.on("error", (err) => {
+      stopProgress();
       logger.error("Pi agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -127,6 +158,7 @@ export const runPiAgent = ({
       reject(err);
     });
     child.on("close", (code) => {
+      stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
       pushOutputEvent(
         db,
@@ -189,8 +221,15 @@ export const runShellAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     child.on("error", (err) => {
+      stopProgress();
       logger.error("Shell agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -199,6 +238,7 @@ export const runShellAgent = ({
       reject(err);
     });
     child.on("close", (code) => {
+      stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
       pushOutputEvent(
         db,
@@ -313,12 +353,19 @@ export const runClaudeAgent = ({
 
     const stdoutLines = collectOutput(child, "stdout");
     const stderrLines = collectOutput(child, "stderr");
+    const stopProgress = startProgressReporter(
+      db,
+      agent.id,
+      stdoutLines,
+      stderrLines,
+    );
 
     // Write event JSON as the user prompt on stdin
     child.stdin?.write(JSON.stringify(event));
     child.stdin?.end();
 
     child.on("error", (err) => {
+      stopProgress();
       logger.error("Claude agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -327,6 +374,7 @@ export const runClaudeAgent = ({
       reject(err);
     });
     child.on("close", (code) => {
+      stopProgress();
       abortSignal?.removeEventListener("abort", onAbort);
       pushOutputEvent(
         db,
