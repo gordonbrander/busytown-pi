@@ -20,18 +20,40 @@ import { logger } from "./lib/json-logger.ts";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const agentExtensionPath = path.join(__dirname, "agent-extension.ts");
 
-const pipeLinesToEvents = (
+const MAX_OUTPUT_CHARS = 100_000;
+
+/** Buffer child process output lines in memory. Returns the mutable array. */
+const collectOutput = (
   child: ChildProcess,
   stream: "stdout" | "stderr",
+): string[] => {
+  const lines: string[] = [];
+  const readable = child[stream];
+  if (!readable) return lines;
+  const rl = createInterface({ input: readable });
+  rl.on("line", (line) => {
+    lines.push(line);
+  });
+  return lines;
+};
+
+/** Push buffered output as a single summary event. */
+const pushOutputEvent = (
   db: DatabaseSync,
   agentId: string,
   eventType: string,
+  lines: string[],
 ): void => {
-  const readable = child[stream];
-  if (!readable) return;
-  const rl = createInterface({ input: readable });
-  rl.on("line", (line) => {
-    pushEvent(db, agentId, eventType, { line });
+  if (lines.length === 0) return;
+  let text = lines.join("\n");
+  const truncated = text.length > MAX_OUTPUT_CHARS;
+  if (truncated) {
+    text = text.slice(0, MAX_OUTPUT_CHARS);
+  }
+  pushEvent(db, agentId, eventType, {
+    line_count: lines.length,
+    truncated,
+    text,
   });
 };
 
@@ -89,20 +111,8 @@ export const runPiAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    pipeLinesToEvents(
-      child,
-      "stdout",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stdout`,
-    );
-    pipeLinesToEvents(
-      child,
-      "stderr",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stderr`,
-    );
+    const stdoutLines = collectOutput(child, "stdout");
+    const stderrLines = collectOutput(child, "stderr");
 
     // Write event JSON as the task prompt on stdin
     child.stdin?.write(JSON.stringify(event));
@@ -118,6 +128,8 @@ export const runPiAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Pi agent exited with non-zero code", {
@@ -165,20 +177,8 @@ export const runShellAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    pipeLinesToEvents(
-      child,
-      "stdout",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stdout`,
-    );
-    pipeLinesToEvents(
-      child,
-      "stderr",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stderr`,
-    );
+    const stdoutLines = collectOutput(child, "stdout");
+    const stderrLines = collectOutput(child, "stderr");
 
     child.on("error", (err) => {
       logger.error("Shell agent failed to spawn", {
@@ -190,6 +190,8 @@ export const runShellAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Shell agent exited with non-zero code", {
@@ -289,20 +291,8 @@ export const runClaudeAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    pipeLinesToEvents(
-      child,
-      "stdout",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stdout`,
-    );
-    pipeLinesToEvents(
-      child,
-      "stderr",
-      db,
-      agent.id,
-      `sys.agent.${agent.id}.stderr`,
-    );
+    const stdoutLines = collectOutput(child, "stdout");
+    const stderrLines = collectOutput(child, "stderr");
 
     // Write event JSON as the user prompt on stdin
     child.stdin?.write(JSON.stringify(event));
@@ -318,6 +308,8 @@ export const runClaudeAgent = ({
     });
     child.on("close", (code) => {
       abortSignal?.removeEventListener("abort", onAbort);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, stdoutLines);
+      pushOutputEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, stderrLines);
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Claude agent exited with non-zero code", {
