@@ -18,7 +18,6 @@ import { logger } from "./lib/json-logger.ts";
 import { lines, filterMap } from "./lib/stream.ts";
 import { performAsync } from "./lib/result.ts";
 import { parsePiLine } from "./lib/pi-stream.ts";
-import { stderr } from "node:process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const agentExtensionPath = path.join(__dirname, "agent-extension.ts");
