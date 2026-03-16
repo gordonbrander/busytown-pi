@@ -1,5 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { createInterface } from "node:readline";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
@@ -16,70 +15,13 @@ import { renderMemoryBlocksPrompt } from "./memory.ts";
 import * as Lines from "./lib/lines.ts";
 import { type Agent, agent } from "./agent-system.ts";
 import { logger } from "./lib/json-logger.ts";
+import { lines, filterMap } from "./lib/stream.ts";
+import { performAsync } from "./lib/result.ts";
+import { parsePiLine } from "./lib/pi-stream.ts";
+import { stderr } from "node:process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const agentExtensionPath = path.join(__dirname, "agent-extension.ts");
-
-const MAX_OUTPUT_CHARS = 100_000;
-
-/** Buffer child process output lines in memory. Returns the mutable array. */
-const collectOutput = (
-  child: ChildProcess,
-  stream: "stdout" | "stderr",
-): string[] => {
-  const lines: string[] = [];
-  const readable = child[stream];
-  if (!readable) return lines;
-  const rl = createInterface({ input: readable });
-  rl.on("line", (line) => {
-    lines.push(line);
-  });
-  return lines;
-};
-
-const PROGRESS_INTERVAL_MS = 2000;
-
-/** Push periodic progress events while a child process is running. */
-const startProgressReporter = (
-  db: DatabaseSync,
-  agentId: string,
-  stdoutLines: string[],
-  stderrLines: string[],
-): (() => void) => {
-  let prevChars = 0;
-  const interval = setInterval(() => {
-    const chars =
-      stdoutLines.reduce((n, l) => n + l.length, 0) +
-      stderrLines.reduce((n, l) => n + l.length, 0);
-    if (chars === prevChars) return;
-    prevChars = chars;
-    pushEvent(db, agentId, `sys.agent.${agentId}.progress`, {
-      chars,
-      lines: stdoutLines.length + stderrLines.length,
-    });
-  }, PROGRESS_INTERVAL_MS);
-  return () => clearInterval(interval);
-};
-
-/** Push buffered output as a single summary event. */
-const pushOutputEvent = (
-  db: DatabaseSync,
-  agentId: string,
-  eventType: string,
-  lines: string[],
-): void => {
-  if (lines.length === 0) return;
-  let text = lines.join("\n");
-  const truncated = text.length > MAX_OUTPUT_CHARS;
-  if (truncated) {
-    text = text.slice(0, MAX_OUTPUT_CHARS);
-  }
-  pushEvent(db, agentId, eventType, {
-    line_count: lines.length,
-    truncated,
-    text,
-  });
-};
 
 type RunPiAgentArgs = {
   agent: PiAgentDef;
@@ -135,21 +77,25 @@ export const runPiAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    const stdoutLines = collectOutput(child, "stdout");
-    const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(
-      db,
-      agent.id,
-      stdoutLines,
-      stderrLines,
-    );
+    const stdoutResult = performAsync(async () => {
+      const events = filterMap(lines(child.stdout!), parsePiLine);
+      for await (const message of events) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.message`, message);
+      }
+    });
+
+    const stderrResult = performAsync(async () => {
+      const stderrLines = lines(child.stderr!);
+      for await (const msg of stderrLines) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, { msg });
+      }
+    });
 
     // Write event JSON as the task prompt on stdin
     child.stdin?.write(JSON.stringify(event));
     child.stdin?.end();
 
     child.on("error", (err) => {
-      stopProgress();
       logger.error("Pi agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -157,21 +103,9 @@ export const runPiAgent = ({
       });
       reject(err);
     });
-    child.on("close", (code) => {
-      stopProgress();
+    child.on("close", async (code) => {
+      await Promise.allSettled([stdoutResult, stderrResult]);
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stdout`,
-        stdoutLines,
-      );
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stderr`,
-        stderrLines,
-      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Pi agent exited with non-zero code", {
@@ -219,17 +153,19 @@ export const runShellAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    const stdoutLines = collectOutput(child, "stdout");
-    const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(
-      db,
-      agent.id,
-      stdoutLines,
-      stderrLines,
-    );
+    const stdoutResult = performAsync(async () => {
+      for await (const msg of lines(child.stdout!)) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, { msg });
+      }
+    });
+
+    const stderrResult = performAsync(async () => {
+      for await (const msg of lines(child.stderr!)) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, { msg });
+      }
+    });
 
     child.on("error", (err) => {
-      stopProgress();
       logger.error("Shell agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -237,21 +173,9 @@ export const runShellAgent = ({
       });
       reject(err);
     });
-    child.on("close", (code) => {
-      stopProgress();
+    child.on("close", async (code) => {
+      await Promise.allSettled([stdoutResult, stderrResult]);
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stdout`,
-        stdoutLines,
-      );
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stderr`,
-        stderrLines,
-      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Shell agent exited with non-zero code", {
@@ -351,21 +275,23 @@ export const runClaudeAgent = ({
     };
     abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-    const stdoutLines = collectOutput(child, "stdout");
-    const stderrLines = collectOutput(child, "stderr");
-    const stopProgress = startProgressReporter(
-      db,
-      agent.id,
-      stdoutLines,
-      stderrLines,
-    );
+    const stdoutResult = performAsync(async () => {
+      for await (const msg of lines(child.stdout!)) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.stdout`, { msg });
+      }
+    });
+
+    const stderrResult = performAsync(async () => {
+      for await (const msg of lines(child.stderr!)) {
+        pushEvent(db, agent.id, `sys.agent.${agent.id}.stderr`, { msg });
+      }
+    });
 
     // Write event JSON as the user prompt on stdin
     child.stdin?.write(JSON.stringify(event));
     child.stdin?.end();
 
     child.on("error", (err) => {
-      stopProgress();
       logger.error("Claude agent failed to spawn", {
         agent: agent.id,
         event_id: event.id,
@@ -373,21 +299,9 @@ export const runClaudeAgent = ({
       });
       reject(err);
     });
-    child.on("close", (code) => {
-      stopProgress();
+    child.on("close", async (code) => {
+      await Promise.allSettled([stdoutResult, stderrResult]);
       abortSignal?.removeEventListener("abort", onAbort);
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stdout`,
-        stdoutLines,
-      );
-      pushOutputEvent(
-        db,
-        agent.id,
-        `sys.agent.${agent.id}.stderr`,
-        stderrLines,
-      );
       const exitCode = code ?? 1;
       if (exitCode !== 0) {
         logger.warn("Claude agent exited with non-zero code", {
