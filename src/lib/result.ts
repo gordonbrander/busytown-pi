@@ -18,7 +18,9 @@ export const perform = <T, E = unknown>(fn: () => T): Result<T, E> => {
   }
 };
 
-export const performAsync = async <T, E = unknown>(fn: () => Promise<T>): Promise<Result<T, E>> => {
+export const performAsync = async <T, E = unknown>(
+  fn: () => Promise<T>,
+): Promise<Result<T, E>> => {
   try {
     const value = await fn();
     return {

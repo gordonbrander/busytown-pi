@@ -22,7 +22,13 @@ Understanding this layering is the key to making sense of the apparent redundanc
 ### First line: Session header
 
 ```json
-{"type":"session","version":3,"id":"<uuid>","timestamp":"<iso8601>","cwd":"/path/to/cwd"}
+{
+  "type": "session",
+  "version": 3,
+  "id": "<uuid>",
+  "timestamp": "<iso8601>",
+  "cwd": "/path/to/cwd"
+}
 ```
 
 ### Subsequent lines: Events
@@ -97,18 +103,52 @@ The `assistantMessageEvent` field in `message_update` uses the `AssistantMessage
 
 ```typescript
 type AssistantMessageEvent =
-  | { type: "start";          partial: AssistantMessage }
-  | { type: "text_start";     contentIndex: number; partial: AssistantMessage }
-  | { type: "text_delta";     contentIndex: number; delta: string; partial: AssistantMessage }
-  | { type: "text_end";       contentIndex: number; content: string; partial: AssistantMessage }
+  | { type: "start"; partial: AssistantMessage }
+  | { type: "text_start"; contentIndex: number; partial: AssistantMessage }
+  | {
+      type: "text_delta";
+      contentIndex: number;
+      delta: string;
+      partial: AssistantMessage;
+    }
+  | {
+      type: "text_end";
+      contentIndex: number;
+      content: string;
+      partial: AssistantMessage;
+    }
   | { type: "thinking_start"; contentIndex: number; partial: AssistantMessage }
-  | { type: "thinking_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
-  | { type: "thinking_end";   contentIndex: number; content: string; partial: AssistantMessage }
+  | {
+      type: "thinking_delta";
+      contentIndex: number;
+      delta: string;
+      partial: AssistantMessage;
+    }
+  | {
+      type: "thinking_end";
+      contentIndex: number;
+      content: string;
+      partial: AssistantMessage;
+    }
   | { type: "toolcall_start"; contentIndex: number; partial: AssistantMessage }
-  | { type: "toolcall_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
-  | { type: "toolcall_end";   contentIndex: number; toolCall: ToolCall; partial: AssistantMessage }
-  | { type: "done";           reason: "stop"|"length"|"toolUse"; message: AssistantMessage }
-  | { type: "error";          reason: "aborted"|"error"; error: AssistantMessage }
+  | {
+      type: "toolcall_delta";
+      contentIndex: number;
+      delta: string;
+      partial: AssistantMessage;
+    }
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall: ToolCall;
+      partial: AssistantMessage;
+    }
+  | {
+      type: "done";
+      reason: "stop" | "length" | "toolUse";
+      message: AssistantMessage;
+    }
+  | { type: "error"; reason: "aborted" | "error"; error: AssistantMessage };
 ```
 
 **Key design principle:** Every sub-event carries `partial: AssistantMessage` — the full message as built up so far. This makes each event self-contained: a consumer can process any event in isolation without accumulating deltas.
@@ -118,6 +158,7 @@ type AssistantMessageEvent =
 ## Message Types
 
 ### `UserMessage`
+
 ```typescript
 {
   role: "user";
@@ -127,6 +168,7 @@ type AssistantMessageEvent =
 ```
 
 ### `AssistantMessage`
+
 ```typescript
 {
   role: "assistant";
@@ -142,6 +184,7 @@ type AssistantMessageEvent =
 ```
 
 ### `ToolResultMessage`
+
 ```typescript
 {
   role: "toolResult";
@@ -187,11 +230,11 @@ Each `ToolResultMessage` in `turn_end.toolResults` is the same data that was emi
 
 ### Summary table
 
-| Field | Same data also in |
-|---|---|
-| `message_update.message` | `message_update.assistantMessageEvent.partial` |
-| `message_end.message` | `turn_end.message` |
-| `turn_end.message` | `agent_end.messages[]` |
+| Field                    | Same data also in                                            |
+| ------------------------ | ------------------------------------------------------------ |
+| `message_update.message` | `message_update.assistantMessageEvent.partial`               |
+| `message_end.message`    | `turn_end.message`                                           |
+| `turn_end.message`       | `agent_end.messages[]`                                       |
 | `turn_end.toolResults[]` | `agent_end.messages[]` and prior `tool_execution_end` events |
 
 ---
@@ -201,12 +244,14 @@ Each `ToolResultMessage` in `turn_end.toolResults` is the same data that was emi
 For most use cases you only need a small subset of the stream.
 
 **Stream text as it arrives:**
+
 ```bash
 pi --mode json "prompt" 2>/dev/null \
   | jq -rj 'select(.assistantMessageEvent.type == "text_delta") | .assistantMessageEvent.delta'
 ```
 
 **Get the final completed response:**
+
 ```bash
 pi --mode json "prompt" 2>/dev/null \
   | jq -c 'select(.type == "message_end")'
@@ -214,12 +259,14 @@ pi --mode json "prompt" 2>/dev/null \
 ```
 
 **Get tool call results:**
+
 ```bash
 pi --mode json "prompt" 2>/dev/null \
   | jq -c 'select(.type == "tool_execution_end")'
 ```
 
 **Get everything that was added to the conversation (after completion):**
+
 ```bash
 pi --mode json "prompt" 2>/dev/null \
   | jq -c 'select(.type == "agent_end") | .messages[]'
@@ -227,10 +274,10 @@ pi --mode json "prompt" 2>/dev/null \
 
 ### Recommended event subset by use case
 
-| Goal | Use | Ignore |
-|---|---|---|
-| Stream output text | `message_update` where `assistantMessageEvent.type == "text_delta"`, read `assistantMessageEvent.delta` | `message` field on same event |
-| Final response text | `message_end.message` | `turn_end`, `agent_end` |
-| Tool call results | `tool_execution_end` | `turn_end.toolResults` |
-| Full conversation history | `agent_end.messages` | all prior per-message/per-tool events |
-| Thinking output | `message_update` where `assistantMessageEvent.type == "thinking_delta"` | — |
+| Goal                      | Use                                                                                                     | Ignore                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Stream output text        | `message_update` where `assistantMessageEvent.type == "text_delta"`, read `assistantMessageEvent.delta` | `message` field on same event         |
+| Final response text       | `message_end.message`                                                                                   | `turn_end`, `agent_end`               |
+| Tool call results         | `tool_execution_end`                                                                                    | `turn_end.toolResults`                |
+| Full conversation history | `agent_end.messages`                                                                                    | all prior per-message/per-tool events |
+| Thinking output           | `message_update` where `assistantMessageEvent.type == "thinking_delta"`                                 | —                                     |

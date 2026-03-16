@@ -13,7 +13,11 @@ describe("parsePiLine", () => {
   it("returns a UserMessage from message_end with role user", () => {
     const line = JSON.stringify({
       type: "message_end",
-      message: { role: "user", content: [{ type: "text", text: "hello" }], timestamp: 1 },
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+        timestamp: 1,
+      },
     });
     const result = parsePiLine(line);
     assert.ok(result);
@@ -60,35 +64,64 @@ describe("parsePiLine", () => {
   });
 
   it("returns undefined for message_start", () => {
-    assert.equal(parsePiLine(JSON.stringify({ type: "message_start", message: {} })), undefined);
+    assert.equal(
+      parsePiLine(JSON.stringify({ type: "message_start", message: {} })),
+      undefined,
+    );
   });
 
   it("returns undefined for message_update", () => {
     assert.equal(
-      parsePiLine(JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "hi" } })),
+      parsePiLine(
+        JSON.stringify({
+          type: "message_update",
+          assistantMessageEvent: { type: "text_delta", delta: "hi" },
+        }),
+      ),
       undefined,
     );
   });
 
   it("returns undefined for turn_start", () => {
-    assert.equal(parsePiLine(JSON.stringify({ type: "turn_start" })), undefined);
+    assert.equal(
+      parsePiLine(JSON.stringify({ type: "turn_start" })),
+      undefined,
+    );
   });
 
   it("returns undefined for turn_end", () => {
-    assert.equal(parsePiLine(JSON.stringify({ type: "turn_end", message: {}, toolResults: [] })), undefined);
+    assert.equal(
+      parsePiLine(
+        JSON.stringify({ type: "turn_end", message: {}, toolResults: [] }),
+      ),
+      undefined,
+    );
   });
 
   it("returns undefined for agent_start", () => {
-    assert.equal(parsePiLine(JSON.stringify({ type: "agent_start" })), undefined);
+    assert.equal(
+      parsePiLine(JSON.stringify({ type: "agent_start" })),
+      undefined,
+    );
   });
 
   it("returns undefined for agent_end", () => {
-    assert.equal(parsePiLine(JSON.stringify({ type: "agent_end", messages: [] })), undefined);
+    assert.equal(
+      parsePiLine(JSON.stringify({ type: "agent_end", messages: [] })),
+      undefined,
+    );
   });
 
   it("returns undefined for tool_execution_start", () => {
     assert.equal(
-      parsePiLine(JSON.stringify({ type: "tool_execution_start", toolCallId: "x", toolName: "bash", args: {} })),
+      parsePiLine(
+        JSON.stringify({
+          type: "tool_execution_start",
+          toolCallId: "x",
+          toolName: "bash",
+          args: {},
+        }),
+      ),
       undefined,
     );
   });

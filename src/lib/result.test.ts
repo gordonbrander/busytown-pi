@@ -75,7 +75,7 @@ describe("performAsync", () => {
 
   it("wraps a real async operation that resolves", async () => {
     const result = await performAsync(
-      () => new Promise<number>((resolve) => setTimeout(() => resolve(7), 0))
+      () => new Promise<number>((resolve) => setTimeout(() => resolve(7), 0)),
     );
     assert.deepEqual(result, { ok: true, value: 7 });
   });
@@ -83,7 +83,8 @@ describe("performAsync", () => {
   it("wraps a real async operation that rejects", async () => {
     const err = new Error("rejected");
     const result = await performAsync(
-      () => new Promise<number>((_, reject) => setTimeout(() => reject(err), 0))
+      () =>
+        new Promise<number>((_, reject) => setTimeout(() => reject(err), 0)),
     );
     assert.deepEqual(result, { ok: false, error: err });
   });
