@@ -2,11 +2,11 @@ import type {
   UserMessage,
   AssistantMessage,
   ToolResultMessage,
-} from "@mariozechner/pi-agent-core";
+} from "@mariozechner/pi-ai";
 
+export type { UserMessage, AssistantMessage, ToolResultMessage };
 export type PiMessage = UserMessage | AssistantMessage | ToolResultMessage;
 
-/** Parses a jsonl line and returns a PiMessage or undefined, if we're not interested in the value */
 export const parsePiLine = (line: string): PiMessage | undefined => {
   try {
     const event = JSON.parse(line);
