@@ -1,6 +1,6 @@
 ---
 description: Implements code changes by following plans written by the plan agent
-model: "sonnet"
+model: "claude-sonnet-4-6"
 listen:
   - "plan.created"
 emits:

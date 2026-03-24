@@ -1,6 +1,6 @@
 ---
 description: Explores the codebase and writes implementation plans as markdown files
-model: "opus"
+model: "claude-opus-4-6"
 listen:
   - "plan.request"
   - "review.created"
