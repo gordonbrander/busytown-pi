@@ -48,32 +48,46 @@ Aligned with Pi's terminology:
 type AgentRunEvent =
   | { type: "agent_start" }
   | { type: "turn_start" }
-  | { type: "text_delta";            delta: string }
-  | { type: "text_end";              content: string }
-  | { type: "thinking_delta";        delta: string }
-  | { type: "thinking_end";          content: string }
-  | { type: "tool_execution_start";  toolCallId: string; toolName: string; args: unknown }
-  | { type: "tool_execution_update"; toolCallId: string; partialResult: unknown }
-  | { type: "tool_execution_end";    toolCallId: string; isError: boolean; result: unknown }
+  | { type: "text_delta"; delta: string }
+  | { type: "text_end"; content: string }
+  | { type: "thinking_delta"; delta: string }
+  | { type: "thinking_end"; content: string }
+  | {
+      type: "tool_execution_start";
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+    }
+  | {
+      type: "tool_execution_update";
+      toolCallId: string;
+      partialResult: unknown;
+    }
+  | {
+      type: "tool_execution_end";
+      toolCallId: string;
+      isError: boolean;
+      result: unknown;
+    }
   | { type: "turn_end" }
-  | { type: "agent_end" }
+  | { type: "agent_end" };
 ```
 
 ### Event semantics
 
-| Event | Description |
-|---|---|
-| `agent_start` | Agent run has begun processing a message |
-| `turn_start` | A new LLM call is starting within the agent run |
-| `text_delta` | Incremental text chunk from the LLM response |
-| `text_end` | LLM text block complete; `content` is the full assembled text |
-| `thinking_delta` | Incremental thinking/reasoning chunk |
-| `thinking_end` | Thinking block complete; `content` is the full assembled thinking |
-| `tool_execution_start` | LLM has dispatched a tool call; `args` is the complete input |
-| `tool_execution_update` | Streaming partial output from an in-progress tool execution |
-| `tool_execution_end` | Tool execution complete; `result` is the full output |
-| `turn_end` | LLM call and all its tool executions are complete |
-| `agent_end` | Agent run is complete; `send()` resolves after this event |
+| Event                   | Description                                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| `agent_start`           | Agent run has begun processing a message                          |
+| `turn_start`            | A new LLM call is starting within the agent run                   |
+| `text_delta`            | Incremental text chunk from the LLM response                      |
+| `text_end`              | LLM text block complete; `content` is the full assembled text     |
+| `thinking_delta`        | Incremental thinking/reasoning chunk                              |
+| `thinking_end`          | Thinking block complete; `content` is the full assembled thinking |
+| `tool_execution_start`  | LLM has dispatched a tool call; `args` is the complete input      |
+| `tool_execution_update` | Streaming partial output from an in-progress tool execution       |
+| `tool_execution_end`    | Tool execution complete; `result` is the full output              |
+| `turn_end`              | LLM call and all its tool executions are complete                 |
+| `agent_end`             | Agent run is complete; `send()` resolves after this event         |
 
 ### Notes on deltas vs end events
 
@@ -128,11 +142,11 @@ agent_end
 
 ```typescript
 type AgentProcess = {
-  readonly id: string
-  readonly output: ReadableStream<AgentRunEvent>
-  send(message: string, abort?: AbortSignal): Promise<void>
-  dispose(): Promise<void>
-}
+  readonly id: string;
+  readonly output: ReadableStream<AgentRunEvent>;
+  send(message: string, abort?: AbortSignal): Promise<void>;
+  dispose(): Promise<void>;
+};
 ```
 
 ### `id`
@@ -184,11 +198,11 @@ ensures all cleanup is complete.
 
 ```typescript
 // Observe the output stream independently
-observeAgentOutput(process.output)
+observeAgentOutput(process.output);
 
 // Drive the agent with backpressure — await ensures one run at a time
-await process.send(JSON.stringify(event1), signal)
-await process.send(JSON.stringify(event2), signal)
+await process.send(JSON.stringify(event1), signal);
+await process.send(JSON.stringify(event2), signal);
 ```
 
 ### Simple consumer (end events only, no streaming)
@@ -196,10 +210,18 @@ await process.send(JSON.stringify(event2), signal)
 ```typescript
 for await (const event of process.output) {
   switch (event.type) {
-    case "text_end":           console.log(event.content); break
-    case "tool_execution_end": console.log("tool result", event.result); break
-    case "turn_end":           console.log("--- turn complete ---"); break
-    case "agent_end":          console.log("=== run complete ==="); break
+    case "text_end":
+      console.log(event.content);
+      break;
+    case "tool_execution_end":
+      console.log("tool result", event.result);
+      break;
+    case "turn_end":
+      console.log("--- turn complete ---");
+      break;
+    case "agent_end":
+      console.log("=== run complete ===");
+      break;
   }
 }
 ```
@@ -208,8 +230,9 @@ for await (const event of process.output) {
 
 ```typescript
 for await (const event of process.output) {
-  if (event.type === "text_delta") process.stdout.write(event.delta)
-  if (event.type === "tool_execution_start") console.log(`[${event.toolName}]`)
-  if (event.type === "tool_execution_update") process.stdout.write(String(event.partialResult))
+  if (event.type === "text_delta") process.stdout.write(event.delta);
+  if (event.type === "tool_execution_start") console.log(`[${event.toolName}]`);
+  if (event.type === "tool_execution_update")
+    process.stdout.write(String(event.partialResult));
 }
 ```

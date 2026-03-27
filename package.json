@@ -39,8 +39,8 @@
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "eslint 'src/**/*.ts'",
-    "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "check-fmt": "prettier --check .",
+    "fmt": "prettier --write ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
