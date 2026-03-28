@@ -146,24 +146,22 @@ export type ResponseEvent =
 // AgentProcess
 // ---------------------------------------------------------------------------
 
-export type SendOptions = {
-  signal?: AbortSignal;
-};
-
 /**
  * A stable handle to an agent for the lifetime of that agent. The underlying
  * OS process may be long-lived (Pi RPC) or spawned per-send (Claude CLI,
  * shell) — that is an implementation detail.
  *
- * `send()` returns a `ReadableStream` that emits all response events for a
+ * `send()` returns an `AsyncIterable` that yields all response events for a
  * single agent run, completing when the run is done (`agent_end`). Callers
- * should consume the stream before sending the next event, providing natural
- * backpressure.
+ * consume via `for-await-of`, which provides natural backpressure. Only one
+ * `send()` may be active at a time.
  */
+export type SendOptions = {
+  signal?: AbortSignal;
+};
+
 export type AgentProcess = {
-  send(event: RequestEvent): Promise<void>;
-  output: ReadableStream<ResponseEvent>;
-  errors: ReadableStream<string>;
+  send(event: RequestEvent, options?: SendOptions): AsyncIterable<ResponseEvent>;
   isAlive(): boolean;
   kill(): Promise<void>;
 };

@@ -3,7 +3,12 @@ import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeText } from "../lib/web-stream.ts";
 import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
 import { ExitError } from "./error.ts";
-import type { AgentProcess, RequestEvent, ResponseEvent } from "./types.ts";
+import type {
+  AgentProcess,
+  RequestEvent,
+  ResponseEvent,
+  SendOptions,
+} from "./types.ts";
 
 export type PiRpcAgentConfig = {
   /** Working directory for the Pi process. */
@@ -44,16 +49,10 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
   const stdin = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
   const stdinWriter = stdin.getWriter();
 
-  /** Send a request to the agent */
-  const send = async (data: RequestEvent): Promise<void> => {
-    processAbortController.signal.throwIfAborted();
-    return await writeText(stdinWriter, JSON.stringify(data) + "\n");
-  };
+  const writeEvent = (event: RequestEvent): Promise<void> =>
+    writeText(stdinWriter, JSON.stringify(event) + "\n");
 
-  const errors: ReadableStream<string> = (
-    Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>
-  )
-    .pipeThrough(lineStream())
+  const writeAbortEvent = () => writeEvent({ type: "abort" });
 
   // Convert stdout to a web ReadableStream of JSONL lines
   const output: ReadableStream<ResponseEvent> = (
@@ -63,13 +62,46 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     .pipeThrough(mapStream(parseJsonLine))
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
+  // Hold a single reader for the process lifetime
+  const reader = output.getReader();
+
   // Handle process death
   proc.once("exit", (code) => {
-    processAbortController.abort(new ExitError(`Pi process exited unexpectedly`, code ?? undefined));
+    processAbortController.abort(
+      new ExitError(`Pi process exited unexpectedly`, code ?? undefined)
+    );
   });
 
+  let busy = false;
+
+  const send = async function*(
+    event: RequestEvent,
+    options?: SendOptions
+  ): AsyncGenerator<ResponseEvent> {
+    if (busy) throw new Error("Concurrent send. Previous agent response step is not finished.");
+    processAbortController.signal.throwIfAborted();
+    busy = true;
+
+    options?.signal?.addEventListener("abort", writeAbortEvent, { once: true });
+
+    try {
+      await writeEvent(event);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          throw new ExitError("Pi process exited unexpectedly");
+        }
+        yield value;
+        if (value.type === "agent_end") return;
+      }
+    } finally {
+      options?.signal?.removeEventListener("abort", writeAbortEvent);
+      busy = false;
+    }
+  };
+
   const kill = async (): Promise<void> => {
-    await send({ type: "abort" });
+    await writeEvent({ type: "abort" });
     return new Promise<void>((resolve) => {
       proc.once("exit", resolve);
       proc.kill("SIGTERM");
@@ -79,8 +111,6 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
   return {
     isAlive,
     send,
-    output,
-    errors,
     kill,
   };
 };
