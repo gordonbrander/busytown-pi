@@ -2,31 +2,14 @@
 
 ## Design Criteria
 
-- **Thin abstraction**: The interface should be as minimal as sensible. Avoid layering
-  concepts that don't add value.
-- **Implementation-agnostic**: The same interface covers all agent backends:
-  Pi RPC, `claude` CLI, and shell commands.
-- **Long-lived handle**: An `AgentProcess` is a stable handle that the daemon holds for
-  the lifetime of an agent. The underlying OS process may be long-lived (Pi RPC) or
-  spawned per-send (Claude CLI, shell) — that is an implementation detail.
-- **Persistent output stream**: Output is exposed as a single `ReadableStream` on the
-  process handle, spanning all agent runs. Consumers can pipe, observe, or log it
-  independently of the send/receive call site.
-- **Backpressure via `send()`**: `send()` returns a `Promise<void>` that resolves when
-  the agent run is complete. Callers `await send()` before sending the next message,
-  enforcing one agent run at a time.
-- **Streaming with ergonomic completion**: Events are streamed as they occur. Delta
-  events carry only the incremental content (no accumulated state). Each delta type has
-  a corresponding `_end` event that carries the complete, assembled content — so
-  consumers that don't need live streaming can simply ignore deltas and handle end events.
-- **Pi-aligned vocabulary and event shapes**: Terminology and event type names follow
-  Pi's conventions (`agent_start`/`agent_end`, `turn_start`/`turn_end`,
-  `tool_execution_*`, etc.). Event shapes are trimmed to remove redundant fields that
-  Pi carries for its own internal purposes.
-- **Per-run cancellation**: An `AbortSignal` passed to `send()` cancels the in-flight
-  agent run without tearing down the agent process. The process remains alive and ready
-  to accept the next `send()`. This is distinct from `dispose()`, which shuts the
-  process down entirely.
+- **Thin abstraction**: The interface should be as minimal as sensible. Avoid layering concepts that don't add value.
+- **Implementation-agnostic**: The same interface covers all agent backends: Pi RPC, `claude` CLI, and shell commands.
+- **Long-lived handle**: An `AgentProcess` is a stable handle that the daemon holds for the conceptual lifetime of an agent. The underlying OS process may be long-lived (Pi RPC) or spawned per-send (Claude CLI, shell) — that is an implementation detail.
+- **Output stream**: Output is exposed as a `ReadableStream` for the events of a single agent run.
+- **Backpressure**: `send()` returns a `ReadableStream` that completes when the agent run is complete. Callers ordinarily consume all events in the readable stream before sending the next message. This backpressure mechanism enforces one agent run at a time.
+- **Streaming with ergonomic completion**: Events are streamed as they occur. Delta events carry only the incremental content (no accumulated state). Each delta type has a corresponding `_end` event that carries the complete, assembled content — so consumers that don't need live streaming can simply ignore deltas and handle end events.
+- **Pi-aligned vocabulary and event shapes**: Terminology and event type names follow Pi's conventions (`agent_start`/`agent_end`, `turn_start`/`turn_end`, `tool_execution_*`, etc.). Event shapes are trimmed to remove redundant fields that Pi carries for its own internal purposes.
+- **Per-run cancellation**: An `AbortSignal` passed to `send()` cancels the in-flight agent run without tearing down the agent process. The process remains alive and ready to accept the next `send()`. This is distinct from `kill()`, which shuts the process down entirely.
 - **Web Streams**: Prefer the Web Streams API (`ReadableStream`) over Node.js streams.
 
 ---
@@ -35,17 +18,15 @@
 
 Aligned with Pi's terminology:
 
-- **Agent run**: One full cycle of `send()` → agent processes → agent stops. Bounded by
-  `agent_start` / `agent_end`. An agent run may involve multiple turns.
-- **Turn**: One LLM call and its associated tool executions, within an agent run. Bounded
-  by `turn_start` / `turn_end`.
+- **Agent run**: One full cycle of `send()` → agent processes → agent stops. Bounded by `agent_start` / `agent_end`. An agent run may involve multiple turns.
+- **Turn**: One LLM request/response cycle, including any tool calls made in that response. Multiple turns happen per user prompt when the LLM. Multiple turns happen per user prompt when the LLM. Bounded by `turn_start` / `turn_end`.
 
 ---
 
 ## Event Types
 
 ```typescript
-type AgentRunEvent =
+type AgentResponseEvent =
   | { type: "agent_start" }
   | { type: "turn_start" }
   | { type: "text_delta"; delta: string }
@@ -73,21 +54,21 @@ type AgentRunEvent =
   | { type: "agent_end" };
 ```
 
-### Event semantics
+### Agent response event semantics
 
-| Event                   | Description                                                       |
-| ----------------------- | ----------------------------------------------------------------- |
-| `agent_start`           | Agent run has begun processing a message                          |
-| `turn_start`            | A new LLM call is starting within the agent run                   |
-| `text_delta`            | Incremental text chunk from the LLM response                      |
-| `text_end`              | LLM text block complete; `content` is the full assembled text     |
-| `thinking_delta`        | Incremental thinking/reasoning chunk                              |
-| `thinking_end`          | Thinking block complete; `content` is the full assembled thinking |
-| `tool_execution_start`  | LLM has dispatched a tool call; `args` is the complete input      |
-| `tool_execution_update` | Streaming partial output from an in-progress tool execution       |
-| `tool_execution_end`    | Tool execution complete; `result` is the full output              |
-| `turn_end`              | LLM call and all its tool executions are complete                 |
-| `agent_end`             | Agent run is complete; `send()` resolves after this event         |
+| Event | Description |
+| ----- | ----------- |
+| `agent_start` | Agent run has begun processing a message |
+| `turn_start` | A new LLM call is starting within the agent run |
+| `text_delta` | Incremental text chunk from the LLM response |
+| `text_end` | LLM text block complete; `content` is the full assembled text |
+| `thinking_delta` | Incremental thinking/reasoning chunk |
+| `thinking_end` | Thinking block complete; `content` is the full assembled thinking |
+| `tool_execution_start` | LLM has dispatched a tool call; `args` is the complete input |
+| `tool_execution_update` | Streaming partial output from an in-progress tool execution |
+| `tool_execution_end` | Tool execution complete; `result` is the full output |
+| `turn_end` | LLM call and all its tool executions are complete |
+| `agent_end` | Agent run is complete; `send()` stream closes after this event |
 
 ### Notes on deltas vs end events
 
@@ -142,31 +123,24 @@ agent_end
 
 ```typescript
 type AgentProcess = {
-  readonly id: string;
-  readonly output: ReadableStream<AgentRunEvent>;
-  send(message: string, abort?: AbortSignal): Promise<void>;
-  dispose(): Promise<void>;
+  send(event: Event, { signal?: AbortSignal } = {}): ReadableStream<AgentResponseEvent>;
+  kill(): Promise<void>;
 };
 ```
 
-### `id`
+### `send(message, { signal?: AbortSignal } = {})`
 
-Stable identifier for this agent process. Matches the agent's configured ID.
+Sends a message to the agent and returns a `ReadableStream` for all of the response events for that agent run (i.e. `agent_start` onwards).
 
-### `output`
+The readable stream finishes when the agent run is complete. This means consumers can send events and stream responses in a step-wise fashion:
 
-A persistent `ReadableStream<AgentRunEvent>` that emits events for all agent runs,
-in order. The stream remains open for the lifetime of the process. Consumers can
-read from it independently — e.g. for progress reporting, logging, or UI updates —
-without coordinating with the send/receive call site.
-
-### `send(message, abort?)`
-
-Sends a message to the agent and returns a `Promise<void>` that resolves when the
-agent run is complete (i.e. after `agent_end` has been emitted on `output`).
-
-The resolved promise is the backpressure mechanism: callers `await send()` before
-sending the next message, ensuring one agent run at a time.
+```typescript
+for await (const event of getEventSomehow()) {
+  for await (const res of agent.send(event)) {
+    // do something
+  }  
+}
+```
 
 #### Abort
 
@@ -184,37 +158,25 @@ Abort behaviour is implementation-specific:
   implementations spawn a fresh subprocess per `send()` call, the process is already
   gone by the next run regardless.
 
-### `dispose()`
+### `kill()`
 
-Shuts down the agent process entirely and closes the `output` stream. This is
-distinct from per-run abort: `dispose()` is permanent teardown. Awaiting `dispose()`
+Shuts down the agent process entirely. This is distinct from per-run abort. `kill()` is a permanent teardown. Awaiting `kill()`
 ensures all cleanup is complete.
 
 ---
 
 ## Usage Patterns
 
-### Observe output and drive sequentially
-
-```typescript
-// Observe the output stream independently
-observeAgentOutput(process.output);
-
-// Drive the agent with backpressure — await ensures one run at a time
-await process.send(JSON.stringify(event1), signal);
-await process.send(JSON.stringify(event2), signal);
-```
-
 ### Simple consumer (end events only, no streaming)
 
 ```typescript
-for await (const event of process.output) {
-  switch (event.type) {
+for await (const res of agent.send(event)) {
+  switch (res.type) {
     case "text_end":
-      console.log(event.content);
+      console.log(res.content);
       break;
     case "tool_execution_end":
-      console.log("tool result", event.result);
+      console.log("tool result", res.result);
       break;
     case "turn_end":
       console.log("--- turn complete ---");
