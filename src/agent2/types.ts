@@ -1,6 +1,7 @@
 import type { Event } from "../lib/event.ts";
 
-export type RequestEvent = Event;
+export type AbortEvent = { type: "abort" };
+export type RequestEvent = Event | AbortEvent;
 
 // ---------------------------------------------------------------------------
 // AssistantMessageEvent (trimmed)
@@ -160,6 +161,9 @@ export type SendOptions = {
  * backpressure.
  */
 export type AgentProcess = {
-  send(event: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
+  send(event: RequestEvent): Promise<void>;
+  output: ReadableStream<ResponseEvent>;
+  errors: ReadableStream<string>;
+  isAlive(): boolean;
   kill(): Promise<void>;
 };

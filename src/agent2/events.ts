@@ -1,10 +1,11 @@
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-
 import type {
   AssistantMessageEvent,
   CompactionResult,
   ResponseEvent,
 } from "./types.ts";
+
+export type PiAgentSessionEvent = AgentSessionEvent;
 
 // Derive Pi's AssistantMessageEvent and CompactionResult from AgentSessionEvent
 // rather than importing from transitive dependencies directly.
@@ -131,4 +132,12 @@ export const mapPiEvent = (event: AgentSessionEvent): ResponseEvent => {
         finalError: event.finalError,
       };
   }
+};
+
+/**
+ * We get a stream of events from the Pi process, and this event indicates a single agent step is complete.
+ * That is, the agent has produced a result over one or more turns and is ready for the next user input.
+ */
+export const isAgentStepComplete = (event: PiAgentSessionEvent): boolean => {
+  return event.type === "agent_end";
 };
