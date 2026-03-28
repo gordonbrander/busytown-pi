@@ -95,8 +95,6 @@ export type ToolExecutionEndEvent = {
 };
 
 // Compaction
-// Note: Pi's actual type name is "compaction_start" / "compaction_end", not
-// "auto_compaction_start" / "auto_compaction_end" as the RPC docs suggest.
 // reason "manual" covers the compact() RPC command; "threshold" / "overflow"
 // are automatic triggers.
 export type CompactionStartEvent = {

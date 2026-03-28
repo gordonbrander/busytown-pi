@@ -179,7 +179,7 @@ Tool execution complete. Fields:
 
 ### `compaction_start`
 
-Context compaction has begun. `reason` is one of:
+Compaction has begun. `reason` is one of:
 
 - `"manual"` — triggered explicitly (e.g. via the RPC `compact` command)
 - `"threshold"` — context is getting large; auto-compaction kicked in
