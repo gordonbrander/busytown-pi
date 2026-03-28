@@ -52,7 +52,13 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
   const writeEvent = (event: RequestEvent): Promise<void> =>
     writeText(stdinWriter, JSON.stringify(event) + "\n");
 
-  const writeAbortEvent = () => writeEvent({ type: "abort" });
+  const writeAbortEventBestEffort = async (): Promise<void> => {
+    try {
+      await writeEvent({ type: "abort" });
+    } catch (e) {
+      console.warn("Failed to write abort event", e);
+    }
+  }
 
   // Convert stdout to a web ReadableStream of JSONL lines
   const output: ReadableStream<ResponseEvent> = (
@@ -82,7 +88,7 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     processAbortController.signal.throwIfAborted();
     busy = true;
 
-    options?.signal?.addEventListener("abort", writeAbortEvent, { once: true });
+    options?.signal?.addEventListener("abort", writeAbortEventBestEffort, { once: true });
 
     try {
       await writeEvent(event);
@@ -95,13 +101,14 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
         if (value.type === "agent_end") return;
       }
     } finally {
-      options?.signal?.removeEventListener("abort", writeAbortEvent);
+      options?.signal?.removeEventListener("abort", writeAbortEventBestEffort);
       busy = false;
     }
   };
 
   const kill = async (): Promise<void> => {
-    await writeEvent({ type: "abort" });
+    if (!isAlive()) return;
+    await writeEvent({ type: "abort" }).catch(() => { });
     return new Promise<void>((resolve) => {
       proc.once("exit", resolve);
       proc.kill("SIGTERM");
