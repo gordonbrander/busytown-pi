@@ -1,15 +1,19 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import { lineStream, mapStream, writeText } from "../lib/web-stream.ts";
+import { lineStream, mapStream, writeJsonLine, writeText } from "../lib/web-stream.ts";
 import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { ExitError } from "./error.ts";
+import { loggerOf } from "../lib/json-logger.ts";
 import type {
   AgentProcess,
+  PiRpcCommand,
   RequestEvent,
   ResponseEvent,
   SendOptions,
 } from "./types.ts";
+
+const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
 export type PiRpcAgentConfig = {
   /** Working directory for the Pi process. */
@@ -36,7 +40,7 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
-export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
+export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const processAbortController = new AbortController();
   const isAlive = () => !processAbortController.signal.aborted;
 
@@ -48,14 +52,21 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
   const stdin = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
   const stdinWriter = stdin.getWriter();
 
-  const writeEvent = (event: RequestEvent): Promise<void> =>
-    writeText(stdinWriter, JSON.stringify(event) + "\n");
+  const sendCommand = (command: PiRpcCommand): Promise<void> =>
+    writeJsonLine(stdinWriter, command);
 
-  const writeAbortEventBestEffort = async (): Promise<void> => {
+  const sendEventPromptCommand = (event: RequestEvent): Promise<void> =>
+    sendCommand({
+      type: "prompt",
+      message: JSON.stringify(event)
+    });
+
+  const sendAbortCommandBestEffort = async (): Promise<void> => {
     try {
-      await writeEvent({ type: "abort" });
+      await sendCommand({ type: "abort" });
     } catch (e) {
-      console.warn("Failed to write abort event", e);
+      config.onError?.({ type: "error", message: "Failed to write abort command" });
+      logger.error("Failed to write abort command", { error: `${e}` })
     }
   }
 
@@ -82,12 +93,12 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
   // Handle process death
   proc.once("exit", (code) => {
     processAbortController.abort(
-      new ExitError(`Pi process exited unexpectedly`, code ?? undefined)
+      new ExitError(`Pi process exited`, code ?? undefined)
     );
   });
 
   const stream = (
-    event: RequestEvent,
+    request: RequestEvent,
     options?: SendOptions
   ): ReadableStream<ResponseEvent> => {
     processAbortController.signal.throwIfAborted();
@@ -97,12 +108,12 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
 
     options?.signal?.addEventListener(
       "abort",
-      writeAbortEventBestEffort,
+      sendAbortCommandBestEffort,
       { once: true },
     );
 
     const cleanup = () => {
-      options?.signal?.removeEventListener("abort", writeAbortEventBestEffort);
+      options?.signal?.removeEventListener("abort", sendAbortCommandBestEffort);
       reader.releaseLock();
     };
 
@@ -117,8 +128,8 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
       {
         async start() {
           try {
-            // Write input event
-            await writeEvent(event);
+            // Write the prompt command to Pi's stdin
+            await sendEventPromptCommand(request);
           } catch (e) {
             cleanup();
             throw e;
@@ -152,7 +163,7 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
         },
         async cancel() {
           try {
-            await writeAbortEventBestEffort();
+            await sendAbortCommandBestEffort();
             await drainUntilEnd();
           } catch {
             // Process died — nothing left to drain
@@ -166,7 +177,7 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
 
   const kill = async (): Promise<void> => {
     if (!isAlive()) return;
-    await writeEvent({ type: "abort" }).catch(() => { });
+    await sendAbortCommandBestEffort();
     return new Promise<void>((resolve) => {
       proc.once("exit", resolve);
       proc.kill("SIGTERM");

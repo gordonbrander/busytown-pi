@@ -1,7 +1,14 @@
-import type { Event } from "../lib/event.ts";
+import { type Event } from "../lib/event.ts";
 
-export type AbortEvent = { type: "abort" };
-export type RequestEvent = Event | AbortEvent;
+export type RequestEvent = Event;
+
+/**
+ * A Pi RPC `prompt` command — what gets written to the Pi process stdin to
+ * start an agent run.
+ */
+export type PromptCommand = { type: "prompt"; message: string };
+export type AbortCommand = { type: "abort" };
+export type PiRpcCommand = PromptCommand | AbortCommand;
 
 // ---------------------------------------------------------------------------
 // AssistantMessageEvent (trimmed)
@@ -161,7 +168,7 @@ export type SendOptions = {
 };
 
 export type AgentProcess = {
-  stream(event: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
+  stream(request: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
   isAlive(): boolean;
   kill(): Promise<void>;
 };

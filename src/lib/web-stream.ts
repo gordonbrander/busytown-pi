@@ -47,6 +47,11 @@ export const writeText = (writer: WritableStreamDefaultWriter<Uint8Array>, text:
   return writer.write(encoder.encode(text));
 };
 
+/** Encode text as bytes and write to writer */
+export const writeJsonLine = (writer: WritableStreamDefaultWriter<Uint8Array>, data: unknown): Promise<void> => {
+  return writer.write(encoder.encode(JSON.stringify(data) + "\n"));
+};
+
 /**
  * Create a `TransformStream` that applies a mapping function to each chunk.
  *
