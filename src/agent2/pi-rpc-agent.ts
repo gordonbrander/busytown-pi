@@ -75,13 +75,15 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     );
   });
 
-  const send = (
+  const stream = (
     event: RequestEvent,
     options?: SendOptions
   ): ReadableStream<ResponseEvent> => {
     processAbortController.signal.throwIfAborted();
 
+    // Acquire exclusive lock on the output stream
     const reader = output.getReader();
+
     options?.signal?.addEventListener(
       "abort",
       writeAbortEventBestEffort,
@@ -104,6 +106,7 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
       {
         async start() {
           try {
+            // Write input event
             await writeEvent(event);
           } catch (e) {
             cleanup();
@@ -112,13 +115,21 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
         },
         async pull(controller) {
           try {
+            // Get next value
             const { done, value } = await reader.read();
+            // If done, it means the pi process exited early due to some error.
+            // Clean up and throw an error to signal this stream is done.
             if (done) {
               cleanup();
               controller.error(new ExitError("Pi process exited unexpectedly"));
               return;
             }
+
+            // Enqueue the value.
             controller.enqueue(value);
+
+            // If it's the agent_end, then we clean up (release the lock on upstream)
+            // and close this step's stream.
             if (value.type === "agent_end") {
               cleanup();
               controller.close();
@@ -153,7 +164,7 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
 
   return {
     isAlive,
-    send,
+    stream,
     kill,
   };
 };
