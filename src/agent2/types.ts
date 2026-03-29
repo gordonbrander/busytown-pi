@@ -151,10 +151,10 @@ export type ResponseEvent =
  * OS process may be long-lived (Pi RPC) or spawned per-send (Claude CLI,
  * shell) — that is an implementation detail.
  *
- * `send()` returns an `AsyncIterable` that yields all response events for a
+ * `stream()` returns an `ReadableStream` that yields all response events for a
  * single agent run, completing when the run is done (`agent_end`). Callers
  * consume via `for-await-of`, which provides natural backpressure. Only one
- * `send()` may be active at a time.
+ * `stream()` may be active at a time.
  */
 export type SendOptions = {
   signal?: AbortSignal;
