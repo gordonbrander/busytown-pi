@@ -26,6 +26,10 @@ export type PiRpcAgentConfig = {
   model?: string;
   /** Called for each line written to stderr by the Pi process. */
   onError?: (error: { type: "error"; message: string }) => void;
+  /** Extension file paths to load via -e <path>. */
+  extensions?: string[];
+  /** Extra environment variables passed to the Pi process. */
+  env?: Record<string, string>;
 };
 
 export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
@@ -37,6 +41,9 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   } else {
     args.push("--no-session");
   }
+  for (const ext of config.extensions ?? []) {
+    args.push("-e", ext);
+  }
   return args;
 };
 
@@ -47,6 +54,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const proc = spawn("pi", toCliArgs(config), {
     stdio: ["pipe", "pipe", "pipe"],
     cwd: config.cwd,
+    env: { ...process.env, ...config.env },
   });
 
   const stdin = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
