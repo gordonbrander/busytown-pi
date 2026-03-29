@@ -19,10 +19,14 @@ const jsonLogOf = (
 
 /** Creates a JSON logger that mixes in the given context into log entries. */
 export const loggerOf = (context: Record<string, unknown> = {}): Logger => ({
-  debug: (message, data) => console.debug(jsonLogOf("debug", message, context, data)),
-  info: (message, data) => console.log(jsonLogOf("info", message, context, data)),
-  warn: (message, data) => console.warn(jsonLogOf("warn", message, context, data)),
-  error: (message, data) => console.error(jsonLogOf("error", message, context, data)),
+  debug: (message, data) =>
+    console.debug(jsonLogOf("debug", message, context, data)),
+  info: (message, data) =>
+    console.log(jsonLogOf("info", message, context, data)),
+  warn: (message, data) =>
+    console.warn(jsonLogOf("warn", message, context, data)),
+  error: (message, data) =>
+    console.error(jsonLogOf("error", message, context, data)),
 });
 
 export const logger = loggerOf();

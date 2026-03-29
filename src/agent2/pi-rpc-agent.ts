@@ -47,7 +47,7 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => { };
+const onErrorNoOp = (): void => {};
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const onError = config.onError ?? onErrorNoOp;
@@ -69,7 +69,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const sendEventPromptCommand = (event: RequestEvent): Promise<void> =>
     sendCommand({
       type: "prompt",
-      message: JSON.stringify(event)
+      message: JSON.stringify(event),
     });
 
   const sendAbortCommandBestEffort = async (): Promise<void> => {
@@ -77,9 +77,9 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
       await sendCommand({ type: "abort" });
     } catch (e) {
       onError({ type: "error", message: "Failed to write abort command" });
-      logger.error("Failed to write abort command", { error: `${e}` })
+      logger.error("Failed to write abort command", { error: `${e}` });
     }
-  }
+  };
 
   // Convert stdout to a web ReadableStream of JSONL lines
   const output: ReadableStream<ResponseEvent> = (
@@ -90,25 +90,30 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
   // Pipe stderr lines to onError callback
-  const stderr = (Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>)
-    .pipeThrough(lineStream());
+  const stderr = (
+    Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>
+  ).pipeThrough(lineStream());
 
-  stderr.pipeTo(new WritableStream({
-    write(line) {
-      onError({ type: "error", message: line });
-    },
-  })).catch(() => { });
+  stderr
+    .pipeTo(
+      new WritableStream({
+        write(line) {
+          onError({ type: "error", message: line });
+        },
+      }),
+    )
+    .catch(() => {});
 
   // Handle process death
   proc.once("exit", (code) => {
     processAbortController.abort(
-      new ExitError(`Pi process exited`, code ?? undefined)
+      new ExitError(`Pi process exited`, code ?? undefined),
     );
   });
 
   const stream = (
     request: RequestEvent,
-    options?: SendOptions
+    options?: SendOptions,
   ): ReadableStream<ResponseEvent> => {
     processAbortController.signal.throwIfAborted();
 
@@ -116,11 +121,9 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     // agent step
     const reader = output.getReader();
 
-    options?.signal?.addEventListener(
-      "abort",
-      sendAbortCommandBestEffort,
-      { once: true },
-    );
+    options?.signal?.addEventListener("abort", sendAbortCommandBestEffort, {
+      once: true,
+    });
 
     const cleanup = () => {
       options?.signal?.removeEventListener("abort", sendAbortCommandBestEffort);

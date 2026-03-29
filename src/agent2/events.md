@@ -55,14 +55,14 @@ For each conceptual output, the table below lists the single event you need
 to handle to get the finished result. You can ignore every other event in
 that category.
 
-| What you want | Event to handle | Key fields |
-|---|---|---|
-| Finished text from the LLM | `message_update` where `assistantMessageEvent.type === "text_end"` | `assistantMessageEvent.content` — full assembled text |
-| Finished thinking/reasoning | `message_update` where `assistantMessageEvent.type === "thinking_end"` | `assistantMessageEvent.content` — full assembled thinking |
+| What you want                | Event to handle                                                        | Key fields                                                   |
+| ---------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Finished text from the LLM   | `message_update` where `assistantMessageEvent.type === "text_end"`     | `assistantMessageEvent.content` — full assembled text        |
+| Finished thinking/reasoning  | `message_update` where `assistantMessageEvent.type === "thinking_end"` | `assistantMessageEvent.content` — full assembled thinking    |
 | Tool call the LLM dispatched | `message_update` where `assistantMessageEvent.type === "toolcall_end"` | `assistantMessageEvent.toolCall` — `{ id, name, arguments }` |
-| Tool execution result | `tool_execution_end` | `toolCallId`, `isError`, `result` |
-| Turn complete | `turn_end` | _(no payload)_ |
-| Run complete | `agent_end` | _(no payload)_ |
+| Tool execution result        | `tool_execution_end`                                                   | `toolCallId`, `isError`, `result`                            |
+| Turn complete                | `turn_end`                                                             | _(no payload)_                                               |
+| Run complete                 | `agent_end`                                                            | _(no payload)_                                               |
 
 ### Minimal consumer example
 
@@ -126,20 +126,20 @@ An assistant message has begun streaming.
 Carries one `assistantMessageEvent` sub-event describing a streaming
 increment of the assistant message. Sub-event types:
 
-| Sub-event type | Description | Key fields |
-|---|---|---|
-| `start` | Message generation started | — |
-| `text_start` | A text block has begun | `contentIndex` |
-| `text_delta` | Incremental text chunk | `contentIndex`, `delta` |
-| `text_end` | Text block complete | `contentIndex`, `content` (full text) |
-| `thinking_start` | A thinking/reasoning block has begun | `contentIndex` |
-| `thinking_delta` | Incremental thinking chunk | `contentIndex`, `delta` |
-| `thinking_end` | Thinking block complete | `contentIndex`, `content` (full thinking) |
-| `toolcall_start` | LLM has begun emitting a tool call | `contentIndex` |
-| `toolcall_delta` | Incremental tool call arguments chunk | `contentIndex`, `delta` |
-| `toolcall_end` | Tool call fully received from LLM | `contentIndex`, `toolCall` (`id`, `name`, `arguments`) |
-| `done` | Message generation finished normally | `reason`: `"stop"` \| `"length"` \| `"toolUse"` |
-| `error` | Message generation failed or was aborted | `reason`: `"aborted"` \| `"error"` |
+| Sub-event type   | Description                              | Key fields                                             |
+| ---------------- | ---------------------------------------- | ------------------------------------------------------ |
+| `start`          | Message generation started               | —                                                      |
+| `text_start`     | A text block has begun                   | `contentIndex`                                         |
+| `text_delta`     | Incremental text chunk                   | `contentIndex`, `delta`                                |
+| `text_end`       | Text block complete                      | `contentIndex`, `content` (full text)                  |
+| `thinking_start` | A thinking/reasoning block has begun     | `contentIndex`                                         |
+| `thinking_delta` | Incremental thinking chunk               | `contentIndex`, `delta`                                |
+| `thinking_end`   | Thinking block complete                  | `contentIndex`, `content` (full thinking)              |
+| `toolcall_start` | LLM has begun emitting a tool call       | `contentIndex`                                         |
+| `toolcall_delta` | Incremental tool call arguments chunk    | `contentIndex`, `delta`                                |
+| `toolcall_end`   | Tool call fully received from LLM        | `contentIndex`, `toolCall` (`id`, `name`, `arguments`) |
+| `done`           | Message generation finished normally     | `reason`: `"stop"` \| `"length"` \| `"toolUse"`        |
+| `error`          | Message generation failed or was aborted | `reason`: `"aborted"` \| `"error"`                     |
 
 `contentIndex` is the index of the content block within the assistant
 message. Use it to associate `*_start` / `*_delta` / `*_end` triples with

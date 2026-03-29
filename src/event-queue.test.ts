@@ -273,7 +273,11 @@ describe("pullNextMatchingEvent", () => {
 
     claimEvent(db, "other-agent", e1.id);
 
-    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "task");
+    const result = pullNextMatchingEvent(
+      db,
+      "puller",
+      (e) => e.type === "task",
+    );
     assert.equal(result?.id, e2.id);
     db.close();
   });

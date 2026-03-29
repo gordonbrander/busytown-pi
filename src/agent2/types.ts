@@ -150,22 +150,22 @@ export type ResponseEvent =
   | AutoRetryEndEvent;
 
 /**
-  * The four event shapes that carry a fully-assembled, actionable result,
-  * as described in the minimal consumer guide:
-  *
-  *   • message_update / text_end      — full assembled text
-  *   • message_update / thinking_end  — full assembled thinking
-  *   • message_update / toolcall_end  — full tool call (id, name, arguments)
-  *   • tool_execution_end             — full tool result
-  */
+ * The four event shapes that carry a fully-assembled, actionable result,
+ * as described in the minimal consumer guide:
+ *
+ *   • message_update / text_end      — full assembled text
+ *   • message_update / thinking_end  — full assembled thinking
+ *   • message_update / toolcall_end  — full tool call (id, name, arguments)
+ *   • tool_execution_end             — full tool result
+ */
 export type FinishedResponseEvent =
   | {
-    type: "message_update";
-    assistantMessageEvent: Extract<
-      AssistantMessageEvent,
-      { type: "text_end" | "thinking_end" | "toolcall_end" }
-    >;
-  }
+      type: "message_update";
+      assistantMessageEvent: Extract<
+        AssistantMessageEvent,
+        { type: "text_end" | "thinking_end" | "toolcall_end" }
+      >;
+    }
   | ToolExecutionEndEvent;
 
 // ---------------------------------------------------------------------------
@@ -187,7 +187,10 @@ export type SendOptions = {
 };
 
 export type AgentProcess = {
-  stream(request: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
+  stream(
+    request: RequestEvent,
+    options?: SendOptions,
+  ): ReadableStream<ResponseEvent>;
   alive: AbortSignal;
   kill(): Promise<void>;
 };

@@ -43,12 +43,18 @@ export const lineStream = (): TransformStream<Uint8Array, string> => {
 const encoder = new TextEncoder();
 
 /** Encode text as bytes and write to writer */
-export const writeText = (writer: WritableStreamDefaultWriter<Uint8Array>, text: string): Promise<void> => {
+export const writeText = (
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  text: string,
+): Promise<void> => {
   return writer.write(encoder.encode(text));
 };
 
 /** Encode text as bytes and write to writer */
-export const writeJsonLine = (writer: WritableStreamDefaultWriter<Uint8Array>, data: unknown): Promise<void> => {
+export const writeJsonLine = (
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  data: unknown,
+): Promise<void> => {
   return writer.write(encoder.encode(JSON.stringify(data) + "\n"));
 };
 

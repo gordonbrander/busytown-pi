@@ -62,9 +62,9 @@ export const pushEvent = (
        RETURNING id, timestamp`,
     )
     .get(type, agentId, JSON.stringify(payload)) as {
-      id: number;
-      timestamp: number;
-    };
+    id: number;
+    timestamp: number;
+  };
 
   return {
     id: row.id,
@@ -255,13 +255,12 @@ export const claimEvent = (
 };
 
 /** Check if event has been claimed */
-export const isClaimed = (
-  db: DatabaseSync,
-  eventId: number,
-): boolean => {
-  return db
-    .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
-    .get(eventId) !== undefined;
+export const isClaimed = (db: DatabaseSync, eventId: number): boolean => {
+  return (
+    db
+      .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
+      .get(eventId) !== undefined
+  );
 };
 
 export const getClaimant = (

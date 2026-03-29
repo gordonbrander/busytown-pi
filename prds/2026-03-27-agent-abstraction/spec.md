@@ -55,19 +55,19 @@ type AgentResponseEvent =
 
 ### Agent response event semantics
 
-| Event | Description |
-| ----- | ----------- |
-| `agent_start` | Agent run has begun processing a message |
-| `turn_start` | A new LLM call is starting within the agent run |
-| `text_delta` | Incremental text chunk from the LLM response |
-| `text_end` | LLM text block complete; `content` is the full assembled text |
-| `thinking_delta` | Incremental thinking/reasoning chunk |
-| `thinking_end` | Thinking block complete; `content` is the full assembled thinking |
-| `tool_execution_start` | LLM has dispatched a tool call; `args` is the complete input |
-| `tool_execution_update` | Streaming partial output from an in-progress tool execution |
-| `tool_execution_end` | Tool execution complete; `result` is the full output |
-| `turn_end` | LLM call and all its tool executions are complete |
-| `agent_end` | Agent run is complete; async generator returns after this event |
+| Event                   | Description                                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| `agent_start`           | Agent run has begun processing a message                          |
+| `turn_start`            | A new LLM call is starting within the agent run                   |
+| `text_delta`            | Incremental text chunk from the LLM response                      |
+| `text_end`              | LLM text block complete; `content` is the full assembled text     |
+| `thinking_delta`        | Incremental thinking/reasoning chunk                              |
+| `thinking_end`          | Thinking block complete; `content` is the full assembled thinking |
+| `tool_execution_start`  | LLM has dispatched a tool call; `args` is the complete input      |
+| `tool_execution_update` | Streaming partial output from an in-progress tool execution       |
+| `tool_execution_end`    | Tool execution complete; `result` is the full output              |
+| `turn_end`              | LLM call and all its tool executions are complete                 |
+| `agent_end`             | Agent run is complete; async generator returns after this event   |
 
 ### Notes on deltas vs end events
 
@@ -162,7 +162,9 @@ reader until `agent_end`:
 const reader = output.getReader();
 let busy = false;
 
-const send = async function* (event: RequestEvent): AsyncGenerator<ResponseEvent> {
+const send = async function* (
+  event: RequestEvent,
+): AsyncGenerator<ResponseEvent> {
   if (busy) throw new Error("concurrent send — previous step not finished");
   busy = true;
   try {

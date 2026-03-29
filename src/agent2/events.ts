@@ -28,19 +28,39 @@ const mapAssistantMessageEvent = (
     case "text_start":
       return { type: "text_start", contentIndex: e.contentIndex };
     case "text_delta":
-      return { type: "text_delta", contentIndex: e.contentIndex, delta: e.delta };
+      return {
+        type: "text_delta",
+        contentIndex: e.contentIndex,
+        delta: e.delta,
+      };
     case "text_end":
-      return { type: "text_end", contentIndex: e.contentIndex, content: e.content };
+      return {
+        type: "text_end",
+        contentIndex: e.contentIndex,
+        content: e.content,
+      };
     case "thinking_start":
       return { type: "thinking_start", contentIndex: e.contentIndex };
     case "thinking_delta":
-      return { type: "thinking_delta", contentIndex: e.contentIndex, delta: e.delta };
+      return {
+        type: "thinking_delta",
+        contentIndex: e.contentIndex,
+        delta: e.delta,
+      };
     case "thinking_end":
-      return { type: "thinking_end", contentIndex: e.contentIndex, content: e.content };
+      return {
+        type: "thinking_end",
+        contentIndex: e.contentIndex,
+        content: e.content,
+      };
     case "toolcall_start":
       return { type: "toolcall_start", contentIndex: e.contentIndex };
     case "toolcall_delta":
-      return { type: "toolcall_delta", contentIndex: e.contentIndex, delta: e.delta };
+      return {
+        type: "toolcall_delta",
+        contentIndex: e.contentIndex,
+        delta: e.delta,
+      };
     case "toolcall_end":
       return {
         type: "toolcall_end",
@@ -79,7 +99,9 @@ export const mapPiEvent = (event: AgentSessionEvent): ResponseEvent => {
     case "message_update":
       return {
         type: "message_update",
-        assistantMessageEvent: mapAssistantMessageEvent(event.assistantMessageEvent),
+        assistantMessageEvent: mapAssistantMessageEvent(
+          event.assistantMessageEvent,
+        ),
       };
     case "message_end":
       return { type: "message_end" };
@@ -146,7 +168,7 @@ export const isFinishedResponseEvent = (
   event: ResponseEvent,
 ): event is FinishedResponseEvent => {
   return (
-    (event.type === "tool_execution_end") ||
+    event.type === "tool_execution_end" ||
     (event.type === "message_update" &&
       (event.assistantMessageEvent.type === "text_end" ||
         event.assistantMessageEvent.type === "thinking_end" ||

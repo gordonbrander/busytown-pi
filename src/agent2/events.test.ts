@@ -37,7 +37,11 @@ describe("mapPiEvent", () => {
     it("strips message and toolResults from turn_end", () => {
       assert.deepEqual(
         mapPiEvent(
-          pi({ type: "turn_end", message: AGENT_MSG, toolResults: TOOL_RESULTS }),
+          pi({
+            type: "turn_end",
+            message: AGENT_MSG,
+            toolResults: TOOL_RESULTS,
+          }),
         ),
         { type: "turn_end" },
       );
@@ -62,18 +66,27 @@ describe("mapPiEvent", () => {
     describe("message_update", () => {
       /** Wrap an assistantMessageEvent in a message_update Pi event. */
       const update = (assistantMessageEvent: object) =>
-        pi({ type: "message_update", message: AGENT_MSG, assistantMessageEvent });
+        pi({
+          type: "message_update",
+          message: AGENT_MSG,
+          assistantMessageEvent,
+        });
 
       it("strips message and partial from start", () => {
-        assert.deepEqual(mapPiEvent(update({ type: "start", partial: PARTIAL })), {
-          type: "message_update",
-          assistantMessageEvent: { type: "start" },
-        });
+        assert.deepEqual(
+          mapPiEvent(update({ type: "start", partial: PARTIAL })),
+          {
+            type: "message_update",
+            assistantMessageEvent: { type: "start" },
+          },
+        );
       });
 
       it("strips partial from text_start", () => {
         assert.deepEqual(
-          mapPiEvent(update({ type: "text_start", contentIndex: 0, partial: PARTIAL })),
+          mapPiEvent(
+            update({ type: "text_start", contentIndex: 0, partial: PARTIAL }),
+          ),
           {
             type: "message_update",
             assistantMessageEvent: { type: "text_start", contentIndex: 0 },
@@ -84,11 +97,20 @@ describe("mapPiEvent", () => {
       it("strips partial from text_delta", () => {
         assert.deepEqual(
           mapPiEvent(
-            update({ type: "text_delta", contentIndex: 0, delta: "hello", partial: PARTIAL }),
+            update({
+              type: "text_delta",
+              contentIndex: 0,
+              delta: "hello",
+              partial: PARTIAL,
+            }),
           ),
           {
             type: "message_update",
-            assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hello" },
+            assistantMessageEvent: {
+              type: "text_delta",
+              contentIndex: 0,
+              delta: "hello",
+            },
           },
         );
       });
@@ -116,7 +138,13 @@ describe("mapPiEvent", () => {
 
       it("strips partial from thinking_start", () => {
         assert.deepEqual(
-          mapPiEvent(update({ type: "thinking_start", contentIndex: 1, partial: PARTIAL })),
+          mapPiEvent(
+            update({
+              type: "thinking_start",
+              contentIndex: 1,
+              partial: PARTIAL,
+            }),
+          ),
           {
             type: "message_update",
             assistantMessageEvent: { type: "thinking_start", contentIndex: 1 },
@@ -136,7 +164,11 @@ describe("mapPiEvent", () => {
           ),
           {
             type: "message_update",
-            assistantMessageEvent: { type: "thinking_delta", contentIndex: 1, delta: "hmm" },
+            assistantMessageEvent: {
+              type: "thinking_delta",
+              contentIndex: 1,
+              delta: "hmm",
+            },
           },
         );
       });
@@ -164,7 +196,13 @@ describe("mapPiEvent", () => {
 
       it("strips partial from toolcall_start", () => {
         assert.deepEqual(
-          mapPiEvent(update({ type: "toolcall_start", contentIndex: 2, partial: PARTIAL })),
+          mapPiEvent(
+            update({
+              type: "toolcall_start",
+              contentIndex: 2,
+              partial: PARTIAL,
+            }),
+          ),
           {
             type: "message_update",
             assistantMessageEvent: { type: "toolcall_start", contentIndex: 2 },
@@ -214,7 +252,11 @@ describe("mapPiEvent", () => {
             assistantMessageEvent: {
               type: "toolcall_end",
               contentIndex: 2,
-              toolCall: { id: "call_1", name: "bash", arguments: { command: "ls" } },
+              toolCall: {
+                id: "call_1",
+                name: "bash",
+                arguments: { command: "ls" },
+              },
             },
           },
         );
@@ -222,7 +264,9 @@ describe("mapPiEvent", () => {
 
       it("strips message from done", () => {
         assert.deepEqual(
-          mapPiEvent(update({ type: "done", reason: "stop", message: AGENT_MSG })),
+          mapPiEvent(
+            update({ type: "done", reason: "stop", message: AGENT_MSG }),
+          ),
           {
             type: "message_update",
             assistantMessageEvent: { type: "done", reason: "stop" },
@@ -232,7 +276,9 @@ describe("mapPiEvent", () => {
 
       it("strips error message from error", () => {
         assert.deepEqual(
-          mapPiEvent(update({ type: "error", reason: "aborted", error: AGENT_MSG })),
+          mapPiEvent(
+            update({ type: "error", reason: "aborted", error: AGENT_MSG }),
+          ),
           {
             type: "message_update",
             assistantMessageEvent: { type: "error", reason: "aborted" },
@@ -390,7 +436,12 @@ describe("mapPiEvent", () => {
     it("maps auto_retry_end on success", () => {
       assert.deepEqual(
         mapPiEvent(pi({ type: "auto_retry_end", success: true, attempt: 2 })),
-        { type: "auto_retry_end", success: true, attempt: 2, finalError: undefined },
+        {
+          type: "auto_retry_end",
+          success: true,
+          attempt: 2,
+          finalError: undefined,
+        },
       );
     });
 

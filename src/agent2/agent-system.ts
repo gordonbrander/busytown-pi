@@ -1,10 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Event } from "../lib/event.ts";
 import { eventMatches } from "../lib/event.ts";
-import {
-  pullNextMatchingEvent,
-  pushEvent,
-} from "../event-queue.ts";
+import { pullNextMatchingEvent, pushEvent } from "../event-queue.ts";
 import { abortableSleep } from "../lib/promise.ts";
 import { type AgentProcess } from "./types.ts";
 import { isFinishedResponseEvent } from "./events.ts";
@@ -75,7 +72,7 @@ export const agentSystemOf = (
     const agentAbortController = new AbortController();
     const eventLoopAbortSignal = AbortSignal.any([
       agentAbortController.signal,
-      systemAbortController.signal
+      systemAbortController.signal,
     ]);
 
     agentHandles.set(def.id, {
@@ -110,6 +107,6 @@ export const agentSystemOf = (
   return {
     spawn,
     kill,
-    stop
-  }
-}
+    stop,
+  };
+};

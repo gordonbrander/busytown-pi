@@ -8,7 +8,7 @@ export class ExitError extends Error {
   }
 
   toString(): string {
-    return `${this.name}: ${this.message} (code: ${this.code})`
+    return `${this.name}: ${this.message} (code: ${this.code})`;
   }
 
   toJSON(): object {
