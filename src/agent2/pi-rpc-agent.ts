@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import { lineStream, mapStream, writeJsonLine, writeText } from "../lib/web-stream.ts";
+import { lineStream, mapStream, writeJsonLine } from "../lib/web-stream.ts";
 import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { ExitError } from "./error.ts";

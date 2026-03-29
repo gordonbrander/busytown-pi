@@ -3,7 +3,6 @@ import type {
   AssistantMessageEvent,
   CompactionResult,
   ResponseEvent,
-  ToolExecutionEndEvent,
   FinishedResponseEvent,
 } from "./types.ts";
 

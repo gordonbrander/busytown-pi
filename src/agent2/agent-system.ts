@@ -5,7 +5,7 @@ import {
   pullNextMatchingEvent,
   pushEvent,
 } from "../event-queue.ts";
-import { abortableSleep, nextTick } from "../lib/promise.ts";
+import { abortableSleep } from "../lib/promise.ts";
 import { type AgentProcess } from "./types.ts";
 import { isFinishedResponseEvent } from "./events.ts";
 
