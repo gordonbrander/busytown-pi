@@ -161,7 +161,7 @@ export type SendOptions = {
 };
 
 export type AgentProcess = {
-  send(event: RequestEvent, options?: SendOptions): AsyncIterable<ResponseEvent>;
+  send(event: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
   isAlive(): boolean;
   kill(): Promise<void>;
 };

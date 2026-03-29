@@ -68,9 +68,6 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     .pipeThrough(mapStream(parseJsonLine))
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
-  // Hold a single reader for the process lifetime
-  const reader = output.getReader();
-
   // Handle process death
   proc.once("exit", (code) => {
     processAbortController.abort(
@@ -78,32 +75,71 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     );
   });
 
-  let busy = false;
-
-  const send = async function*(
+  const send = (
     event: RequestEvent,
     options?: SendOptions
-  ): AsyncGenerator<ResponseEvent> {
-    if (busy) throw new Error("Concurrent send. Previous agent response step is not finished.");
+  ): ReadableStream<ResponseEvent> => {
     processAbortController.signal.throwIfAborted();
-    busy = true;
 
-    options?.signal?.addEventListener("abort", writeAbortEventBestEffort, { once: true });
+    const reader = output.getReader();
+    options?.signal?.addEventListener(
+      "abort",
+      writeAbortEventBestEffort,
+      { once: true },
+    );
 
-    try {
-      await writeEvent(event);
+    const cleanup = () => {
+      options?.signal?.removeEventListener("abort", writeAbortEventBestEffort);
+      reader.releaseLock();
+    };
+
+    const drainUntilEnd = async (): Promise<void> => {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          throw new ExitError("Pi process exited unexpectedly");
-        }
-        yield value;
-        if (value.type === "agent_end") return;
+        if (done || value.type === "agent_end") break;
       }
-    } finally {
-      options?.signal?.removeEventListener("abort", writeAbortEventBestEffort);
-      busy = false;
-    }
+    };
+
+    return new ReadableStream<ResponseEvent>(
+      {
+        async start() {
+          try {
+            await writeEvent(event);
+          } catch (e) {
+            cleanup();
+            throw e;
+          }
+        },
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              cleanup();
+              controller.error(new ExitError("Pi process exited unexpectedly"));
+              return;
+            }
+            controller.enqueue(value);
+            if (value.type === "agent_end") {
+              cleanup();
+              controller.close();
+            }
+          } catch (e) {
+            cleanup();
+            controller.error(e);
+          }
+        },
+        async cancel() {
+          try {
+            await writeAbortEventBestEffort();
+            await drainUntilEnd();
+          } catch {
+            // Process died — nothing left to drain
+          }
+          cleanup();
+        },
+      },
+      { highWaterMark: 0 },
+    );
   };
 
   const kill = async (): Promise<void> => {
