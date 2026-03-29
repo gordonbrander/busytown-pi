@@ -10,6 +10,7 @@ import {
   getOrCreateCursor,
   openDb,
   pollEvents,
+  pullNextMatchingEvent,
   pushEvent,
   updateCursor,
 } from "./event-queue.ts";
@@ -195,6 +196,100 @@ describe("getNextEvent", () => {
 
     const next = getNextEvent(db, e1.id);
     assert.equal(next, undefined);
+    db.close();
+  });
+});
+
+describe("pullNextMatchingEvent", () => {
+  // Helper: initialize cursor so it exists before pushing test events.
+  // getOrCreateCursor pushes a sys.cursor.create event, so calling it first
+  // ensures the cursor starts before any test events.
+  const initPuller = (db: DatabaseSync, id: string): void => {
+    getOrCreateCursor(db, id);
+  };
+
+  it("returns the first event matching the filter", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    const e2 = pushEvent(db, "w", "b");
+
+    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "b");
+    assert.equal(result?.id, e2.id);
+    assert.equal(result?.type, "b");
+    db.close();
+  });
+
+  it("skips events that don't match the filter", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "a");
+    const e3 = pushEvent(db, "w", "b");
+
+    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "b");
+    assert.equal(result?.id, e3.id);
+    db.close();
+  });
+
+  it("returns undefined when no events match", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "a");
+
+    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "z");
+    assert.equal(result, undefined);
+    db.close();
+  });
+
+  it("returns undefined when queue is empty", () => {
+    const db = createTestDb();
+    const result = pullNextMatchingEvent(db, "puller", () => true);
+    assert.equal(result, undefined);
+    db.close();
+  });
+
+  it("advances cursor past skipped and matched events", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "b");
+    pushEvent(db, "w", "c");
+
+    pullNextMatchingEvent(db, "puller", (e) => e.type === "b");
+
+    // Cursor should be at e2, so next pull starts after it
+    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "c");
+    assert.equal(result?.type, "c");
+    db.close();
+  });
+
+  it("skips claimed events", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    const e1 = pushEvent(db, "w", "task");
+    const e2 = pushEvent(db, "w", "task");
+
+    claimEvent(db, "other-agent", e1.id);
+
+    const result = pullNextMatchingEvent(db, "puller", (e) => e.type === "task");
+    assert.equal(result?.id, e2.id);
+    db.close();
+  });
+
+  it("advances cursor past all events when none match", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "b");
+
+    pullNextMatchingEvent(db, "puller", () => false);
+
+    // New event after exhausting the queue should be found
+    const e3 = pushEvent(db, "w", "c");
+    const result = pullNextMatchingEvent(db, "puller", () => true);
+    assert.equal(result?.id, e3.id);
     db.close();
   });
 });

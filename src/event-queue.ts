@@ -62,9 +62,9 @@ export const pushEvent = (
        RETURNING id, timestamp`,
     )
     .get(type, agentId, JSON.stringify(payload)) as {
-    id: number;
-    timestamp: number;
-  };
+      id: number;
+      timestamp: number;
+    };
 
   return {
     id: row.id,
@@ -187,6 +187,31 @@ export const getNextEvent = (
   return row ? parseEvent(row) : undefined;
 };
 
+export const pullNextMatchingEvent = (
+  db: DatabaseSync,
+  id: string,
+  filter: (event: Event) => boolean,
+): Event | undefined => {
+  while (true) {
+    const sinceId = getOrCreateCursor(db, id);
+    const event = getNextEvent(db, sinceId);
+    if (!event) {
+      return undefined;
+    }
+
+    // Advance cursor
+    updateCursor(db, id, event.id);
+
+    // Events that don't match are skipped
+    // Events that have already been claimed cannot be matched and are skipped.
+    if (!filter(event) || isClaimed(db, event.id)) {
+      continue;
+    }
+
+    return event;
+  }
+};
+
 export const pollEvents = (
   db: DatabaseSync,
   agentId: string,
@@ -227,6 +252,16 @@ export const claimEvent = (
     db.exec("ROLLBACK");
     throw err;
   }
+};
+
+/** Check if event has been claimed */
+export const isClaimed = (
+  db: DatabaseSync,
+  eventId: number,
+): boolean => {
+  return db
+    .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
+    .get(eventId) !== undefined;
 };
 
 export const getClaimant = (

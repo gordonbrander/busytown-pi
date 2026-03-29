@@ -3,6 +3,8 @@ import type {
   AssistantMessageEvent,
   CompactionResult,
   ResponseEvent,
+  ToolExecutionEndEvent,
+  FinishedResponseEvent,
 } from "./types.ts";
 
 export type PiAgentSessionEvent = AgentSessionEvent;
@@ -132,6 +134,25 @@ export const mapPiEvent = (event: AgentSessionEvent): ResponseEvent => {
         finalError: event.finalError,
       };
   }
+};
+
+// ---------------------------------------------------------------------------
+// Finished-result helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * @returns true if event is one of the four finished-result events
+ */
+export const isFinishedResponseEvent = (
+  event: ResponseEvent,
+): event is FinishedResponseEvent => {
+  return (
+    (event.type === "tool_execution_end") ||
+    (event.type === "message_update" &&
+      (event.assistantMessageEvent.type === "text_end" ||
+        event.assistantMessageEvent.type === "thinking_end" ||
+        event.assistantMessageEvent.type === "toolcall_end"))
+  );
 };
 
 /**
