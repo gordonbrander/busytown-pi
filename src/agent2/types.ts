@@ -169,6 +169,6 @@ export type SendOptions = {
 
 export type AgentProcess = {
   stream(request: RequestEvent, options?: SendOptions): ReadableStream<ResponseEvent>;
-  isAlive(): boolean;
+  alive: AbortSignal;
   kill(): Promise<void>;
 };

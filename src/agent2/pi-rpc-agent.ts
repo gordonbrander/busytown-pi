@@ -47,9 +47,12 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
+const onErrorNoOp = (): void => { };
+
 export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
+  const onError = config.onError ?? onErrorNoOp;
+
   const processAbortController = new AbortController();
-  const isAlive = () => !processAbortController.signal.aborted;
 
   const proc = spawn("pi", toCliArgs(config), {
     stdio: ["pipe", "pipe", "pipe"],
@@ -73,7 +76,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     try {
       await sendCommand({ type: "abort" });
     } catch (e) {
-      config.onError?.({ type: "error", message: "Failed to write abort command" });
+      onError({ type: "error", message: "Failed to write abort command" });
       logger.error("Failed to write abort command", { error: `${e}` })
     }
   }
@@ -87,16 +90,14 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
   // Pipe stderr lines to onError callback
-  if (config.onError) {
-    const stderr = (Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>)
-      .pipeThrough(lineStream());
-    const onError = config.onError;
-    stderr.pipeTo(new WritableStream({
-      write(line) {
-        onError({ type: "error", message: line });
-      },
-    })).catch(() => { });
-  }
+  const stderr = (Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>)
+    .pipeThrough(lineStream());
+
+  stderr.pipeTo(new WritableStream({
+    write(line) {
+      onError({ type: "error", message: line });
+    },
+  })).catch(() => { });
 
   // Handle process death
   proc.once("exit", (code) => {
@@ -111,7 +112,8 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   ): ReadableStream<ResponseEvent> => {
     processAbortController.signal.throwIfAborted();
 
-    // Acquire exclusive lock on the output stream
+    // Acquire exclusive lock on the output stream for the duration of this
+    // agent step
     const reader = output.getReader();
 
     options?.signal?.addEventListener(
@@ -125,7 +127,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
       reader.releaseLock();
     };
 
-    const drainUntilEnd = async (): Promise<void> => {
+    const drainUntilAgentEnd = async (): Promise<void> => {
       while (true) {
         const { done, value } = await reader.read();
         if (done || value.type === "agent_end") break;
@@ -172,7 +174,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
         async cancel() {
           try {
             await sendAbortCommandBestEffort();
-            await drainUntilEnd();
+            await drainUntilAgentEnd();
           } catch {
             // Process died — nothing left to drain
           }
@@ -184,7 +186,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   };
 
   const kill = async (): Promise<void> => {
-    if (!isAlive()) return;
+    if (processAbortController.signal.aborted) return;
     await sendAbortCommandBestEffort();
     return new Promise<void>((resolve) => {
       proc.once("exit", resolve);
@@ -193,7 +195,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   };
 
   return {
-    isAlive,
+    alive: processAbortController.signal,
     stream,
     kill,
   };
