@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeText } from "../lib/web-stream.ts";
 import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
+import { parseJsonLine } from "../lib/jsonl.ts";
 import { ExitError } from "./error.ts";
 import type {
   AgentProcess,
@@ -19,6 +20,8 @@ export type PiRpcAgentConfig = {
   provider?: string;
   /** Pass --model to Pi. */
   model?: string;
+  /** Called for each line written to stderr by the Pi process. */
+  onError?: (error: { type: "error"; message: string }) => void;
 };
 
 export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
@@ -31,10 +34,6 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
     args.push("--no-session");
   }
   return args;
-};
-
-const parseJsonLine = (line: string): unknown => {
-  return JSON.parse(line.trim());
 };
 
 export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
@@ -67,6 +66,18 @@ export const createPiRpcAgent = (config: PiRpcAgentConfig): AgentProcess => {
     .pipeThrough(lineStream())
     .pipeThrough(mapStream(parseJsonLine))
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
+
+  // Pipe stderr lines to onError callback
+  if (config.onError) {
+    const stderr = (Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>)
+      .pipeThrough(lineStream());
+    const onError = config.onError;
+    stderr.pipeTo(new WritableStream({
+      write(line) {
+        onError({ type: "error", message: line });
+      },
+    })).catch(() => { });
+  }
 
   // Handle process death
   proc.once("exit", (code) => {
