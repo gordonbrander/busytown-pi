@@ -3,7 +3,7 @@ import type { Event } from "../lib/event.ts";
 import { eventMatches } from "../lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "../event-queue.ts";
 import { abortableSleep } from "../lib/promise.ts";
-import { type AgentProcess } from "./types.ts";
+import { type AgentProcess } from "./agent.ts";
 import { isFinishedResponseEvent } from "./events.ts";
 
 export type AgentSystem = {
@@ -19,6 +19,10 @@ export type AgentDef = {
   create: () => AgentProcess;
 };
 
+// TODO instead of `eventLoop` have a `step: (event: Event) => Promise<void>`.
+// That way we can support workers like the logger that generate pure side-effects
+// and aren't streaming agents.
+// We will need to still surface a promise for the agent process liveness.
 export type AgentHandle = {
   eventLoop: Promise<void>;
   abortController: AbortController;

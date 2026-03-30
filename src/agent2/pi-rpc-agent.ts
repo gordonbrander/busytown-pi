@@ -3,15 +3,10 @@ import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeJsonLine } from "../lib/web-stream.ts";
 import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
-import { ExitError } from "./error.ts";
 import { loggerOf } from "../lib/json-logger.ts";
-import type {
-  AgentProcess,
-  PiRpcCommand,
-  RequestEvent,
-  ResponseEvent,
-  SendOptions,
-} from "./types.ts";
+import type { PiRpcCommand } from "./commands.ts";
+import type { AgentProcess, SendOptions } from "./agent.ts";
+import type { RequestEvent, ResponseEvent } from "./events.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -47,7 +42,7 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => {};
+const onErrorNoOp = (): void => { };
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const onError = config.onError ?? onErrorNoOp;
@@ -102,12 +97,12 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
         },
       }),
     )
-    .catch(() => {});
+    .catch(() => { });
 
-  // Handle process death
+  // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {
     processAbortController.abort(
-      new ExitError(`Pi process exited`, code ?? undefined),
+      new Error(`Pi process exited (code: ${code ?? "null"})`),
     );
   });
 
@@ -152,11 +147,11 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
           try {
             // Get next value
             const { done, value } = await reader.read();
-            // If done, it means the pi process exited early due to some error.
-            // Clean up and throw an error to signal this stream is done.
+            // If done, it means the pi process exited.
+            // Clean up and close this stream.
             if (done) {
               cleanup();
-              controller.error(new ExitError("Pi process exited unexpectedly"));
+              controller.close();
               return;
             }
 
@@ -168,6 +163,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
             if (value.type === "agent_end") {
               cleanup();
               controller.close();
+              return;
             }
           } catch (e) {
             cleanup();
@@ -180,8 +176,9 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
             await drainUntilAgentEnd();
           } catch {
             // Process died — nothing left to drain
+          } finally {
+            cleanup();
           }
-          cleanup();
         },
       },
       { highWaterMark: 0 },
@@ -190,7 +187,10 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
 
   const kill = async (): Promise<void> => {
     if (processAbortController.signal.aborted) return;
+    // Abort immediately
+    processAbortController.abort(new Error(`Pi process aborted via kill()`));
     await sendAbortCommandBestEffort();
+    // Promise for completion of teardown
     return new Promise<void>((resolve) => {
       proc.once("exit", resolve);
       proc.kill("SIGTERM");
@@ -198,7 +198,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   };
 
   return {
-    alive: processAbortController.signal,
+    aborted: processAbortController.signal,
     stream,
     kill,
   };
