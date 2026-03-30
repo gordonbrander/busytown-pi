@@ -166,12 +166,12 @@ export type ResponseEvent =
  */
 export type FinishedResponseEvent =
   | {
-    type: "message_update";
-    assistantMessageEvent: Extract<
-      AssistantMessageEvent,
-      { type: "text_end" | "thinking_end" | "toolcall_end" }
-    >;
-  }
+      type: "message_update";
+      assistantMessageEvent: Extract<
+        AssistantMessageEvent,
+        { type: "text_end" | "thinking_end" | "toolcall_end" }
+      >;
+    }
   | ToolExecutionEndEvent;
 
 const mapAssistantMessageEvent = (
