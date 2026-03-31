@@ -9,7 +9,7 @@ import {
 import { EventDraft, type Event } from "../lib/event.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { loggerOf } from "../lib/json-logger.ts";
-import type { PiRpcCommand } from "./commands.ts";
+import type { PiRpcCommand } from "./pi-rpc-commands.ts";
 import type { Agent } from "./agent.ts";
 import { parseSlug } from "../lib/slug.ts";
 
@@ -57,7 +57,7 @@ export const toCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => {};
+const onErrorNoOp = (): void => { };
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   const { listen, ignoreSelf = true, onError = onErrorNoOp, env, cwd } = config;
@@ -115,7 +115,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
         },
       }),
     )
-    .catch(() => {});
+    .catch(() => { });
 
   // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {
