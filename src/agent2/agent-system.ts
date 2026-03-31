@@ -85,15 +85,18 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
   };
 
   const disposeAgent = async (id: string): Promise<void> => {
+    logger.debug("Disposing agent", { id });
     const agent = agents.get(id);
     if (!agent) {
       return;
     }
     // Clean up and automatically unregister via abort event
     await asyncDispose(agent);
+    logger.debug("Disposed agent", { id });
   };
 
   const disposeSystem = async (): Promise<void> => {
+    logger.debug("Disposing agent system");
     if (systemAbortController.signal.aborted) {
       return;
     }
@@ -101,6 +104,7 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
     const kills = Array.from(agents.keys()).map(disposeAgent);
     await Promise.allSettled(kills);
     agents.clear();
+    logger.debug("Disposed agent system");
   };
 
   return {

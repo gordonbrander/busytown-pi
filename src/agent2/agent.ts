@@ -28,6 +28,7 @@ export type AgentProcess = {
   /**
    * Teardown and clean up any internal long-lived resources.
    * Implementors should make this method idempotent.
+   * Calling this should also cause the `disposed` AbortSignal to be aborted.
    * @returns promise for the completion of the teardown.
    */
   [Symbol.asyncDispose](): Promise<void>;
