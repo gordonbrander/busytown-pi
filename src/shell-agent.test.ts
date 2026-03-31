@@ -13,7 +13,9 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
   ...overrides,
 });
 
-const collect = async (stream: ReadableStream<EventDraft>): Promise<EventDraft[]> => {
+const collect = async (
+  stream: ReadableStream<EventDraft>,
+): Promise<EventDraft[]> => {
   const drafts: EventDraft[] = [];
   for await (const draft of stream) {
     drafts.push(draft);
