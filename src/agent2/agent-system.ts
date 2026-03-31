@@ -61,6 +61,7 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
 
   const registerAgent = (agent: Agent): string => {
     systemAbortController.signal.throwIfAborted();
+    agent.disposed.throwIfAborted();
 
     if (agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already registered`);
