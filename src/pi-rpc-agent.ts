@@ -1,17 +1,17 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import { lineStream, mapStream, writeJsonLine } from "../lib/web-stream.ts";
+import { lineStream, mapStream, writeJsonLine } from "./lib/web-stream.ts";
 import {
   mapPiEvent,
   type PiAgentSessionEvent,
   type ResponseEvent,
 } from "./pi-events.ts";
-import { EventDraft, type Event } from "../lib/event.ts";
-import { parseJsonLine } from "../lib/jsonl.ts";
-import { loggerOf } from "../lib/json-logger.ts";
+import { EventDraft, type Event } from "./lib/event.ts";
+import { parseJsonLine } from "./lib/jsonl.ts";
+import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
 import type { Agent } from "./agent.ts";
-import { parseSlug } from "../lib/slug.ts";
+import { parseSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 

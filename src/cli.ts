@@ -10,10 +10,9 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAllAgents, updateAgentFrontmatter } from "./agent.ts";
+import { loadAllAgents, updateAgentFrontmatter } from "./agent2.ts";
 import { applyMemoryUpdate } from "./memory.ts";
-import { createAgentSystem, agent } from "./agent-system.ts";
-import { makeAgentRunner } from "./pi-process.ts";
+import { agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {

@@ -1,4 +1,4 @@
-import type { Event, EventDraft } from "../lib/event.ts";
+import type { Event, EventDraft } from "./lib/event.ts";
 import type { Agent } from "./agent.ts";
 
 export type MockAgentOpts = {

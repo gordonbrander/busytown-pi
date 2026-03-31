@@ -10,7 +10,7 @@ import {
   updateAgentFrontmatter,
   isHookName,
   parseHooks,
-} from "./agent.ts";
+} from "./agent2.ts";
 
 let tmpDir: string;
 
