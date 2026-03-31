@@ -5,7 +5,7 @@ import {
   mapPiEvent,
   type PiAgentSessionEvent,
   type ResponseEvent,
-} from "./events.ts";
+} from "./pi-events.ts";
 import { EventDraft, type Event } from "../lib/event.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { loggerOf } from "../lib/json-logger.ts";

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import { mapPiEvent } from "./events.ts";
+import { mapPiEvent } from "./pi-events.ts";
 
 /** Cast a plain object to AgentSessionEvent to keep test inputs concise. */
 const pi = (obj: object): AgentSessionEvent => obj as AgentSessionEvent;
