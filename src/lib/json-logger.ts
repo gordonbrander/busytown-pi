@@ -1,5 +1,12 @@
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+export type LogDriver = {
+  debug: (message: string) => void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+};
+
 export type Logger = {
   debug: (message: string, data?: Record<string, unknown>) => void;
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -18,15 +25,18 @@ const jsonLogOf = (
 };
 
 /** Creates a JSON logger that mixes in the given context into log entries. */
-export const loggerOf = (context: Record<string, unknown> = {}): Logger => ({
+export const loggerOf = (
+  context: Record<string, unknown> = {},
+  driver: LogDriver = console
+): Logger => ({
   debug: (message, data) =>
-    console.debug(jsonLogOf("debug", message, context, data)),
+    driver.debug(jsonLogOf("debug", message, context, data)),
   info: (message, data) =>
-    console.log(jsonLogOf("info", message, context, data)),
+    driver.info(jsonLogOf("info", message, context, data)),
   warn: (message, data) =>
-    console.warn(jsonLogOf("warn", message, context, data)),
+    driver.warn(jsonLogOf("warn", message, context, data)),
   error: (message, data) =>
-    console.error(jsonLogOf("error", message, context, data)),
+    driver.error(jsonLogOf("error", message, context, data)),
 });
 
 export const logger = loggerOf();
