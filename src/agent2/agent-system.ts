@@ -2,8 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { EventDraft, eventMatches, type Event } from "../lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "../event-queue.ts";
 import { abortableSleep } from "../lib/promise.ts";
-import { isFinishedResponseEvent } from "./events.ts";
-import { dispose } from "./dispose.ts";
+import { dispose } from "../lib/dispose.ts";
 import { loggerOf } from "../lib/json-logger.ts";
 
 const logger = loggerOf({ source: "agent-system.ts" });
