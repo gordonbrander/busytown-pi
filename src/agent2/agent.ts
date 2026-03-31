@@ -1,9 +1,9 @@
 import type { Event, EventDraft } from "../lib/event.ts";
 
 /**
-* An agent process
-* Underlying implementation may be short lived or long-lived.
-*/
+ * An agent process
+ * Underlying implementation may be short lived or long-lived.
+ */
 export type AgentProcess = {
   /**
    * Send an event and stream responses from the agent.
@@ -31,4 +31,10 @@ export type AgentProcess = {
    * @returns promise for the completion of the teardown.
    */
   [Symbol.asyncDispose](): Promise<void>;
+};
+
+export type Agent = AgentProcess & {
+  id: string;
+  listen: string[];
+  ignoreSelf: boolean;
 };

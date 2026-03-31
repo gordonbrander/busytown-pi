@@ -1,33 +1,48 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeJsonLine } from "../lib/web-stream.ts";
-import { mapPiEvent, type PiAgentSessionEvent, type ResponseEvent } from "./events.ts";
+import {
+  mapPiEvent,
+  type PiAgentSessionEvent,
+  type ResponseEvent,
+} from "./events.ts";
 import { EventDraft, type Event } from "../lib/event.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { loggerOf } from "../lib/json-logger.ts";
 import type { PiRpcCommand } from "./commands.ts";
-import type { AgentProcess } from "./agent.ts";
+import type { Agent } from "./agent.ts";
+import { parseSlug } from "../lib/slug.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
-export type PiRpcAgentConfig = {
-  /** Working directory for the Pi process. */
-  cwd: string;
+type AgentConfig = {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+};
+
+type PiRpcCliFlagConfig = {
+  /** Pass --model to Pi. */
+  model?: string;
   /** Pass --session-dir to Pi. If absent, pass --no-session instead. */
   sessionDir?: string;
   /** Pass --provider to Pi. */
   provider?: string;
-  /** Pass --model to Pi. */
-  model?: string;
-  /** Called for each line written to stderr by the Pi process. */
-  onError?: (error: { type: "error"; message: string }) => void;
   /** Extension file paths to load via -e <path>. */
   extensions?: string[];
-  /** Extra environment variables passed to the Pi process. */
-  env?: Record<string, string>;
 };
 
-export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
+export type PiRpcAgentConfig = AgentConfig &
+  PiRpcCliFlagConfig & {
+    /** Working directory for the Pi process. */
+    cwd: string;
+    /** Called for each line written to stderr by the Pi process. */
+    onError?: (error: { type: "error"; message: string }) => void;
+    /** Extra environment variables passed to the Pi process. */
+    env?: Record<string, string>;
+  };
+
+export const toCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   const args = ["--mode", "rpc"];
   if (config.provider) args.push("--provider", config.provider);
   if (config.model) args.push("--model", config.model);
@@ -42,17 +57,20 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => { };
+const onErrorNoOp = (): void => {};
 
-export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
-  const onError = config.onError ?? onErrorNoOp;
+export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
+  const { listen, ignoreSelf = true, onError = onErrorNoOp, env, cwd } = config;
+
+  // Make sure we have a valid ID. Throws if not.
+  const id = parseSlug(config.id);
 
   const processAbortController = new AbortController();
 
   const proc = spawn("pi", toCliArgs(config), {
     stdio: ["pipe", "pipe", "pipe"],
-    cwd: config.cwd,
-    env: { ...process.env, ...config.env },
+    cwd,
+    env: { ...process.env, ...env },
   });
 
   const stdin = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
@@ -97,7 +115,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
         },
       }),
     )
-    .catch(() => { });
+    .catch(() => {});
 
   // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {
@@ -149,8 +167,8 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
 
             // Enqueue the value.
             controller.enqueue({
-              type: "",
-              payload: value
+              type: `agent.${id}.response`,
+              payload: value,
             });
 
             // If it's the agent_end, then we clean up (release the lock on upstream)
@@ -193,6 +211,9 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   };
 
   return {
+    id,
+    listen,
+    ignoreSelf,
     disposed: processAbortController.signal,
     stream,
     [Symbol.asyncDispose]: dispose,
