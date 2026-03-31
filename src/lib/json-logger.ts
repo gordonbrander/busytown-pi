@@ -27,7 +27,7 @@ const jsonLogOf = (
 /** Creates a JSON logger that mixes in the given context into log entries. */
 export const loggerOf = (
   context: Record<string, unknown> = {},
-  driver: LogDriver = console
+  driver: LogDriver = console,
 ): Logger => ({
   debug: (message, data) =>
     driver.debug(jsonLogOf("debug", message, context, data)),
