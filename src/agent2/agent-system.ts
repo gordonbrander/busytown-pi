@@ -1,116 +1,109 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { Event } from "../lib/event.ts";
-import { eventMatches } from "../lib/event.ts";
+import { EventDraft, eventMatches, type Event } from "../lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "../event-queue.ts";
 import { abortableSleep } from "../lib/promise.ts";
-import { type AgentProcess } from "./agent.ts";
 import { isFinishedResponseEvent } from "./events.ts";
+import { dispose } from "./dispose.ts";
+import { loggerOf } from "../lib/json-logger.ts";
 
-export type AgentSystem = {
-  spawn: (def: AgentDef) => string;
-  kill: (id: string) => Promise<boolean>;
-  stop: () => Promise<void>;
-};
+const logger = loggerOf({ source: "agent-system.ts" });
 
-export type AgentDef = {
-  id: string;
+export type AgentHandler = {
   listen: string[];
   ignoreSelf: boolean;
-  create: () => AgentProcess;
+  stream: (event: Event) => ReadableStream<EventDraft>;
+  disposed: AbortSignal;
+  [Symbol.asyncDispose](): Promise<void>;
 };
 
-// TODO instead of `eventLoop` have a `step: (event: Event) => Promise<void>`.
-// That way we can support workers like the logger that generate pure side-effects
-// and aren't streaming agents.
-// We will need to still surface a promise for the agent process liveness.
-export type AgentHandle = {
-  eventLoop: Promise<void>;
-  abortController: AbortController;
+export type AgentSystem = {
+  spawn: (id: string, create: () => AgentHandler) => string;
+  kill: (id: string) => Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
 };
 
 export const agentSystemOf = (
   db: DatabaseSync,
   timeout = 1000,
 ): AgentSystem => {
+  logger.debug("Agent system created");
   const systemAbortController = new AbortController();
 
-  const agentHandles: Map<string, AgentHandle> = new Map();
+  const handlers: Map<string, AgentHandler> = new Map();
 
-  const forkAgentEventLoop = async (agent: AgentDef, signal: AbortSignal) => {
+  const forkAgentPollLoop = async (id: string, agent: AgentHandler): Promise<void> => {
+    // If either the agent or the system is disposed, abort the loop
+    const signal = AbortSignal.any([agent.disposed, systemAbortController.signal]);
+
     const shouldHandleEvent = (event: Event) => {
-      if (agent.ignoreSelf && event.agent_id === agent.id) {
+      if (agent.ignoreSelf && event.agent_id === id) {
         return false;
       }
       return eventMatches(event, agent.listen);
     };
 
-    const proc = agent.create();
-
     try {
       while (!signal.aborted) {
-        const event = pullNextMatchingEvent(db, agent.id, shouldHandleEvent);
+        const event = pullNextMatchingEvent(db, id, shouldHandleEvent);
 
         if (!event) {
           await abortableSleep(timeout, signal);
           continue;
         }
 
-        for await (const res of proc.stream(event, { signal })) {
-          if (isFinishedResponseEvent(res)) {
-            pushEvent(db, agent.id, `agent.${agent.id}.stream`, res);
+        for await (const draft of agent.stream(event)) {
+          // Break the stream if either agent or system aborted.
+          // This will run ReadableStream.cancel() and clean up resources.
+          if (signal.aborted) {
+            break;
           }
+          pushEvent(db, id, draft.type, draft.payload);
         }
       }
+    } catch (e) {
+      logger.warn("Agent poll loop error", { error: `${e}` });
     } finally {
-      await proc.kill();
+      await dispose(agent);
     }
   };
 
-  const spawn = (def: AgentDef) => {
+  const spawn = (id: string, create: () => AgentHandler) => {
     systemAbortController.signal.throwIfAborted();
-
-    if (agentHandles.has(def.id)) {
-      throw new Error(`Agent with id ${def.id} already registered`);
+    if (handlers.has(id)) {
+      throw new Error(`Agent with id ${id} already registered`);
     }
+    logger.debug("Spawning agent", { id });
 
-    const agentAbortController = new AbortController();
-    const eventLoopAbortSignal = AbortSignal.any([
-      agentAbortController.signal,
-      systemAbortController.signal,
-    ]);
+    const agent = create();
+    forkAgentPollLoop(id, agent);
 
-    agentHandles.set(def.id, {
-      eventLoop: forkAgentEventLoop(def, eventLoopAbortSignal),
-      abortController: agentAbortController,
-    });
+    handlers.set(id, agent);
 
-    return def.id;
+    return id;
   };
 
-  const kill = async (id: string): Promise<boolean> => {
-    const handle = agentHandles.get(id);
-    if (!handle) {
-      return false;
+  const kill = async (id: string): Promise<void> => {
+    const agent = handlers.get(id);
+    if (!agent) {
+      return;
     }
-    handle.abortController.abort(new Error(`Agent killed`));
-    await handle.eventLoop;
-    agentHandles.delete(id);
-    return true;
+    await dispose(agent);
+    handlers.delete(id);
   };
 
-  const stop = async () => {
+  const disposeSystem = async (): Promise<void> => {
     if (systemAbortController.signal.aborted) {
       return;
     }
     systemAbortController.abort(new Error("System stopped"));
-    const kills = Array.from(agentHandles.keys()).map(kill);
+    const kills = Array.from(handlers.keys()).map(kill);
     await Promise.allSettled(kills);
-    agentHandles.clear();
+    handlers.clear();
   };
 
   return {
     spawn,
     kill,
-    stop,
+    [Symbol.asyncDispose]: disposeSystem,
   };
 };

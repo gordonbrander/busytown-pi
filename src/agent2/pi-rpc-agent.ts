@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeJsonLine } from "../lib/web-stream.ts";
-import { mapPiEvent, type PiAgentSessionEvent } from "./events.ts";
+import { mapPiEvent, type PiAgentSessionEvent, type ResponseEvent } from "./events.ts";
+import { EventDraft, type Event } from "../lib/event.ts";
 import { parseJsonLine } from "../lib/jsonl.ts";
 import { loggerOf } from "../lib/json-logger.ts";
 import type { PiRpcCommand } from "./commands.ts";
-import type { AgentProcess, SendOptions } from "./agent.ts";
-import type { RequestEvent, ResponseEvent } from "./events.ts";
+import type { AgentProcess } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -42,7 +42,7 @@ export const toCliArgs = (config: PiRpcAgentConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => {};
+const onErrorNoOp = (): void => { };
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const onError = config.onError ?? onErrorNoOp;
@@ -61,7 +61,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   const sendCommand = (command: PiRpcCommand): Promise<void> =>
     writeJsonLine(stdinWriter, command);
 
-  const sendEventPromptCommand = (event: RequestEvent): Promise<void> =>
+  const sendEventPromptCommand = (event: Event): Promise<void> =>
     sendCommand({
       type: "prompt",
       message: JSON.stringify(event),
@@ -97,7 +97,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
         },
       }),
     )
-    .catch(() => {});
+    .catch(() => { });
 
   // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {
@@ -106,22 +106,14 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     );
   });
 
-  const stream = (
-    request: RequestEvent,
-    options?: SendOptions,
-  ): ReadableStream<ResponseEvent> => {
+  const stream = (event: Event): ReadableStream<EventDraft> => {
     processAbortController.signal.throwIfAborted();
 
     // Acquire exclusive lock on the output stream for the duration of this
     // agent step
     const reader = output.getReader();
 
-    options?.signal?.addEventListener("abort", sendAbortCommandBestEffort, {
-      once: true,
-    });
-
     const cleanup = () => {
-      options?.signal?.removeEventListener("abort", sendAbortCommandBestEffort);
       reader.releaseLock();
     };
 
@@ -132,12 +124,12 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
       }
     };
 
-    return new ReadableStream<ResponseEvent>(
+    return new ReadableStream<EventDraft>(
       {
         async start() {
           try {
             // Write the prompt command to Pi's stdin
-            await sendEventPromptCommand(request);
+            await sendEventPromptCommand(event);
           } catch (e) {
             cleanup();
             throw e;
@@ -156,7 +148,10 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
             }
 
             // Enqueue the value.
-            controller.enqueue(value);
+            controller.enqueue({
+              type: "",
+              payload: value
+            });
 
             // If it's the agent_end, then we clean up (release the lock on upstream)
             // and close this step's stream.
@@ -174,8 +169,8 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
           try {
             await sendAbortCommandBestEffort();
             await drainUntilAgentEnd();
-          } catch {
-            // Process died — nothing left to drain
+          } catch (e) {
+            throw e;
           } finally {
             cleanup();
           }
@@ -185,7 +180,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
     );
   };
 
-  const kill = async (): Promise<void> => {
+  const dispose = async (): Promise<void> => {
     if (processAbortController.signal.aborted) return;
     // Abort immediately
     processAbortController.abort(new Error(`Pi process aborted via kill()`));
@@ -198,8 +193,8 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentProcess => {
   };
 
   return {
-    aborted: processAbortController.signal,
+    disposed: processAbortController.signal,
     stream,
-    kill,
+    [Symbol.asyncDispose]: dispose,
   };
 };

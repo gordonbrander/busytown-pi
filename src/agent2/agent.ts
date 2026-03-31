@@ -1,24 +1,34 @@
-import type { RequestEvent, ResponseEvent } from "./events.ts";
+import type { Event, EventDraft } from "../lib/event.ts";
 
 /**
- * A stable handle to an agent for the lifetime of that agent. The underlying
- * OS process may be long-lived (Pi RPC) or spawned per-send (Claude CLI,
- * shell) — that is an implementation detail.
- *
- * `stream()` returns an `ReadableStream` that yields all response events for a
- * single agent run, completing when the run is done (`agent_end`). Callers
- * consume via `for-await-of`, which provides natural backpressure. Only one
- * `stream()` may be active at a time.
- */
-export type SendOptions = {
-  signal?: AbortSignal;
-};
-
+* An agent process
+* Underlying implementation may be short lived or long-lived.
+*/
 export type AgentProcess = {
-  stream(
-    request: RequestEvent,
-    options?: SendOptions,
-  ): ReadableStream<ResponseEvent>;
-  aborted: AbortSignal;
-  kill(): Promise<void>;
+  /**
+   * Send an event and stream responses from the agent.
+   * Stream represents the responses for a single agent cycle, e.g.:
+   * ```
+   * user message -> (response -> tool call -> tool result -> response... -> final response)
+   * ```
+   * @throws {Error} if called after the disposed signal has been aborted.
+   * @returns a readable stream of event drafts.
+   */
+  stream(event: Event): ReadableStream<EventDraft>;
+
+  /**
+   * Signals when the process is disposed.
+   * Implementors should abort the signal immediately when `agent.dispose()` is
+   * called, and not wait for disposal completion.
+   * Other methods such as `stream()` should throw an error when called after
+   * the disposed signal has been aborted.
+   */
+  disposed: AbortSignal;
+
+  /**
+   * Teardown and clean up any internal long-lived resources.
+   * Implementors should make this method idempotent.
+   * @returns promise for the completion of the teardown.
+   */
+  [Symbol.asyncDispose](): Promise<void>;
 };

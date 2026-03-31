@@ -6,6 +6,11 @@ export type Event = {
   payload: unknown;
 };
 
+export type EventDraft = {
+  type: string;
+  payload: unknown;
+};
+
 export type RawEventRow = {
   id: number;
   timestamp: number;

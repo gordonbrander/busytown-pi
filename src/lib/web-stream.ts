@@ -74,10 +74,11 @@ export const mapStream = <I, O>(fn: (chunk: I) => O): TransformStream<I, O> =>
     },
   });
 
-/* Create a stream that acts a bit like a CSP channel, applying backpressure after high water mark is reached */
-export const bufferStream = <T>(highWaterMark: number = 0) =>
-  new TransformStream<T, T>(
-    undefined,
-    new CountQueuingStrategy({ highWaterMark }), // writer side
-    new CountQueuingStrategy({ highWaterMark }), // reader side
-  );
+/** Creates an empty `ReadableStream` */
+export const emptyReadableStream = <T>(): ReadableStream<T> => {
+  return new ReadableStream<T>({
+    pull(controller) {
+      controller.close();
+    },
+  });
+};
