@@ -57,7 +57,7 @@ export const toCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => { };
+const onErrorNoOp = (): void => {};
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   const { listen, ignoreSelf = true, onError = onErrorNoOp, env, cwd } = config;
@@ -115,7 +115,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
         },
       }),
     )
-    .catch(() => { });
+    .catch(() => {});
 
   // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {
