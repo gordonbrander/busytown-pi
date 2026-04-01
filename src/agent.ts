@@ -1,4 +1,3 @@
-import { asyncDispose } from "./lib/dispose.ts";
 import type { Event, EventDraft } from "./lib/event.ts";
 
 /**
