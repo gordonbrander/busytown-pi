@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildAgentSystemPrompt, resolveAgentModel } from "./agent-setup.ts";
-import type { AgentDef } from "./agent.ts";
+import type { AgentDef } from "./file-agent.ts";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 describe("buildAgentSystemPrompt", () => {
