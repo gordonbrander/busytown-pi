@@ -11,13 +11,14 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAgentDef } from "./agent.ts";
+import { loadAgentDef } from "./file-agent.ts";
 import {
   buildAgentSystemPrompt,
   registerAgentMemoryTool,
   registerAgentHooks,
 } from "./agent-setup.ts";
 import { nextTick } from "./lib/promise.ts";
+import { renderTemplate } from "./lib/template.ts";
 
 export default (pi: ExtensionAPI) => {
   const dbPath = process.env.BUSYTOWN_DB_PATH;
@@ -42,7 +43,6 @@ export default (pi: ExtensionAPI) => {
     if (agent.type === "pi" && agent.hooks.before_agent_start) {
       // Inline hook execution for before_agent_start — uses the same
       // renderTemplate / exec pattern but needs the prompt extra.
-      const { renderTemplate } = await import("./lib/template.ts");
       const rendered = renderTemplate(agent.hooks.before_agent_start, {
         cwd: ctx.cwd,
         sessionFile: ctx.sessionManager.getSessionFile() ?? "",

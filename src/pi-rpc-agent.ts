@@ -36,11 +36,11 @@ type PiRpcCliFlagConfig = {
 
 export type PiRpcAgentConfig = AgentConfig &
   PiRpcCliFlagConfig & {
-    /** Working directory for the Pi process. */
-    cwd: string;
+    /** Working directory for the Pi process. Defaults to process.cwd(). */
+    cwd?: string;
     /** Called for each line written to stderr by the Pi process. */
     onError?: (error: { type: "error"; message: string }) => void;
-    /** Extra environment variables passed to the Pi process. */
+    /** Extra environment variables passed to the Pi process. Process.env is merged with this object. */
     env?: Record<string, string | undefined>;
   };
 
@@ -64,7 +64,13 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
 const onErrorNoOp = (): void => { };
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
-  const { listen, ignoreSelf = true, onError = onErrorNoOp, env, cwd } = config;
+  const {
+    listen,
+    ignoreSelf = true,
+    onError = onErrorNoOp,
+    env,
+    cwd = process.cwd(),
+  } = config;
 
   // Make sure we have a valid ID. Throws if not.
   const id = parseSlug(config.id);

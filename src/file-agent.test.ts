@@ -6,11 +6,10 @@ import os from "node:os";
 import matter from "gray-matter";
 import {
   loadAgentDef,
-  loadAgentDefs,
   updateAgentFrontmatter,
   isHookName,
   parseHooks,
-} from "./agent-def.ts";
+} from "./file-agent.ts";
 
 let tmpDir: string;
 
@@ -522,58 +521,5 @@ Agent with memory.
         charLimit: 1000,
       },
     });
-  });
-});
-
-describe("loadAllAgents", () => {
-  it("loads all .md files from directory", () => {
-    writeAgent(
-      "agent-a.md",
-      `---
-listen:
-  - a.*
----
-Agent A
-`,
-    );
-    writeAgent(
-      "agent-b.md",
-      `---
-listen:
-  - b.*
----
-Agent B
-`,
-    );
-    // Non-md file should be ignored
-    writeAgent("readme.txt", "not an agent");
-
-    const agents = loadAgentDefs(tmpDir);
-    assert.equal(agents.length, 2);
-    const ids = agents.map((a) => a.id).sort();
-    assert.deepEqual(ids, ["agent-a", "agent-b"]);
-  });
-
-  it("returns empty array for nonexistent directory", () => {
-    const agents = loadAgentDefs(path.join(tmpDir, "nonexistent"));
-    assert.deepEqual(agents, []);
-  });
-
-  it("skips agents that fail to load", () => {
-    writeAgent(
-      "good.md",
-      `---
-listen:
-  - "*"
----
-Good agent
-`,
-    );
-    // Create a subdirectory (not a file) — will be skipped
-    fs.mkdirSync(path.join(tmpDir, "subdir.md"));
-
-    const agents = loadAgentDefs(tmpDir);
-    assert.equal(agents.length, 1);
-    assert.equal(agents[0].id, "good");
   });
 });

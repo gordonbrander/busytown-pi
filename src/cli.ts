@@ -1,6 +1,7 @@
 #!/usr/bin/env -S node --experimental-strip-types
 
 import fs from "node:fs";
+import { glob as globDir } from "node:fs/promises";
 import path from "node:path";
 import { defineCommand, runMain } from "citty";
 import {
@@ -10,8 +11,8 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAgentDefs, updateAgentFrontmatter } from "./agent-def.ts";
-import { applyMemoryUpdate } from "./memory.ts";
+import { loadFileAgentOf, updateAgentFrontmatter } from "./file-agent.ts";
+import { applyMemoryUpdate } from "./memory/memory.ts";
 import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
@@ -23,7 +24,8 @@ import {
 } from "./pidfile.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { asyncDispose } from "./lib/dispose.ts";
-import { cleanupGroupAsync, toCleanupAsync } from "./lib/cleanup.ts";
+import { cleanupGroupAsync } from "./lib/cleanup.ts";
+import { toOption, unwrap } from "./lib/option.ts";
 
 const logger = loggerOf({ source: "cli.ts" });
 
@@ -132,18 +134,16 @@ const startCommand = defineCommand({
       };
 
       // Create a new system
+      logger.info("Agent system starting...");
       system = agentSystemOf(db);
-      const agentDefs = loadAgentDefs(agentsDir);
 
-      for (const def of agentDefs) {
-        switch (def.type) {
-          case "pi":
-            break;
-          case "shell":
-            break;
-          case "claude":
-            break;
-        }
+      const agentFiles = globDir("*.md", { cwd: agentsDir });
+      for await (const file of agentFiles) {
+        const agent = loadFileAgentOf({
+          path: path.resolve(agentsDir, file),
+          dbPath: unwrap(toOption(db.location()), "No database location"),
+        });
+        system.registerAgent(agent);
       }
 
       logger.info("Agent system started", { stats: system.stats() });
@@ -153,11 +153,13 @@ const startCommand = defineCommand({
     cleanupEverything.add(stopFileWatcher);
 
     pushEvent(db, "sys", "sys.daemon.start");
-    logger.info("Daemon started", {
+    logger.info("Daemon start", {
       pid: process.pid,
       db: db.location(),
       agents_dir: agentsDir,
     });
+
+    reloadSystem();
 
     const shutdown = async () => {
       logger.info("Shutting down daemon", { pid: process.pid });
@@ -229,22 +231,6 @@ const statusCommand = defineCommand({
     }
 
     console.log(`Busytown daemon is running (pid ${status.pid}).`);
-
-    // Show some info from the DB
-    try {
-      const db = resolveDb(args.dir, args.db);
-      const tip = getEventsSince(db, { tail: 1 });
-      if (tip.length > 0) {
-        console.log(`  last event: #${tip[0]!.id} (${tip[0]!.type})`);
-      }
-      const agentsDir = resolveAgentsDir(args.dir);
-      const agents = loadAgentDefs(agentsDir);
-      const listening = agents.filter((a) => a.listen.length > 0);
-      console.log(`  agents:     ${listening.length} listening`);
-      db.close();
-    } catch {
-      // DB might not exist yet, that's fine
-    }
   },
 });
 
@@ -331,35 +317,6 @@ const eventsCommand = defineCommand({
   },
 });
 
-const agentsCommand = defineCommand({
-  meta: { name: "agents", description: "List loaded agent definitions" },
-  args: {
-    ...globalArgs,
-    "agents-dir": {
-      type: "string",
-      description: "Agent definitions directory (default: <dir>/.pi/agents)",
-    },
-  },
-  run: ({ args }) => {
-    const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAgentDefs(agentsDir);
-    if (agents.length === 0) {
-      console.log(`No agents found in ${agentsDir}`);
-      return;
-    }
-    for (const agent of agents) {
-      const listen =
-        agent.listen.length > 0 ? agent.listen.join(", ") : "(none)";
-      const emits = agent.emits.length > 0 ? agent.emits.join(", ") : "(none)";
-      console.log(`${agent.id} (${agent.type})`);
-      if (agent.description) console.log(`  ${agent.description}`);
-      console.log(`  listen: ${listen}`);
-      console.log(`  emits:  ${emits}`);
-      console.log();
-    }
-  },
-});
-
 const claimCommand = defineCommand({
   meta: { name: "claim", description: "Claim an event" },
   args: {
@@ -408,81 +365,6 @@ const checkClaimCommand = defineCommand({
   },
 });
 
-const updateMemoryCommand = defineCommand({
-  meta: {
-    name: "update-memory",
-    description: "Update a memory block in an agent file",
-  },
-  args: {
-    ...globalArgs,
-    "agents-dir": {
-      type: "string",
-      description: "Agent definitions directory (default: <dir>/.pi/agents)",
-    },
-    agent: {
-      type: "string",
-      description: "Agent ID (matches filename or name field)",
-      required: true,
-    },
-    block: {
-      type: "string",
-      description: "Memory block key",
-      required: true,
-    },
-    "new-text": {
-      type: "string",
-      description: "New text (replacement or append)",
-      required: true,
-    },
-    "old-text": {
-      type: "string",
-      description: "Text to find and replace (omit to append)",
-    },
-  },
-  run: ({ args }) => {
-    const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAgentDefs(agentsDir);
-    const agent = agents.find((a) => a.id === args.agent);
-    if (!agent) {
-      console.error(`Agent "${args.agent}" not found in ${agentsDir}`);
-      process.exit(1);
-    }
-
-    const block = agent.memoryBlocks[args.block];
-    if (!block) {
-      const available = Object.keys(agent.memoryBlocks).join(", ");
-      console.error(
-        `Block "${args.block}" not found. Available: ${available || "(none)"}`,
-      );
-      process.exit(1);
-    }
-
-    const result = applyMemoryUpdate(
-      block.value,
-      block.charLimit,
-      args["new-text"],
-      args["old-text"],
-    );
-
-    updateAgentFrontmatter(agent.filePath, (frontmatter) => {
-      const mb = frontmatter.memory_blocks ?? {};
-      if (mb[args.block]) {
-        mb[args.block].value = result.text;
-      }
-      return { ...frontmatter, memory_blocks: mb };
-    });
-
-    console.log(
-      JSON.stringify({
-        blockKey: args.block,
-        usage: `${result.text.length}/${block.charLimit}`,
-        truncated: result.truncated,
-        value: result.text,
-      }),
-    );
-  },
-});
-
 const reloadCommand = defineCommand({
   meta: {
     name: "reload",
@@ -516,10 +398,8 @@ const main = defineCommand({
     status: statusCommand,
     push: pushCommand,
     events: eventsCommand,
-    agents: agentsCommand,
     claim: claimCommand,
     "check-claim": checkClaimCommand,
-    "update-memory": updateMemoryCommand,
     reload: reloadCommand,
   },
 });

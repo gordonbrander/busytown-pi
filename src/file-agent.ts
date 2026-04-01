@@ -5,12 +5,11 @@ import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import matter from "gray-matter";
 import fs from "node:fs";
-import path from "node:path";
 import { pathToSlug } from "./lib/slug.ts";
-import { loggerOf } from "./lib/json-logger.ts";
+import { type Agent } from "./agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
-
-const logger = loggerOf({ source: "agent-def.ts" });
+import { shellAgentOf } from "./shell-agent.ts";
+import { type MemoryBlock } from "./memory/memory.ts";
 
 export const MemoryBlockEntrySchema = Type.Object({
   description: Type.String({ default: "" }),
@@ -72,11 +71,7 @@ export const AgentFrontmatterSchema = Type.Object(
 
 export type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
 
-export type MemoryBlockDef = {
-  description: string;
-  value: string;
-  charLimit: number;
-};
+export type MemoryBlockDef = MemoryBlock;
 
 const MemoryBlocksRecordSchema = Type.Record(Type.String(), Type.Unknown());
 
@@ -237,33 +232,15 @@ export const updateAgentFrontmatter = (
   fs.writeFileSync(filePath, output);
 };
 
-/** Loads all agent definitions from the given directory. */
-export const loadAgentDefs = (agentsDir: string): AgentDef[] => {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(agentsDir, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-
-  const agents: AgentDef[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    try {
-      agents.push(loadAgentDef(path.join(agentsDir, entry.name)));
-    } catch (err) {
-      logger.error("Failed to load agent", {
-        file: entry.name,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-  return agents;
+export type AgentConfig = {
+  path: string;
+  dbPath: string;
 };
 
-export const loadAgentOf = async (path: string): Agent => {
-  const agentDef = loadAgentDef(path);
+export const loadFileAgentOf = (
+  config: AgentConfig,
+): Agent => {
+  const agentDef = loadAgentDef(config.path);
 
   switch (agentDef.type) {
     case "pi":
@@ -271,14 +248,25 @@ export const loadAgentOf = async (path: string): Agent => {
         id: agentDef.id,
         listen: agentDef.listen,
         ignoreSelf: agentDef.ignoreSelf,
-        env: process.env,
-        cwd: process.cwd(),
-        extensions: agentDef,
-      })
-      break;
+        env: {
+          BUSYTOWN_DB_PATH: config.dbPath,
+          BUSYTOWN_AGENT_ID: agentDef.id,
+          BUSYTOWN_AGENT_FILE: config.path,
+        }
+      });
     case "shell":
-      break;
+      return shellAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
+        shellScript: agentDef.body,
+        env: {
+          BUSYTOWN_DB_PATH: config.dbPath,
+          BUSYTOWN_AGENT_ID: agentDef.id,
+          BUSYTOWN_AGENT_FILE: config.path,
+        }
+      });
     case "claude":
-      break;
+      throw new Error("Claude agent not implemented yet");
   }
 };

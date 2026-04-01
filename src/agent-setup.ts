@@ -16,8 +16,8 @@ import {
   type PiAgentDef,
   type Hooks,
   type HookName,
-} from "./agent.ts";
-import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
+} from "./file-agent.ts";
+import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory/memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import * as Lines from "./lib/lines.ts";
 import { renderTemplate } from "./lib/template.ts";

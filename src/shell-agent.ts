@@ -14,10 +14,11 @@ export type ShellAgentConfig = {
   listen: string[];
   ignoreSelf?: boolean;
   shellScript: string;
+  env?: Record<string, string | undefined>;
 };
 
 export const shellAgentOf = (config: ShellAgentConfig): Agent => {
-  const { listen, ignoreSelf = false, shellScript } = config;
+  const { listen, ignoreSelf = false, shellScript, env = {} } = config;
   const id = parseSlug(config.id);
   const agentAbortController = new AbortController();
 
@@ -31,6 +32,7 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
 
     const proc = spawn("/bin/sh", ["-c", rendered], {
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...env },
     });
 
     // Pipe stderr to logger (fire-and-forget)
@@ -46,7 +48,7 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
           },
         }),
       )
-      .catch(() => {});
+      .catch(() => { });
 
     // Build stdout line stream
     const stdout = (
