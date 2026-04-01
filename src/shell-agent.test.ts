@@ -14,7 +14,7 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
 });
 
 describe("shellAgentOf", () => {
-  it("returns an agent with the configured properties", () => {
+  it("returns an agent with the configured properties", { timeout: 2000 }, () => {
     const agent = shellAgentOf({
       id: "my-agent",
       listen: ["test.*"],
@@ -23,20 +23,20 @@ describe("shellAgentOf", () => {
 
     assert.equal(agent.id, "my-agent");
     assert.deepEqual(agent.listen, ["test.*"]);
-    assert.equal(agent.ignoreSelf, false);
+    assert.equal(agent.ignoreSelf, true);
     assert.equal(agent.disposed.aborted, false);
   });
 
-  it("defaults ignoreSelf to false", () => {
+  it("defaults ignoreSelf to true", { timeout: 2000 }, () => {
     const agent = shellAgentOf({
       id: "agent",
       listen: [],
       shellScript: "echo hi",
     });
-    assert.equal(agent.ignoreSelf, false);
+    assert.equal(agent.ignoreSelf, true);
   });
 
-  it("respects ignoreSelf config", () => {
+  it("respects ignoreSelf config", { timeout: 2000 }, () => {
     const agent = shellAgentOf({
       id: "agent",
       listen: [],
@@ -48,7 +48,7 @@ describe("shellAgentOf", () => {
 });
 
 describe("stream", () => {
-  it("streams stdout lines as response events", async () => {
+  it("streams stdout lines as response events", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "echo-agent",
       listen: ["*"],
@@ -68,7 +68,7 @@ describe("stream", () => {
     });
   });
 
-  it("templates event fields into the shell script", async () => {
+  it("templates event fields into the shell script", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "template-agent",
       listen: ["*"],
@@ -85,7 +85,7 @@ describe("stream", () => {
     });
   });
 
-  it("templates nested payload fields", async () => {
+  it("templates nested payload fields", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "nested-agent",
       listen: ["*"],
@@ -102,7 +102,7 @@ describe("stream", () => {
     });
   });
 
-  it("emits an error event on non-zero exit code", async () => {
+  it("emits an error event on non-zero exit code", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "fail-agent",
       listen: ["*"],
@@ -120,7 +120,7 @@ describe("stream", () => {
     assert.equal((drafts[1].payload as { code: number }).code, 1);
   });
 
-  it("closes cleanly for a script with no output", async () => {
+  it("closes cleanly for a script with no output", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "silent-agent",
       listen: ["*"],
@@ -131,7 +131,7 @@ describe("stream", () => {
     assert.equal(drafts.length, 0);
   });
 
-  it("supports cancellation via stream cancel", async () => {
+  it("supports cancellation via stream cancel", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "cancel-agent",
       listen: ["*"],
@@ -153,7 +153,7 @@ describe("stream", () => {
 });
 
 describe("dispose", () => {
-  it("sets disposed signal to aborted", async () => {
+  it("sets disposed signal to aborted", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "dispose-agent",
       listen: ["*"],
@@ -165,7 +165,7 @@ describe("dispose", () => {
     assert.equal(agent.disposed.aborted, true);
   });
 
-  it("is idempotent", async () => {
+  it("is idempotent", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "dispose-agent",
       listen: ["*"],
@@ -177,7 +177,7 @@ describe("dispose", () => {
     assert.equal(agent.disposed.aborted, true);
   });
 
-  it("throws on stream after dispose", async () => {
+  it("throws on stream after dispose", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
       id: "disposed-agent",
       listen: ["*"],

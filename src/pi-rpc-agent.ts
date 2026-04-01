@@ -1,8 +1,14 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Readable, Writable } from "node:stream";
-import { lineStream, mapStream, writeJsonLine } from "./lib/web-stream.ts";
+import { Writable } from "node:stream";
+import {
+  lineStream,
+  mapStream,
+  stderr,
+  stdout,
+  writeJsonLine,
+} from "./lib/web-stream.ts";
 import {
   mapPiEvent,
   type PiAgentSessionEvent,
@@ -104,19 +110,14 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   };
 
   // Convert stdout to a web ReadableStream of JSONL lines
-  const output: ReadableStream<ResponseEvent> = (
-    Readable.toWeb(proc.stdout) as ReadableStream<Uint8Array>
-  )
+  const output: ReadableStream<ResponseEvent> = stdout(proc)
     .pipeThrough(lineStream())
     .pipeThrough(mapStream(JSON.parse))
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
   // Pipe stderr lines to onError callback
-  const stderr = (
-    Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>
-  ).pipeThrough(lineStream());
-
-  stderr
+  stderr(proc)
+    .pipeThrough(lineStream())
     .pipeTo(
       new WritableStream({
         write(line) {

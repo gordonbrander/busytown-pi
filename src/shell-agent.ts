@@ -1,11 +1,10 @@
 import { spawn } from "node:child_process";
-import { Readable } from "node:stream";
 import type { Agent } from "./agent.ts";
 import { type EventDraft, type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { parseSlug } from "./lib/slug.ts";
 import { renderTemplate } from "./lib/template.ts";
-import { lineStream } from "./lib/web-stream.ts";
+import { stderr, stdout, lineStream } from "./lib/web-stream.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });
 
@@ -36,11 +35,8 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
     });
 
     // Pipe stderr to logger (fire-and-forget)
-    const stderr = (
-      Readable.toWeb(proc.stderr) as ReadableStream<Uint8Array>
-    ).pipeThrough(lineStream());
-
-    stderr
+    stderr(proc)
+      .pipeThrough(lineStream())
       .pipeTo(
         new WritableStream({
           write(line) {
@@ -51,11 +47,9 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
       .catch(() => {});
 
     // Build stdout line stream
-    const stdout = (
-      Readable.toWeb(proc.stdout) as ReadableStream<Uint8Array>
-    ).pipeThrough(lineStream());
+    const lines = stdout(proc).pipeThrough(lineStream());
 
-    const reader = stdout.getReader();
+    const reader = lines.getReader();
 
     const exitPromise = new Promise<{
       code: number | null;

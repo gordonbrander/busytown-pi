@@ -1,3 +1,71 @@
+import type { ChildProcess } from "node:child_process";
+import { Readable } from "node:stream";
+
+/**
+ * Create a `ReadableStream<Uint8Array>` from a child process's stdout.
+ * The stream closes automatically when the process exits.
+ */
+export const stdout = (proc: ChildProcess): ReadableStream<Uint8Array> =>
+  processStream(proc, proc.stdout!);
+
+/**
+ * Create a `ReadableStream<Uint8Array>` from a child process's stderr.
+ * The stream closes automatically when the process exits.
+ */
+export const stderr = (proc: ChildProcess): ReadableStream<Uint8Array> =>
+  processStream(proc, proc.stderr!);
+
+/**
+ * Wrap a child process's readable stream as a web `ReadableStream<Uint8Array>`
+ * that tears down when the process exits.
+ *
+ * `Readable.toWeb` doesn't always close the web stream promptly when the
+ * underlying Node stream is destroyed by a killed process. This utility
+ * listens for the process `exit` event and explicitly cancels the reader.
+ */
+const processStream = (
+  proc: ChildProcess,
+  nodeStream: NodeJS.ReadableStream,
+): ReadableStream<Uint8Array> => {
+  const webStream = Readable.toWeb(
+    nodeStream as Readable,
+  ) as ReadableStream<Uint8Array>;
+  const reader = webStream.getReader();
+
+  let done = false;
+
+  const onExit = () => {
+    if (!done) {
+      reader.cancel().catch(() => {});
+    }
+  };
+  proc.once("exit", onExit);
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          done = true;
+          proc.off("exit", onExit);
+          controller.close();
+          return;
+        }
+        controller.enqueue(result.value);
+      } catch {
+        done = true;
+        proc.off("exit", onExit);
+        controller.close();
+      }
+    },
+    cancel() {
+      done = true;
+      proc.off("exit", onExit);
+      reader.cancel().catch(() => {});
+    },
+  });
+};
+
 /**
  * Create a `TransformStream<Uint8Array, string>` that decodes bytes and emits
  * complete lines.
