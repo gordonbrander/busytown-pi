@@ -11,7 +11,7 @@ import {
   pushEvent,
 } from "./event-queue.ts";
 import { loadFileAgentOf, listAgentPaths } from "./file-agent.ts";
-import { AgentSystem, agentSystemOf } from "./agent-system.ts";
+import { type AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { virtualAgentOf } from "./virtual-agent.ts";
 import { forever } from "./lib/promise.ts";
