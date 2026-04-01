@@ -26,7 +26,7 @@ import {
   registerAgentHooks,
   registerBusytownTools,
   resolveAgentModel,
-} from "./agent-setup.ts";
+} from "./pi-agent-shared.ts";
 import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
 import { collect } from "./lib/generator.ts";
 

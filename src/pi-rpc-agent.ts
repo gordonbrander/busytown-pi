@@ -53,7 +53,7 @@ export type PiRpcAgentConfig = AgentConfig &
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /** Extension that installs Busytown Pi tools for agent */
-const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "agent-extension.ts");
+const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
 
 const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   const args = ["--mode", "rpc"];

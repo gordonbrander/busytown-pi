@@ -11,7 +11,7 @@ import {
   registerAgentMemoryTool,
   registerAgentHooks,
   registerBusytownTools,
-} from "./agent-setup.ts";
+} from "./pi-agent-shared.ts";
 
 export default (pi: ExtensionAPI) => {
   const dbPath = process.env.BUSYTOWN_DB_PATH;

@@ -1,6 +1,6 @@
 /**
  * Shared agent setup logic used by both the headless agent extension
- * (agent-extension.ts) and the interactive --agent flag (index.ts).
+ * (pi-agent-extension.ts) and the interactive --agent flag (index.ts).
  * @module
  */
 import type {
