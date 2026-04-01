@@ -17,7 +17,10 @@ import {
   type Hooks,
   type HookName,
 } from "./file-agent.ts";
-import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory/memory.ts";
+import {
+  applyMemoryUpdate,
+  renderMemoryBlocksPrompt,
+} from "./memory/memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import { renderTemplate } from "./lib/template.ts";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
@@ -63,8 +66,7 @@ export const buildAgentSystemPrompt = (
     "",
     renderMemoryBlocksPrompt(agent.memoryBlocks),
   ].join("\n");
-}
-
+};
 
 /** Register the update-memory tool for agents with memory blocks. */
 export const registerAgentMemoryTool = (

@@ -35,7 +35,10 @@ export const cleanupGroup = (): CleanupGroup => {
 };
 
 /** Convert a disposable to a cleanup function. */
-export const toCleanup = (disposable: Disposable): Cleanup => () => disposable[Symbol.dispose]();
+export const toCleanup =
+  (disposable: Disposable): Cleanup =>
+  () =>
+    disposable[Symbol.dispose]();
 
 export type Awaitable<T> = T | Promise<T>;
 
@@ -78,4 +81,7 @@ export const cleanupGroupAsync = (): CleanupGroupAsync => {
 };
 
 /** Convert an async disposable to an async cleanup function. */
-export const toCleanupAsync = (disposable: AsyncDisposable): CleanupAsync => async () => await disposable[Symbol.asyncDispose]();
+export const toCleanupAsync =
+  (disposable: AsyncDisposable): CleanupAsync =>
+  async () =>
+    await disposable[Symbol.asyncDispose]();

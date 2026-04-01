@@ -236,9 +236,7 @@ export type AgentConfig = {
   dbPath: string;
 };
 
-export const loadFileAgentOf = (
-  config: AgentConfig,
-): Agent => {
+export const loadFileAgentOf = (config: AgentConfig): Agent => {
   const agentDef = loadAgentDef(config.path);
 
   switch (agentDef.type) {
@@ -251,7 +249,7 @@ export const loadFileAgentOf = (
           BUSYTOWN_DB_PATH: config.dbPath,
           BUSYTOWN_AGENT_ID: agentDef.id,
           BUSYTOWN_AGENT_FILE: config.path,
-        }
+        },
       });
     case "shell":
       return shellAgentOf({
@@ -263,7 +261,7 @@ export const loadFileAgentOf = (
           BUSYTOWN_DB_PATH: config.dbPath,
           BUSYTOWN_AGENT_ID: agentDef.id,
           BUSYTOWN_AGENT_FILE: config.path,
-        }
+        },
       });
     case "claude":
       throw new Error("Claude agent not implemented yet");
@@ -275,13 +273,17 @@ export const loadFileAgentOf = (
  * @param agentDir The directory to search for agent files.
  * @returns An async generator that yields the full paths of agent files.
  */
-export async function* listAgentPaths(agentDir: string): AsyncGenerator<string> {
+export async function* listAgentPaths(
+  agentDir: string,
+): AsyncGenerator<string> {
   for await (const agentPath of globDir("*.md", { cwd: agentDir })) {
     yield path.resolve(agentDir, agentPath);
   }
-};
+}
 
-export async function* listAgentDefs(agentDir: string): AsyncGenerator<AgentDef> {
+export async function* listAgentDefs(
+  agentDir: string,
+): AsyncGenerator<AgentDef> {
   for await (const agentPath of listAgentPaths(agentDir)) {
     yield loadAgentDef(agentPath);
   }

@@ -2,7 +2,10 @@ export const toOption = <T>(value: T | undefined | null): T | undefined => {
   return value ?? undefined;
 };
 
-export const unwrap = <T>(value: T | undefined, msg = "Value is undefined"): T => {
+export const unwrap = <T>(
+  value: T | undefined,
+  msg = "Value is undefined",
+): T => {
   if (value === undefined) {
     throw new TypeError(msg);
   }

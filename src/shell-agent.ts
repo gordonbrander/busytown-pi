@@ -48,7 +48,7 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
           },
         }),
       )
-      .catch(() => { });
+      .catch(() => {});
 
     // Build stdout line stream
     const stdout = (

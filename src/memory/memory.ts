@@ -43,7 +43,6 @@ export const renderMemoryBlockEntry = (
 `;
 };
 
-
 export const renderMemoryBlocksPrompt = (
   blocks: Record<string, MemoryBlock>,
   updateInstruction = "Use the `updateMemory` tool to store important information you learn.",

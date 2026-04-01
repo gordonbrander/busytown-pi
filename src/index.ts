@@ -63,7 +63,9 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Load agents for widget display (read-only, no spawning)
-    const agents = await collect(listAgentDefs(path.join(projectRoot, ".pi", "agents")));
+    const agents = await collect(
+      listAgentDefs(path.join(projectRoot, ".pi", "agents")),
+    );
 
     // Start the dashboard widget (agent status + daemon indicator)
     const stopWidget = startWidget(db, agents, ctx, projectRoot);

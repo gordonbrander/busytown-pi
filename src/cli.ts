@@ -10,7 +10,11 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadFileAgentOf, updateAgentFrontmatter, listAgentPaths } from "./file-agent.ts";
+import {
+  loadFileAgentOf,
+  updateAgentFrontmatter,
+  listAgentPaths,
+} from "./file-agent.ts";
 import { applyMemoryUpdate } from "./memory/memory.ts";
 import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
@@ -91,7 +95,7 @@ const startCommand = defineCommand({
     if (status.running) {
       logger.error(
         `Busytown daemon already running. Use 'busytown stop' first.`,
-        { pid: status.pid }
+        { pid: status.pid },
       );
       process.exit(1);
     }
@@ -130,7 +134,7 @@ const startCommand = defineCommand({
       if (system) {
         logger.info("Agent system shutting down...", { stats: system.stats() });
         await asyncDispose(system);
-      };
+      }
 
       // Create a new system
       logger.info("Agent system starting...");
