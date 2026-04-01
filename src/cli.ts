@@ -18,6 +18,7 @@ import {
 import { applyMemoryUpdate } from "./memory/memory.ts";
 import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
+import { virtualAgentOf } from "./virtual-agent.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
@@ -148,6 +149,14 @@ const startCommand = defineCommand({
         });
         system.registerAgent(agent);
       }
+
+      system.registerAgent(
+        virtualAgentOf({
+          id: "_sys-reload",
+          listen: ["sys.reload"],
+          handler: () => reloadSystem(),
+        }),
+      );
 
       logger.info("Agent system started", { stats: system.stats() });
     };
