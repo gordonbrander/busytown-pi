@@ -8,6 +8,7 @@ import { pathToSlug } from "./lib/slug.ts";
 import { type Agent } from "./agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
+import { guessProvider } from "./pi-agent-shared.ts";
 import { type MemoryBlock } from "./memory/memory.ts";
 
 export const MemoryBlockEntrySchema = Type.Object({
@@ -60,6 +61,7 @@ export const AgentFrontmatterSchema = Type.Object(
     emits: Type.Array(Type.String(), { default: [] }),
     tools: Type.Array(Type.String(), { default: [] }),
     model: Type.Optional(Type.String()),
+    provider: Type.Optional(Type.String()),
     memory_blocks: Type.Optional(
       Type.Record(Type.String(), MemoryBlockEntrySchema),
     ),
@@ -129,6 +131,7 @@ export type PiAgentDef = {
   tools: string[];
   body: string;
   model?: string;
+  provider?: string;
   memoryBlocks: Record<string, MemoryBlockDef>;
   hooks: Hooks;
 };
@@ -213,6 +216,7 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     tools: fm.tools,
     body: content.trim(),
     model: fm.model,
+    provider: fm.provider ?? (fm.model ? guessProvider(fm.model) : undefined),
     memoryBlocks,
     hooks: fm.hooks ?? {},
   };
@@ -245,6 +249,8 @@ export const loadFileAgentOf = (config: AgentConfig): Agent => {
         id: agentDef.id,
         listen: agentDef.listen,
         ignoreSelf: agentDef.ignoreSelf,
+        model: agentDef.model,
+        provider: agentDef.provider,
         env: {
           BUSYTOWN_DB_PATH: config.dbPath,
           BUSYTOWN_AGENT_ID: agentDef.id,

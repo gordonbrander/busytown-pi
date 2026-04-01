@@ -1,6 +1,6 @@
 ---
 description: Reviews code changes for correctness, type safety, and style
-model: "opus"
+model: "claude-opus-4"
 listen:
   - "code.review"
 emits:

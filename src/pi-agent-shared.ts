@@ -30,7 +30,13 @@ import {
 } from "./memory/memory.ts";
 import { nextTick } from "./lib/promise.ts";
 import { renderTemplate } from "./lib/template.ts";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+
+/** Best-guess provider from a model ID string. */
+export const guessProvider = (model: string): string | undefined => {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (/^(gpt-|o[1-9]-)/.test(model)) return "openai";
+  return undefined;
+};
 
 const HOOK_TIMEOUT = 30_000;
 
@@ -409,44 +415,4 @@ export const registerAgentHooks = (
       }
     });
   }
-};
-
-/**
- * Resolve a short model pattern (e.g. "sonnet") to a Model object
- * from the registry. Uses fuzzy matching: exact id > partial id/name match.
- * Returns the model object directly so it can be passed to `pi.setModel()`.
- */
-export const resolveAgentModel = (
-  modelPattern: string,
-  modelRegistry: ModelRegistry,
-): ReturnType<ModelRegistry["getAvailable"]>[number] | undefined => {
-  const models = modelRegistry.getAvailable();
-
-  // Exact id match (case-insensitive)
-  const exact = models.find(
-    (m) => m.id.toLowerCase() === modelPattern.toLowerCase(),
-  );
-  if (exact) return exact;
-
-  // Partial match on id or name
-  const lower = modelPattern.toLowerCase();
-  const matches = models.filter(
-    (m) =>
-      m.id.toLowerCase().includes(lower) ||
-      (m.name && m.name.toLowerCase().includes(lower)),
-  );
-  if (matches.length === 0) return undefined;
-
-  // Prefer aliases (no date suffix) over dated versions
-  const isAlias = (id: string): boolean => !/\d{8}$/.test(id);
-  const aliases = matches.filter((m) => isAlias(m.id));
-  const dated = matches.filter((m) => !isAlias(m.id));
-
-  if (aliases.length > 0) {
-    aliases.sort((a, b) => b.id.localeCompare(a.id));
-    return aliases[0];
-  }
-
-  dated.sort((a, b) => b.id.localeCompare(a.id));
-  return dated[0];
 };

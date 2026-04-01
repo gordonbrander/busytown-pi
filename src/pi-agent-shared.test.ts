@@ -1,11 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  buildAgentSystemPrompt,
-  resolveAgentModel,
-} from "./pi-agent-shared.ts";
+import { buildAgentSystemPrompt, guessProvider } from "./pi-agent-shared.ts";
 import type { AgentDef } from "./file-agent.ts";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 describe("buildAgentSystemPrompt", () => {
   const makeAgent = (overrides: Partial<AgentDef> = {}): AgentDef => ({
@@ -51,70 +47,25 @@ describe("buildAgentSystemPrompt", () => {
   });
 });
 
-describe("resolveAgentModel", () => {
-  const makeRegistry = (
-    models: Array<{ id: string; name?: string; provider: string }>,
-  ): ModelRegistry =>
-    ({ getAvailable: () => models }) as unknown as ModelRegistry;
-
-  it("returns exact match by id (case-insensitive)", () => {
-    const registry = makeRegistry([
-      { id: "claude-sonnet-4-20250514", provider: "anthropic" },
-      { id: "gpt-4o", provider: "openai" },
-    ]);
-    const result = resolveAgentModel("claude-sonnet-4-20250514", registry);
-    assert.equal(result?.id, "claude-sonnet-4-20250514");
+describe("guessProvider", () => {
+  it("returns anthropic for claude models", () => {
+    assert.equal(guessProvider("claude-sonnet-4"), "anthropic");
+    assert.equal(guessProvider("claude-opus-4"), "anthropic");
+    assert.equal(guessProvider("claude-haiku-3-20240307"), "anthropic");
   });
 
-  it("returns partial match on id", () => {
-    const registry = makeRegistry([
-      {
-        id: "claude-sonnet-4-20250514",
-        name: "Claude 4 Sonnet",
-        provider: "anthropic",
-      },
-      {
-        id: "claude-opus-4-20250514",
-        name: "Claude 4 Opus",
-        provider: "anthropic",
-      },
-    ]);
-    const result = resolveAgentModel("sonnet", registry);
-    assert.equal(result?.id, "claude-sonnet-4-20250514");
+  it("returns openai for gpt models", () => {
+    assert.equal(guessProvider("gpt-4o"), "openai");
+    assert.equal(guessProvider("gpt-4-turbo"), "openai");
   });
 
-  it("prefers alias over dated version", () => {
-    const registry = makeRegistry([
-      {
-        id: "claude-sonnet-4-20250514",
-        name: "Claude 4 Sonnet (dated)",
-        provider: "anthropic",
-      },
-      {
-        id: "claude-sonnet-4",
-        name: "Claude 4 Sonnet",
-        provider: "anthropic",
-      },
-    ]);
-    const result = resolveAgentModel("sonnet", registry);
-    assert.equal(result?.id, "claude-sonnet-4");
+  it("returns openai for o-series models", () => {
+    assert.equal(guessProvider("o1-preview"), "openai");
+    assert.equal(guessProvider("o3-mini"), "openai");
   });
 
-  it("returns undefined when no match", () => {
-    const registry = makeRegistry([{ id: "gpt-4o", provider: "openai" }]);
-    const result = resolveAgentModel("sonnet", registry);
-    assert.equal(result, undefined);
-  });
-
-  it("matches on name field", () => {
-    const registry = makeRegistry([
-      {
-        id: "some-model-id",
-        name: "Claude Sonnet Special",
-        provider: "anthropic",
-      },
-    ]);
-    const result = resolveAgentModel("sonnet", registry);
-    assert.equal(result?.id, "some-model-id");
+  it("returns undefined for unknown models", () => {
+    assert.equal(guessProvider("gemini-pro"), undefined);
+    assert.equal(guessProvider("mistral-large"), undefined);
   });
 });

@@ -25,7 +25,6 @@ import {
   registerAgentMemoryTool,
   registerAgentHooks,
   registerBusytownTools,
-  resolveAgentModel,
 } from "./pi-agent-shared.ts";
 import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
 import { collect } from "./lib/generator.ts";
@@ -266,14 +265,21 @@ export default (pi: ExtensionAPI) => {
 
       // Set the model if the agent defines one
       if (agent.type === "pi" && agent.model) {
-        const model = resolveAgentModel(agent.model, ctx.modelRegistry);
-        if (model) {
-          await pi.setModel(model);
-        } else {
+        if (!agent.provider) {
           ctx.ui.notify(
-            `Agent "${agent.id}": model "${agent.model}" not found`,
+            `Agent "${agent.id}": cannot determine provider for model "${agent.model}". Set "provider" in agent frontmatter.`,
             "warning",
           );
+        } else {
+          const model = ctx.modelRegistry.find(agent.provider, agent.model);
+          if (model) {
+            await pi.setModel(model);
+          } else {
+            ctx.ui.notify(
+              `Agent "${agent.id}": model "${agent.provider}/${agent.model}" not found`,
+              "warning",
+            );
+          }
         }
       }
 
