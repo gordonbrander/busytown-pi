@@ -14,18 +14,22 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
 });
 
 describe("shellAgentOf", () => {
-  it("returns an agent with the configured properties", { timeout: 2000 }, () => {
-    const agent = shellAgentOf({
-      id: "my-agent",
-      listen: ["test.*"],
-      shellScript: "echo hi",
-    });
+  it(
+    "returns an agent with the configured properties",
+    { timeout: 2000 },
+    () => {
+      const agent = shellAgentOf({
+        id: "my-agent",
+        listen: ["test.*"],
+        shellScript: "echo hi",
+      });
 
-    assert.equal(agent.id, "my-agent");
-    assert.deepEqual(agent.listen, ["test.*"]);
-    assert.equal(agent.ignoreSelf, true);
-    assert.equal(agent.disposed.aborted, false);
-  });
+      assert.equal(agent.id, "my-agent");
+      assert.deepEqual(agent.listen, ["test.*"]);
+      assert.equal(agent.ignoreSelf, true);
+      assert.equal(agent.disposed.aborted, false);
+    },
+  );
 
   it("defaults ignoreSelf to true", { timeout: 2000 }, () => {
     const agent = shellAgentOf({
@@ -68,22 +72,26 @@ describe("stream", () => {
     });
   });
 
-  it("templates event fields into the shell script", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "template-agent",
-      listen: ["*"],
-      shellScript: "echo {{type}}",
-    });
+  it(
+    "templates event fields into the shell script",
+    { timeout: 2000 },
+    async () => {
+      const agent = shellAgentOf({
+        id: "template-agent",
+        listen: ["*"],
+        shellScript: "echo {{type}}",
+      });
 
-    const event = testEvent({ type: "task.created" });
-    const drafts = await collect(agent.stream(event));
+      const event = testEvent({ type: "task.created" });
+      const drafts = await collect(agent.stream(event));
 
-    assert.equal(drafts.length, 1);
-    assert.deepEqual(drafts[0], {
-      type: "agent.template-agent.response",
-      payload: { line: "task.created" },
-    });
-  });
+      assert.equal(drafts.length, 1);
+      assert.deepEqual(drafts[0], {
+        type: "agent.template-agent.response",
+        payload: { line: "task.created" },
+      });
+    },
+  );
 
   it("templates nested payload fields", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
@@ -102,34 +110,42 @@ describe("stream", () => {
     });
   });
 
-  it("emits an error event on non-zero exit code", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "fail-agent",
-      listen: ["*"],
-      shellScript: "echo before && exit 1",
-    });
+  it(
+    "emits an error event on non-zero exit code",
+    { timeout: 2000 },
+    async () => {
+      const agent = shellAgentOf({
+        id: "fail-agent",
+        listen: ["*"],
+        shellScript: "echo before && exit 1",
+      });
 
-    const drafts = await collect(agent.stream(testEvent()));
+      const drafts = await collect(agent.stream(testEvent()));
 
-    assert.equal(drafts.length, 2);
-    assert.deepEqual(drafts[0], {
-      type: "agent.fail-agent.response",
-      payload: { line: "before" },
-    });
-    assert.equal(drafts[1].type, "agent.fail-agent.error");
-    assert.equal((drafts[1].payload as { code: number }).code, 1);
-  });
+      assert.equal(drafts.length, 2);
+      assert.deepEqual(drafts[0], {
+        type: "agent.fail-agent.response",
+        payload: { line: "before" },
+      });
+      assert.equal(drafts[1].type, "agent.fail-agent.error");
+      assert.equal((drafts[1].payload as { code: number }).code, 1);
+    },
+  );
 
-  it("closes cleanly for a script with no output", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "silent-agent",
-      listen: ["*"],
-      shellScript: "true",
-    });
+  it(
+    "closes cleanly for a script with no output",
+    { timeout: 2000 },
+    async () => {
+      const agent = shellAgentOf({
+        id: "silent-agent",
+        listen: ["*"],
+        shellScript: "true",
+      });
 
-    const drafts = await collect(agent.stream(testEvent()));
-    assert.equal(drafts.length, 0);
-  });
+      const drafts = await collect(agent.stream(testEvent()));
+      assert.equal(drafts.length, 0);
+    },
+  );
 
   it("supports cancellation via stream cancel", { timeout: 2000 }, async () => {
     const agent = shellAgentOf({
