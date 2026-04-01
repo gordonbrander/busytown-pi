@@ -3,7 +3,7 @@
  * @module
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { getOrOpenDb } from "./event-queue.ts";
+import { getOrOpenDb, pushEvent } from "./event-queue.ts";
 import { loadAgentDef } from "./file-agent.ts";
 import {
   buildAgentSystemPrompt,
@@ -67,4 +67,10 @@ export default (pi: ExtensionAPI) => {
   if (Object.keys(agent.memoryBlocks).length > 0) {
     registerAgentMemoryTool(pi, agentFile);
   }
+
+  // Log session file path as a busytown event
+  pi.on("session_start", async (_event, ctx) => {
+    const sessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    pushEvent(db, agentId, `agent.${agentId}.session_start`, { sessionFile });
+  });
 };
