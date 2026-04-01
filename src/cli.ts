@@ -10,12 +10,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import {
-  loadFileAgentOf,
-  updateAgentFrontmatter,
-  listAgentPaths,
-} from "./file-agent.ts";
-import { applyMemoryUpdate } from "./memory/memory.ts";
+import { loadFileAgentOf, listAgentPaths } from "./file-agent.ts";
 import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { virtualAgentOf } from "./virtual-agent.ts";
