@@ -9,7 +9,6 @@ import {
   type ResponseEvent,
 } from "./pi-events.ts";
 import { EventDraft, type Event } from "./lib/event.ts";
-import { parseJsonLine } from "./lib/jsonl.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
 import type { Agent } from "./agent.ts";
@@ -109,7 +108,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
     Readable.toWeb(proc.stdout) as ReadableStream<Uint8Array>
   )
     .pipeThrough(lineStream())
-    .pipeThrough(mapStream(parseJsonLine))
+    .pipeThrough(mapStream(JSON.parse))
     .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
 
   // Pipe stderr lines to onError callback
