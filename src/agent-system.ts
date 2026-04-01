@@ -8,9 +8,14 @@ import { type Agent } from "./agent.ts";
 
 const logger = loggerOf({ source: "agent-system.ts" });
 
+export type SystemStats = {
+  agents: string[];
+};
+
 export type AgentSystem = {
   registerAgent: (agent: Agent) => string;
   disposeAgent: (id: string) => Promise<void>;
+  stats: () => SystemStats;
   [Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -19,6 +24,12 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
   const systemAbortController = new AbortController();
   // Registry of agents
   const agents: Map<string, Agent> = new Map();
+
+  const stats = (): SystemStats => {
+    return {
+      agents: Array.from(agents.keys()),
+    };
+  };
 
   const forkAgentPollLoop = async (agent: Agent): Promise<void> => {
     // If either the agent or the system is disposed, abort the loop
@@ -67,7 +78,7 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
       throw new Error(`Agent with id ${agent.id} already registered`);
     }
 
-    logger.debug("Registered agent", { id: agent.id });
+    logger.debug("Register agent", { id: agent.id });
 
     // Automatically unregister agent if killed
     agent.disposed.addEventListener(
@@ -111,6 +122,7 @@ export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
   return {
     registerAgent,
     disposeAgent,
+    stats,
     [Symbol.asyncDispose]: disposeSystem,
   };
 };

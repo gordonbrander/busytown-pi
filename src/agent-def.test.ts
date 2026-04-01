@@ -6,11 +6,11 @@ import os from "node:os";
 import matter from "gray-matter";
 import {
   loadAgentDef,
-  loadAllAgents,
+  loadAgentDefs,
   updateAgentFrontmatter,
   isHookName,
   parseHooks,
-} from "./agent2.ts";
+} from "./agent-def.ts";
 
 let tmpDir: string;
 
@@ -548,14 +548,14 @@ Agent B
     // Non-md file should be ignored
     writeAgent("readme.txt", "not an agent");
 
-    const agents = loadAllAgents(tmpDir);
+    const agents = loadAgentDefs(tmpDir);
     assert.equal(agents.length, 2);
     const ids = agents.map((a) => a.id).sort();
     assert.deepEqual(ids, ["agent-a", "agent-b"]);
   });
 
   it("returns empty array for nonexistent directory", () => {
-    const agents = loadAllAgents(path.join(tmpDir, "nonexistent"));
+    const agents = loadAgentDefs(path.join(tmpDir, "nonexistent"));
     assert.deepEqual(agents, []);
   });
 
@@ -572,7 +572,7 @@ Good agent
     // Create a subdirectory (not a file) — will be skipped
     fs.mkdirSync(path.join(tmpDir, "subdir.md"));
 
-    const agents = loadAllAgents(tmpDir);
+    const agents = loadAgentDefs(tmpDir);
     assert.equal(agents.length, 1);
     assert.equal(agents[0].id, "good");
   });

@@ -1,10 +1,16 @@
+/**
+ * @module Loads and parses agent files into agent config objects
+ */
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToSlug } from "./lib/slug.ts";
-import { logger } from "./lib/json-logger.ts";
+import { loggerOf } from "./lib/json-logger.ts";
+import { piRpcAgentOf } from "./pi-rpc-agent.ts";
+
+const logger = loggerOf({ source: "agent-def.ts" });
 
 export const MemoryBlockEntrySchema = Type.Object({
   description: Type.String({ default: "" }),
@@ -231,7 +237,8 @@ export const updateAgentFrontmatter = (
   fs.writeFileSync(filePath, output);
 };
 
-export const loadAllAgents = (agentsDir: string): AgentDef[] => {
+/** Loads all agent definitions from the given directory. */
+export const loadAgentDefs = (agentsDir: string): AgentDef[] => {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(agentsDir, { withFileTypes: true });
@@ -253,4 +260,25 @@ export const loadAllAgents = (agentsDir: string): AgentDef[] => {
     }
   }
   return agents;
+};
+
+export const loadAgentOf = async (path: string): Agent => {
+  const agentDef = loadAgentDef(path);
+
+  switch (agentDef.type) {
+    case "pi":
+      return piRpcAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
+        env: process.env,
+        cwd: process.cwd(),
+        extensions: agentDef,
+      })
+      break;
+    case "shell":
+      break;
+    case "claude":
+      break;
+  }
 };

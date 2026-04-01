@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Readable, Writable } from "node:stream";
 import { lineStream, mapStream, writeJsonLine } from "./lib/web-stream.ts";
 import {
@@ -24,7 +26,7 @@ type AgentConfig = {
 type PiRpcCliFlagConfig = {
   /** Pass --model to Pi. */
   model?: string;
-  /** Pass --session-dir to Pi. If absent, pass --no-session instead. */
+  /** Pass --session-dir to Pi. */
   sessionDir?: string;
   /** Pass --provider to Pi. */
   provider?: string;
@@ -39,25 +41,27 @@ export type PiRpcAgentConfig = AgentConfig &
     /** Called for each line written to stderr by the Pi process. */
     onError?: (error: { type: "error"; message: string }) => void;
     /** Extra environment variables passed to the Pi process. */
-    env?: Record<string, string>;
+    env?: Record<string, string | undefined>;
   };
 
-export const toCliArgs = (config: PiRpcCliFlagConfig): string[] => {
+/** This directory */
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+/** Extension that installs Busytown Pi tools for agent */
+const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "agent-extension.ts");
+
+const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   const args = ["--mode", "rpc"];
   if (config.provider) args.push("--provider", config.provider);
   if (config.model) args.push("--model", config.model);
   if (config.sessionDir) {
     args.push("--session-dir", config.sessionDir);
-  } else {
-    args.push("--no-session");
   }
-  for (const ext of config.extensions ?? []) {
-    args.push("-e", ext);
-  }
+  args.push("-e", AGENT_EXTENSION_PATH);
   return args;
 };
 
-const onErrorNoOp = (): void => {};
+const onErrorNoOp = (): void => { };
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   const { listen, ignoreSelf = true, onError = onErrorNoOp, env, cwd } = config;
@@ -67,7 +71,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
 
   const processAbortController = new AbortController();
 
-  const proc = spawn("pi", toCliArgs(config), {
+  const proc = spawn("pi", buildCliArgs(config), {
     stdio: ["pipe", "pipe", "pipe"],
     cwd,
     env: { ...process.env, ...env },
@@ -112,10 +116,11 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
       new WritableStream({
         write(line) {
           onError({ type: "error", message: line });
+          logger.error("stderr", { line });
         },
       }),
     )
-    .catch(() => {});
+    .catch(() => { });
 
   // Handle process death. Make sure we've aborted if we haven't already.
   proc.once("exit", (code) => {

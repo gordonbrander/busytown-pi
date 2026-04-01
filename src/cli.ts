@@ -10,9 +10,9 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAllAgents, updateAgentFrontmatter } from "./agent2.ts";
+import { loadAgentDefs, updateAgentFrontmatter } from "./agent-def.ts";
 import { applyMemoryUpdate } from "./memory.ts";
-import { agentSystemOf } from "./agent-system.ts";
+import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {
@@ -21,7 +21,11 @@ import {
   removePidfile,
   isProcessAlive,
 } from "./pidfile.ts";
-import { logger } from "./lib/json-logger.ts";
+import { loggerOf } from "./lib/json-logger.ts";
+import { asyncDispose } from "./lib/dispose.ts";
+import { cleanupGroupAsync, toCleanupAsync } from "./lib/cleanup.ts";
+
+const logger = loggerOf({ source: "cli.ts" });
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -76,14 +80,17 @@ const startCommand = defineCommand({
     },
   },
   run: async ({ args }) => {
+    const cleanupEverything = cleanupGroupAsync();
+
     const projectRoot = resolveProjectRoot(args.dir);
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
 
     // Check for existing daemon
     const status = getDaemonStatus(projectRoot);
     if (status.running) {
-      console.error(
-        `Busytown daemon already running (pid ${status.pid}). Use 'busytown stop' first.`,
+      logger.error(
+        `Busytown daemon already running. Use 'busytown stop' first.`,
+        { pid: status.pid }
       );
       process.exit(1);
     }
@@ -103,76 +110,64 @@ const startCommand = defineCommand({
 
     // Write pidfile
     writePidfile(projectRoot);
+    cleanupEverything.add(() => removePidfile(projectRoot));
 
     const db = resolveDb(args.dir, args.db);
-    const system = createAgentSystem(db);
+    cleanupEverything.add(() => db.close());
 
-    const spawnAll = (): number => {
-      const agents = loadAllAgents(agentsDir);
-      const toAgent = makeAgentRunner(db, projectRoot);
-      let spawned = 0;
+    let system: AgentSystem | undefined = undefined;
 
-      for (const a of agents) {
-        if (a.listen.length === 0) continue;
-        try {
-          system.spawn(toAgent(a));
-          spawned++;
-          logger.info("Agent spawned", {
-            agent: a.id,
-            listen: a.listen,
-          });
-        } catch (err) {
-          logger.error("Agent spawn failed", {
-            agent: a.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
+    // Cleans up whichever system is active during shutdown
+    cleanupEverything.add(async () => {
+      if (system) {
+        await asyncDispose(system);
+      }
+    });
+
+    const reloadSystem = async (): Promise<void> => {
+      // Dispose the old system, if it exists
+      if (system) {
+        logger.info("Agent system shutting down...", { stats: system.stats() });
+        await asyncDispose(system);
+      };
+
+      // Create a new system
+      system = agentSystemOf(db);
+      const agentDefs = loadAgentDefs(agentsDir);
+
+      for (const def of agentDefs) {
+        switch (def.type) {
+          case "pi":
+            break;
+          case "shell":
+            break;
+          case "claude":
+            break;
         }
       }
 
-      const reload = async () => {
-        await system.stop();
-        const count = spawnAll();
-        logger.info("Agents reloaded", { count });
-      };
-
-      system.spawn(
-        agent({
-          id: "_sys_reload",
-          listen: ["sys.reload"],
-          hidden: true,
-          ignoreSelf: true,
-          run: async () => {
-            void reload();
-          },
-        }),
-      );
-
-      return spawned;
+      logger.info("Agent system started", { stats: system.stats() });
     };
 
-    const spawned = spawnAll();
     const stopFileWatcher = watchFiles(db, projectRoot);
+    cleanupEverything.add(stopFileWatcher);
 
-    pushEvent(db, "sys", "sys.lifecycle.start");
-    logger.info("Busytown daemon started", {
+    pushEvent(db, "sys", "sys.daemon.start");
+    logger.info("Daemon started", {
       pid: process.pid,
-      agents: spawned,
       db: db.location(),
       agents_dir: agentsDir,
     });
 
     const shutdown = async () => {
-      logger.info("Shutting down");
-      pushEvent(db, "sys", "sys.lifecycle.finish");
-      removePidfile(projectRoot);
-      await stopFileWatcher();
-      await system.stop();
-      db.close();
+      logger.info("Shutting down daemon", { pid: process.pid });
+      pushEvent(db, "sys", "sys.daemon.finish");
+      await cleanupEverything();
       process.exit(0);
     };
 
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
 
     await forever();
   },
@@ -243,7 +238,7 @@ const statusCommand = defineCommand({
         console.log(`  last event: #${tip[0]!.id} (${tip[0]!.type})`);
       }
       const agentsDir = resolveAgentsDir(args.dir);
-      const agents = loadAllAgents(agentsDir);
+      const agents = loadAgentDefs(agentsDir);
       const listening = agents.filter((a) => a.listen.length > 0);
       console.log(`  agents:     ${listening.length} listening`);
       db.close();
@@ -347,7 +342,7 @@ const agentsCommand = defineCommand({
   },
   run: ({ args }) => {
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAllAgents(agentsDir);
+    const agents = loadAgentDefs(agentsDir);
     if (agents.length === 0) {
       console.log(`No agents found in ${agentsDir}`);
       return;
@@ -446,7 +441,7 @@ const updateMemoryCommand = defineCommand({
   },
   run: ({ args }) => {
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAllAgents(agentsDir);
+    const agents = loadAgentDefs(agentsDir);
     const agent = agents.find((a) => a.id === args.agent);
     if (!agent) {
       console.error(`Agent "${args.agent}" not found in ${agentsDir}`);
