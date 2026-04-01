@@ -8,7 +8,7 @@ import {
   type PiAgentSessionEvent,
   type ResponseEvent,
 } from "./pi-events.ts";
-import { EventDraft, type Event } from "./lib/event.ts";
+import { type EventDraft, type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
 import type { Agent } from "./agent.ts";

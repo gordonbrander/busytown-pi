@@ -1,5 +1,5 @@
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-export { type Event } from "../lib/event.ts";
+export { type Event } from "./lib/event.ts";
 
 export type PiAgentSessionEvent = AgentSessionEvent;
 
@@ -164,12 +164,12 @@ export type ResponseEvent =
  */
 export type FinishedResponseEvent =
   | {
-      type: "message_update";
-      assistantMessageEvent: Extract<
-        AssistantMessageEvent,
-        { type: "text_end" | "thinking_end" | "toolcall_end" }
-      >;
-    }
+    type: "message_update";
+    assistantMessageEvent: Extract<
+      AssistantMessageEvent,
+      { type: "text_end" | "thinking_end" | "toolcall_end" }
+    >;
+  }
   | ToolExecutionEndEvent;
 
 const mapAssistantMessageEvent = (
