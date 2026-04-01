@@ -18,7 +18,7 @@ export type ShellAgentConfig = {
 };
 
 export const shellAgentOf = (config: ShellAgentConfig): Agent => {
-  const { listen, ignoreSelf = false, shellScript, env = {} } = config;
+  const { listen, ignoreSelf = true, shellScript, env = {} } = config;
   const id = parseSlug(config.id);
   const agentAbortController = new AbortController();
 
