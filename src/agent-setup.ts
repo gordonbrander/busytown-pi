@@ -8,7 +8,14 @@ import type {
   ExtensionContext,
   ExecResult,
 } from "@mariozechner/pi-coding-agent";
+import type { DatabaseSync } from "node:sqlite";
 import { Type } from "@sinclair/typebox";
+import {
+  claimEvent,
+  getClaimant,
+  getEventsSince,
+  pushEvent,
+} from "./event-queue.ts";
 import {
   loadAgentDef,
   updateAgentFrontmatter,
@@ -39,7 +46,7 @@ const buildHookContext = (
   ...extras,
 });
 
-const execHook = async (
+export const execHook = async (
   pi: ExtensionAPI,
   hooks: Hooks,
   hookName: HookName,
@@ -66,6 +73,107 @@ export const buildAgentSystemPrompt = (
     "",
     renderMemoryBlocksPrompt(agent.memoryBlocks),
   ].join("\n");
+};
+
+/** Register the three busytown queue tools (push, events, claim). */
+export const registerBusytownTools = (
+  pi: ExtensionAPI,
+  db: DatabaseSync,
+  defaultAgentId: string,
+): void => {
+  pi.registerTool({
+    name: "busytown-push",
+    label: "Busytown Push",
+    description:
+      "Push an event to the Busytown event queue to trigger agent workflows. " +
+      "Common event types: plan.request, code.request, review.request",
+    parameters: Type.Object({
+      type: Type.String({ description: "Event type (e.g. 'plan.request')" }),
+      payload: Type.Optional(
+        Type.String({ description: "JSON payload string (default: '{}')" }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      await nextTick();
+      const payload = params.payload
+        ? JSON.parse(params.payload as string)
+        : {};
+      const event = pushEvent(
+        db,
+        defaultAgentId,
+        params.type as string,
+        payload,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "busytown-events",
+    label: "Busytown Events",
+    description: "List recent events from the Busytown event queue",
+    parameters: Type.Object({
+      type: Type.Optional(Type.String({ description: "Filter by event type" })),
+      tail: Type.Optional(
+        Type.Integer({
+          description: "Number of recent events to show (default: 20)",
+        }),
+      ),
+      since: Type.Optional(
+        Type.Integer({
+          description:
+            "List events since this event ID (mutually exclusive with tail)",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      await nextTick();
+      const sinceId = params.since as number | undefined;
+      const events = getEventsSince(db, {
+        ...(sinceId != null
+          ? { sinceId }
+          : { tail: (params.tail as number) ?? 20 }),
+        filterType: params.type as string,
+      });
+      const ljson = events.map((e) => JSON.stringify(e)).join("\n");
+      return {
+        content: [{ type: "text", text: ljson }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "busytown-claim",
+    label: "Busytown Claim",
+    description: "Claim an event so no other agent processes it",
+    parameters: Type.Object({
+      event_id: Type.Integer({ description: "Event ID to claim" }),
+      agent: Type.Optional(
+        Type.String({
+          description: `Agent ID claiming the event (default: "${defaultAgentId}")`,
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      await nextTick();
+      const claimingAgent = (params.agent as string) ?? defaultAgentId;
+      const claimed = claimEvent(db, claimingAgent, params.event_id as number);
+      const claimant = getClaimant(db, params.event_id as number);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ claimed, claimant }, null, 2),
+          },
+        ],
+        details: {},
+      };
+    },
+  });
 };
 
 /** Register the update-memory tool for agents with memory blocks. */
