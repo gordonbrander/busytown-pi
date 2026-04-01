@@ -12,8 +12,6 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-
-import { loadAgentDef, loadAllAgents } from "./agent.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
@@ -29,6 +27,8 @@ import {
   registerAgentHooks,
   resolveAgentModel,
 } from "./agent-setup.ts";
+import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
+import { collect } from "./lib/generator.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".busytown", "events.db");
@@ -63,7 +63,7 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Load agents for widget display (read-only, no spawning)
-    const agents = loadAllAgents(path.join(projectRoot, ".pi", "agents"));
+    const agents = await collect(listAgentDefs(path.join(projectRoot, ".pi", "agents")));
 
     // Start the dashboard widget (agent status + daemon indicator)
     const stopWidget = startWidget(db, agents, ctx, projectRoot);

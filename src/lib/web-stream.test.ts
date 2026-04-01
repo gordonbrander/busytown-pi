@@ -1,15 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { collect } from "./generator.ts";
 import { lineStream, mapStream } from "./web-stream.ts";
-
-/** Collect all chunks from a ReadableStream into an array. */
-const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
-  const chunks: T[] = [];
-  for await (const chunk of stream) {
-    chunks.push(chunk);
-  }
-  return chunks;
-};
 
 /** Write all string chunks as encoded bytes, then close the stream. */
 const writeAllBytes = async (

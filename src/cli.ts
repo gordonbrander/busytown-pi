@@ -1,7 +1,6 @@
 #!/usr/bin/env -S node --experimental-strip-types
 
 import fs from "node:fs";
-import { glob as globDir } from "node:fs/promises";
 import path from "node:path";
 import { defineCommand, runMain } from "citty";
 import {
@@ -11,7 +10,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadFileAgentOf, updateAgentFrontmatter } from "./file-agent.ts";
+import { loadFileAgentOf, updateAgentFrontmatter, listAgentPaths } from "./file-agent.ts";
 import { applyMemoryUpdate } from "./memory/memory.ts";
 import { AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
@@ -137,11 +136,11 @@ const startCommand = defineCommand({
       logger.info("Agent system starting...");
       system = agentSystemOf(db);
 
-      const agentFiles = globDir("*.md", { cwd: agentsDir });
-      for await (const file of agentFiles) {
+      const dbPath = unwrap(toOption(db.location()), "No database location");
+      for await (const agentPath of listAgentPaths(agentsDir)) {
         const agent = loadFileAgentOf({
-          path: path.resolve(agentsDir, file),
-          dbPath: unwrap(toOption(db.location()), "No database location"),
+          path: agentPath,
+          dbPath,
         });
         system.registerAgent(agent);
       }

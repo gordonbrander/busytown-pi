@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { shellAgentOf } from "./shell-agent.ts";
 import type { Event } from "./lib/event.ts";
 import type { EventDraft } from "./lib/event.ts";
+import { collect } from "./lib/generator.ts";
 
 const testEvent = (overrides: Partial<Event> = {}): Event => ({
   id: 1,
@@ -12,16 +13,6 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
   payload: { message: "hello world" },
   ...overrides,
 });
-
-const collect = async (
-  stream: ReadableStream<EventDraft>,
-): Promise<EventDraft[]> => {
-  const drafts: EventDraft[] = [];
-  for await (const draft of stream) {
-    drafts.push(draft);
-  }
-  return drafts;
-};
 
 describe("shellAgentOf", () => {
   it("returns an agent with the configured properties", () => {

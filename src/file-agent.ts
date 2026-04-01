@@ -1,10 +1,9 @@
-/**
- * @module Loads and parses agent files into agent config objects
- */
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import matter from "gray-matter";
 import fs from "node:fs";
+import path from "node:path";
+import { glob as globDir } from "node:fs/promises";
 import { pathToSlug } from "./lib/slug.ts";
 import { type Agent } from "./agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
@@ -270,3 +269,20 @@ export const loadFileAgentOf = (
       throw new Error("Claude agent not implemented yet");
   }
 };
+
+/**
+ * Asynchronously lists all agent paths in the given directory.
+ * @param agentDir The directory to search for agent files.
+ * @returns An async generator that yields the full paths of agent files.
+ */
+export async function* listAgentPaths(agentDir: string): AsyncGenerator<string> {
+  for await (const agentPath of globDir("*.md", { cwd: agentDir })) {
+    yield path.resolve(agentDir, agentPath);
+  }
+};
+
+export async function* listAgentDefs(agentDir: string): AsyncGenerator<AgentDef> {
+  for await (const agentPath of listAgentPaths(agentDir)) {
+    yield loadAgentDef(agentPath);
+  }
+}
