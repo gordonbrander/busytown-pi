@@ -35,7 +35,8 @@ export const renderMemoryBlockEntry = (
   return `<${tag}>
   <description>${block.description ?? ""}</description>
   <metadata>
-
+    char_count: ${block.value.length}
+    char_limit: ${block.charLimit}
   </metadata>
   <value>${block.value}</value>
 </${tag}>
