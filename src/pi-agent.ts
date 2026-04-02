@@ -97,7 +97,9 @@ export const piAgentOf = (config: PiAgentConfig): Agent => {
           },
         }),
       )
-      .catch(() => {});
+      .catch((e) => {
+        logger.error("stderr", { agent: id, error: `${e}` });
+      });
 
     // Parse stdout as JSONL PiAgentSessionEvent
     const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)

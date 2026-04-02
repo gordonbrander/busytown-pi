@@ -2,7 +2,6 @@ import type { Agent } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
 import type { EventDraft } from "./lib/event.ts";
 import { parseSlug } from "./lib/slug.ts";
-import { emptyReadableStream } from "./lib/web-stream.ts";
 
 export type VirtualAgentHandler = (event: Event) => void | Promise<void>;
 
@@ -20,8 +19,12 @@ export const virtualAgentOf = (config: VirtualAgentConfig): Agent => {
 
   const stream = (event: Event): ReadableStream<EventDraft> => {
     abortController.signal.throwIfAborted();
-    handler(event);
-    return emptyReadableStream();
+    return new ReadableStream<EventDraft>({
+      async start(controller) {
+        await handler(event);
+        controller.close();
+      },
+    });
   };
 
   const asyncDispose = async (): Promise<void> => {

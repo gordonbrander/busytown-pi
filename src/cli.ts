@@ -168,7 +168,7 @@ const startCommand = defineCommand({
       agents_dir: agentsDir,
     });
 
-    reloadSystem();
+    await reloadSystem();
 
     const shutdown = async () => {
       logger.info("Shutting down daemon", { pid: process.pid });

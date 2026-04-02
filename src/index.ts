@@ -21,10 +21,10 @@ import {
 } from "./dashboard.ts";
 import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
 import {
-  buildAgentSystemPrompt,
   registerAgentMemoryTool,
   registerAgentHooks,
   registerBusytownTools,
+  buildAgentAppendPrompt,
 } from "./pi-agent-shared.ts";
 import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
 import { collect } from "./lib/generator.ts";
@@ -254,13 +254,12 @@ export default (pi: ExtensionAPI) => {
 
       // Inject agent system prompt on every turn
       pi.on("before_agent_start", async (event) => {
-        const currentAgent = loadAgentDef(agentFile, projectRoot);
-        return {
-          systemPrompt: buildAgentSystemPrompt(
-            event.systemPrompt,
-            currentAgent,
-          ),
-        };
+        const systemPrompt = [
+          event.systemPrompt,
+          "",
+          buildAgentAppendPrompt(agent),
+        ].join("\n");
+        return { systemPrompt };
       });
 
       // Set the model if the agent defines one

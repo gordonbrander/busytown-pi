@@ -157,12 +157,3 @@ export const mapStream = <I, O>(fn: (chunk: I) => O): TransformStream<I, O> =>
       controller.enqueue(fn(chunk));
     },
   });
-
-/** Creates an empty `ReadableStream` */
-export const emptyReadableStream = <T>(): ReadableStream<T> => {
-  return new ReadableStream<T>({
-    pull(controller) {
-      controller.close();
-    },
-  });
-};

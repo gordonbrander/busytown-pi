@@ -19,7 +19,10 @@ export type AgentSystem = {
   [Symbol.asyncDispose](): Promise<void>;
 };
 
-export const agentSystemOf = (db: DatabaseSync, timeout = 200): AgentSystem => {
+export const agentSystemOf = (
+  db: DatabaseSync,
+  timeout = 1000,
+): AgentSystem => {
   logger.debug("Agent system created");
   const systemAbortController = new AbortController();
   // Registry of agents
