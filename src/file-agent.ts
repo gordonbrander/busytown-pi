@@ -174,7 +174,7 @@ export type AgentDef =
   | ShellAgentDef
   | ClaudeAgentDef;
 
-export const loadAgentDef = (filePath: string, cwd?: string): AgentDef => {
+export const loadAgentDef = (filePath: string, cwd: string): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
   const fm = parseAgentFrontmatter(data);
@@ -183,9 +183,11 @@ export const loadAgentDef = (filePath: string, cwd?: string): AgentDef => {
     throw new Error(`Cannot derive agent ID from path: ${filePath}`);
   }
 
-  const memoryBlocks = cwd
-    ? hydrateMemoryBlocks(cwd, id, parseMemoryBlockEntries(fm.memory_blocks))
-    : {};
+  const memoryBlocks = hydrateMemoryBlocks(
+    cwd,
+    id,
+    parseMemoryBlockEntries(fm.memory_blocks),
+  );
 
   if (fm.type === "shell") {
     return {
@@ -326,8 +328,9 @@ export async function* listAgentPaths(
 
 export async function* listAgentDefs(
   agentDir: string,
+  cwd: string,
 ): AsyncGenerator<AgentDef> {
   for await (const agentPath of listAgentPaths(agentDir)) {
-    yield loadAgentDef(agentPath);
+    yield loadAgentDef(agentPath, cwd);
   }
 }

@@ -221,7 +221,7 @@ export const registerAgentMemoryTool = (
       const oldText = params.oldText as string | undefined;
 
       // Re-read agent def to get block schema (description, charLimit)
-      const currentAgent = loadAgentDef(agentFile);
+      const currentAgent = loadAgentDef(agentFile, cwd);
       const block = currentAgent.memoryBlocks[blockKey];
 
       if (!block) {
