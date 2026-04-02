@@ -8,9 +8,11 @@ proceeds. The types are defined in [`types.ts`](./types.ts).
 ## Event hierarchy
 
 An agent run is bounded by `agent_start` / `agent_end`. Within a run there
-are one or more turns, each bounded by `turn_start` / `turn_end`. Within a
-turn there are one or more assistant messages, each bounded by
-`message_start` / `message_end`, interleaved with tool executions.
+are one or more turns, each bounded by `turn_start` / `turn_end`. A turn is
+one LLM request/response cycle plus any tool executions triggered by that
+response. Multiple turns happen when the LLM invokes tools and loops, or
+when steering messages are queued. Within a turn, the assistant message is
+bounded by `message_start` / `message_end`, followed by tool executions.
 
 ```
 agent_start
@@ -61,8 +63,8 @@ that category.
 | Finished thinking/reasoning  | `message_update` where `assistantMessageEvent.type === "thinking_end"` | `assistantMessageEvent.content` — full assembled thinking    |
 | Tool call the LLM dispatched | `message_update` where `assistantMessageEvent.type === "toolcall_end"` | `assistantMessageEvent.toolCall` — `{ id, name, arguments }` |
 | Tool execution result        | `tool_execution_end`                                                   | `toolCallId`, `isError`, `result`                            |
-| Turn complete                | `turn_end`                                                             | _(no payload)_                                               |
-| Run complete                 | `agent_end`                                                            | _(no payload)_                                               |
+| Turn complete                | `turn_end`                                                             | `message`, `toolResults`                                     |
+| Run complete                 | `agent_end`                                                            | `messages` — all messages from the run                       |
 
 ### Minimal consumer example
 
@@ -102,18 +104,24 @@ run.
 ### `agent_end`
 
 The agent run is complete. The `send()` stream closes after this event.
+Fields:
+
+- `messages` — all messages from the run
 
 ---
 
 ### `turn_start`
 
-A new LLM call is starting within the run.
+A new turn is starting within the run. Each turn is one LLM API call plus
+any tool executions triggered by that response. Includes `turnIndex`
+(zero-based).
 
 ### `turn_end`
 
-The LLM call and all tool executions triggered by it are complete. If the
-agent is going to make another LLM call (e.g. because there are steering
-messages queued), a new `turn_start` follows immediately.
+The turn is complete. Fields:
+
+- `message` — the assistant's response message for this turn
+- `toolResults` — array of all tool results from this turn
 
 ---
 
@@ -210,3 +218,25 @@ waiting before retrying. Fields: `attempt`, `maxAttempts`, `delayMs`,
 
 A retry cycle has concluded. `success` indicates whether the retry succeeded.
 On final failure, `finalError` contains the last error message.
+
+---
+
+## References
+
+### Source code (in `node_modules`)
+
+- **Type definitions** — `@mariozechner/pi-agent-core/dist/types.d.ts`
+  (`AgentEvent`, `AssistantMessageEvent`, and related types)
+- **Agent loop** — `@mariozechner/pi-agent-core/dist/agent-loop.js`
+  (emits `agent_start`/`agent_end`, `turn_start`/`turn_end`, drives the
+  multi-turn tool-use loop)
+- **Agent session** — `@mariozechner/pi-coding-agent/dist/core/agent-session.js`
+  (wraps raw events with `turnIndex` and `timestamp`)
+
+### Documentation
+
+- **pi-agent-core README** — `@mariozechner/pi-agent-core/README.md`
+  (event flow diagrams and event type reference)
+- **Pi mono-repo** — <https://github.com/badlogic/pi-mono>
+  (`packages/agent` for pi-agent-core, `packages/coding-agent` for
+  pi-coding-agent)
