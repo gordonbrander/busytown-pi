@@ -38,7 +38,7 @@ const globalArgs = {
   },
   db: {
     type: "string" as const,
-    description: "Path to SQLite database (default: <dir>/.busytown/events.db)",
+    description: "Path to SQLite database (default: <dir>/.pi/busytown/events.db)",
   },
 };
 
@@ -47,7 +47,7 @@ const globalArgs = {
 const resolveDbPath = (dir?: string, db?: string): string => {
   if (db) return db;
   const root = dir ?? process.cwd();
-  return path.join(root, ".busytown", "events.db");
+  return path.join(root, ".pi", "busytown", "events.db");
 };
 
 const resolveAgentsDir = (dir?: string, agentsDir?: string): string => {

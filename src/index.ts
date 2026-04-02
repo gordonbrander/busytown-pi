@@ -30,7 +30,7 @@ import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
 import { collect } from "./lib/generator.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
-  path.join(projectRoot, ".busytown", "events.db");
+  path.join(projectRoot, ".pi", "busytown", "events.db");
 
 export default (pi: ExtensionAPI) => {
   const projectRoot = process.cwd();

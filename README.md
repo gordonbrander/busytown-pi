@@ -10,7 +10,7 @@ Agents listen for events, react to them, and push new events, forming asynchrono
 
 ## How it works
 
-Everything is stored in a single SQLite database (`.busytown/events.db`).
+Everything is stored in a single SQLite database (`.pi/busytown/events.db`).
 Events are simple JSON objects:
 
 ```json
@@ -78,8 +78,8 @@ your-project/
 ├── .pi/
 │   ├── settings.json    # Package config (if using pi install -l)
 │   └── agents/          # Agent definitions (markdown files)
-└── .busytown/
-    └── events.db        # SQLite event queue (auto-created)
+│   └── busytown/
+│       └── events.db    # SQLite event queue (auto-created)
 ```
 
 ## Building an agent factory

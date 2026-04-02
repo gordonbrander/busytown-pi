@@ -21,7 +21,7 @@ agents race for exclusive ownership of an event.
 
 A long-running background process (`busytown start`) that:
 
-- Opens the SQLite event queue at `.busytown/events.db`
+- Opens the SQLite event queue at `.pi/busytown/events.db`
 - Loads agent definitions from `.pi/agents/*.md` files
 - Runs an async poll loop per agent, pulling matching events and feeding them to
   the agent's `stream()` method

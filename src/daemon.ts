@@ -17,7 +17,7 @@ export const spawnDaemon = async (
   if (status.running) return { ok: true, pid: status.pid };
 
   const cliBin = resolveCliBin();
-  const logPath = path.join(projectRoot, ".busytown", "daemon.log");
+  const logPath = path.join(projectRoot, ".pi", "busytown", "daemon.log");
 
   const child = spawn(
     "node",
