@@ -268,15 +268,6 @@ Memory block fields (frontmatter):
 
 Block values are stored separately at `.pi/busytown/memory_blocks/<agent_id>/<block_key>.md`, keeping agent definition files clean and making blocks easy to inspect or edit directly.
 
-Pi agents update their memory blocks automatically, using an `update-memory` tool that is registered by the agent extension. Shell agents and external scripts can use the CLI:
-
-```bash
-busytown update-memory \
-  --agent my-agent \
-  --block context \
-  --new-text "Switched to PostgreSQL for persistence"
-```
-
 ## Tools & commands
 
 Busytown registers several additional tools for agents:
@@ -349,9 +340,6 @@ busytown claim --agent my-agent --event 42
 
 # Check who claimed an event
 busytown check-claim --event 42
-
-# Update an agent's memory block
-busytown update-memory --agent my-agent --block context --new-text "new info"
 ```
 
 ## Key concepts
