@@ -5,7 +5,7 @@ import type {
   ExtensionContext,
   Theme,
 } from "@mariozechner/pi-coding-agent";
-import type { AgentDef } from "./agent.ts";
+import type { AgentDef } from "./file-agent.ts";
 import type { Event } from "./lib/event.ts";
 import { getEventsSince } from "./event-queue.ts";
 import { getDaemonStatus } from "./pidfile.ts";
@@ -44,7 +44,7 @@ type DashboardAction =
 // Event helpers
 // ---------------------------------------------------------------------------
 
-const AGENT_EVENT_RE = /^sys\.agent\.(.+)\.(start|finish|error|progress)$/;
+const AGENT_EVENT_RE = /^agent\.(.+)\.(start|end|error)$/;
 
 const applyAgentEvent = (
   agent: AgentState,
@@ -61,13 +61,7 @@ const applyAgentEvent = (
       progressChars: undefined,
     };
   }
-  if (action === "progress") {
-    const chars = (payload as Record<string, unknown>)?.chars as
-      | number
-      | undefined;
-    return { ...agent, progressChars: chars };
-  }
-  if (action === "finish") {
+  if (action === "end") {
     return {
       ...agent,
       status: "idle",
@@ -479,7 +473,8 @@ const formatChars = (chars: number): string => {
 type FgColor = Parameters<Theme["fg"]>[0];
 
 const typeColor = (type: string): FgColor => {
-  if (type.startsWith("sys.agent.")) {
+  if (type.startsWith("agent.")) {
+    if (type.endsWith(".message")) return "error";
     if (type.endsWith(".error")) return "error";
     if (type.endsWith(".start")) return "accent";
     if (type.endsWith(".finish")) return "success";

@@ -3,14 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import matter from "gray-matter";
-import {
-  loadAgentDef,
-  loadAllAgents,
-  updateAgentFrontmatter,
-  isHookName,
-  parseHooks,
-} from "./agent.ts";
+import { loadAgentDef, isHookName, parseHooks } from "./file-agent.ts";
+import { writeMemoryBlockValue } from "./memory/memory.ts";
 
 let tmpDir: string;
 
@@ -50,7 +44,7 @@ You are a planner agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.id, "planner");
     assert.equal(agent.type, "pi");
     assert.equal(agent.description, "Plans tasks");
@@ -76,7 +70,7 @@ echo "Task done: {{event.type}}"
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "shell");
     assert.deepEqual(agent.listen, ["task.complete"]);
   });
@@ -92,7 +86,7 @@ Do stuff.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.id, "my-cool-agent");
   });
 
@@ -106,7 +100,7 @@ Default agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "pi");
   });
 
@@ -119,7 +113,7 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.ignoreSelf, true);
   });
 
@@ -136,7 +130,7 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     if (agent.type === "pi") {
       assert.deepEqual(agent.tools, ["read", "bash", "edit"]);
     }
@@ -144,7 +138,7 @@ listen: []
 });
 
 describe("memory_blocks", () => {
-  it("loads an agent with memory_blocks", () => {
+  it("hydrates memory blocks with empty values when no files on disk", () => {
     const filePath = writeAgent(
       "with-memory.md",
       `---
@@ -153,7 +147,27 @@ listen:
 memory_blocks:
   agent:
     description: Agent notes
-    value: some data
+    char_limit: 1000
+---
+Hello
+`,
+    );
+
+    const agent = loadAgentDef(filePath, tmpDir);
+    assert.deepEqual(agent.memoryBlocks, {
+      agent: { description: "Agent notes", charLimit: 1000, value: "" },
+    });
+  });
+
+  it("hydrates memory block values from disk", () => {
+    const filePath = writeAgent(
+      "with-memory.md",
+      `---
+listen:
+  - "*"
+memory_blocks:
+  agent:
+    description: Agent notes
     char_limit: 1000
   project:
     description: Project facts
@@ -162,7 +176,9 @@ Hello
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    writeMemoryBlockValue(tmpDir, "with-memory", "agent", "some data");
+
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.deepEqual(agent.memoryBlocks, {
       agent: {
         description: "Agent notes",
@@ -186,81 +202,8 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.deepEqual(agent.memoryBlocks, {});
-  });
-
-  it("applies defaults for missing fields", () => {
-    const filePath = writeAgent(
-      "partial-memory.md",
-      `---
-listen: []
-memory_blocks:
-  notes: {}
----
-`,
-    );
-
-    const agent = loadAgentDef(filePath);
-    assert.deepEqual(agent.memoryBlocks.notes, {
-      description: "",
-      value: "",
-      charLimit: 2000,
-    });
-  });
-});
-
-describe("updateAgentFrontmatter", () => {
-  it("rewrites frontmatter while preserving body", () => {
-    const filePath = writeAgent(
-      "update-test.md",
-      `---
-listen:
-  - "*"
-memory_blocks:
-  agent:
-    description: Agent notes
-    value: old value
-    char_limit: 2000
----
-Body content here.
-`,
-    );
-
-    updateAgentFrontmatter(filePath, (fm) => {
-      const mb = fm.memory_blocks ?? {};
-      if (mb.agent) mb.agent.value = "new value";
-      return { ...fm, memory_blocks: mb };
-    });
-
-    const updated = loadAgentDef(filePath);
-    assert.equal(updated.memoryBlocks.agent.value, "new value");
-    assert.ok(updated.body.includes("Body content here."));
-  });
-
-  it("preserves extra frontmatter keys not in schema", () => {
-    const filePath = writeAgent(
-      "extra-keys.md",
-      `---
-listen:
-  - "*"
-custom_field: hello
-another: 42
----
-Body.
-`,
-    );
-
-    updateAgentFrontmatter(filePath, (fm) => ({
-      ...fm,
-      listen: ["foo.*"],
-    }));
-
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const { data } = matter(raw);
-    assert.equal(data.custom_field, "hello");
-    assert.equal(data.another, 42);
-    assert.deepEqual(data.listen, ["foo.*"]);
   });
 });
 
@@ -280,7 +223,7 @@ Agent with hooks.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "pi");
     if (agent.type === "pi") {
       assert.equal(agent.hooks.session_start, "echo session started");
@@ -304,7 +247,7 @@ Multi-line hooks.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     if (agent.type === "pi") {
       assert.ok(agent.hooks.before_agent_start?.includes("step 1"));
       assert.ok(agent.hooks.before_agent_start?.includes("step 2"));
@@ -321,7 +264,7 @@ No hooks here.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     if (agent.type === "pi") {
       assert.deepEqual(agent.hooks, {});
     }
@@ -339,7 +282,7 @@ hooks:
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     if (agent.type === "pi") {
       assert.equal(agent.hooks.session_start, "echo hello");
       // agent_end with no value is parsed as null by yaml, should be skipped
@@ -360,7 +303,7 @@ echo hi
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "shell");
     assert.equal("hooks" in agent, false);
   });
@@ -446,7 +389,7 @@ You are a coding agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "claude");
     assert.equal(agent.id, "coder");
     assert.equal(agent.description, "Writes code");
@@ -471,7 +414,7 @@ No tools agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "claude");
     if (agent.type === "claude") {
       assert.deepEqual(agent.tools, []);
@@ -491,7 +434,7 @@ Claude agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "claude");
     assert.equal("hooks" in agent, false);
   });
@@ -506,14 +449,15 @@ listen:
 memory_blocks:
   context:
     description: Project context
-    value: some context
     char_limit: 1000
 ---
 Agent with memory.
 `,
     );
 
-    const agent = loadAgentDef(filePath);
+    writeMemoryBlockValue(tmpDir, "claude-memory", "context", "some context");
+
+    const agent = loadAgentDef(filePath, tmpDir);
     assert.equal(agent.type, "claude");
     assert.deepEqual(agent.memoryBlocks, {
       context: {
@@ -522,58 +466,5 @@ Agent with memory.
         charLimit: 1000,
       },
     });
-  });
-});
-
-describe("loadAllAgents", () => {
-  it("loads all .md files from directory", () => {
-    writeAgent(
-      "agent-a.md",
-      `---
-listen:
-  - a.*
----
-Agent A
-`,
-    );
-    writeAgent(
-      "agent-b.md",
-      `---
-listen:
-  - b.*
----
-Agent B
-`,
-    );
-    // Non-md file should be ignored
-    writeAgent("readme.txt", "not an agent");
-
-    const agents = loadAllAgents(tmpDir);
-    assert.equal(agents.length, 2);
-    const ids = agents.map((a) => a.id).sort();
-    assert.deepEqual(ids, ["agent-a", "agent-b"]);
-  });
-
-  it("returns empty array for nonexistent directory", () => {
-    const agents = loadAllAgents(path.join(tmpDir, "nonexistent"));
-    assert.deepEqual(agents, []);
-  });
-
-  it("skips agents that fail to load", () => {
-    writeAgent(
-      "good.md",
-      `---
-listen:
-  - "*"
----
-Good agent
-`,
-    );
-    // Create a subdirectory (not a file) — will be skipped
-    fs.mkdirSync(path.join(tmpDir, "subdir.md"));
-
-    const agents = loadAllAgents(tmpDir);
-    assert.equal(agents.length, 1);
-    assert.equal(agents[0].id, "good");
   });
 });

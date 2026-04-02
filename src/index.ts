@@ -3,7 +3,6 @@ import type {
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import path from "node:path";
-import { Type } from "@sinclair/typebox";
 import { parseArgs } from "citty";
 import {
   claimEvent,
@@ -12,8 +11,6 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-
-import { loadAgentDef, loadAllAgents } from "./agent.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
 import { shellSplit } from "./lib/shell.ts";
@@ -24,14 +21,16 @@ import {
 } from "./dashboard.ts";
 import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
 import {
-  buildAgentSystemPrompt,
   registerAgentMemoryTool,
   registerAgentHooks,
-  resolveAgentModel,
-} from "./agent-setup.ts";
+  registerBusytownTools,
+  buildAgentAppendPrompt,
+} from "./pi-agent-shared.ts";
+import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
+import { collect } from "./lib/generator.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
-  path.join(projectRoot, ".busytown", "events.db");
+  path.join(projectRoot, ".pi", "busytown", "events.db");
 
 export default (pi: ExtensionAPI) => {
   const projectRoot = process.cwd();
@@ -63,7 +62,9 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Load agents for widget display (read-only, no spawning)
-    const agents = loadAllAgents(path.join(projectRoot, ".pi", "agents"));
+    const agents = await collect(
+      listAgentDefs(path.join(projectRoot, ".pi", "agents"), projectRoot),
+    );
 
     // Start the dashboard widget (agent status + daemon indicator)
     const stopWidget = startWidget(db, agents, ctx, projectRoot);
@@ -77,95 +78,7 @@ export default (pi: ExtensionAPI) => {
     registerEventLogCommand(pi, db);
 
     // Register tools
-    pi.registerTool({
-      name: "busytown-push",
-      label: "Busytown Push",
-      description:
-        "Push an event to the Busytown event queue to trigger agent workflows. " +
-        "Common event types: plan.request, code.request, review.request",
-      parameters: Type.Object({
-        type: Type.String({ description: "Event type (e.g. 'plan.request')" }),
-        payload: Type.Optional(
-          Type.String({ description: "JSON payload string (default: '{}')" }),
-        ),
-      }),
-      execute: async (_toolCallId, params) => {
-        await nextTick();
-        const payload = params.payload
-          ? JSON.parse(params.payload as string)
-          : {};
-        const event = pushEvent(db, "pi", params.type as string, payload);
-        return {
-          content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
-          details: {},
-        };
-      },
-    });
-
-    pi.registerTool({
-      name: "busytown-events",
-      label: "Busytown Events",
-      description: "List recent events from the Busytown event queue",
-      parameters: Type.Object({
-        type: Type.Optional(
-          Type.String({ description: "Filter by event type" }),
-        ),
-        tail: Type.Optional(
-          Type.Integer({
-            description: "Number of recent events to show (default: 20)",
-          }),
-        ),
-        since: Type.Optional(
-          Type.Integer({
-            description:
-              "List events since this event ID (mutually exclusive with tail)",
-          }),
-        ),
-      }),
-      async execute(_toolCallId, params) {
-        await nextTick();
-        const sinceId = params.since as number | undefined;
-        const events = getEventsSince(db, {
-          ...(sinceId != null
-            ? { sinceId }
-            : { tail: (params.tail as number) ?? 20 }),
-          filterType: params.type as string,
-        });
-        const ljson = events.map((e) => JSON.stringify(e)).join("\n");
-        return {
-          content: [{ type: "text", text: ljson }],
-          details: {},
-        };
-      },
-    });
-
-    pi.registerTool({
-      name: "busytown-claim",
-      label: "Busytown Claim",
-      description: "Claim an event so no other agent processes it",
-      parameters: Type.Object({
-        event_id: Type.Integer({ description: "Event ID to claim" }),
-        agent: Type.String({ description: "Agent ID claiming the event" }),
-      }),
-      async execute(_toolCallId, params) {
-        await nextTick();
-        const claimed = claimEvent(
-          db,
-          params.agent as string,
-          params.event_id as number,
-        );
-        const claimant = getClaimant(db, params.event_id as number);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ claimed, claimant }, null, 2),
-            },
-          ],
-          details: {},
-        };
-      },
-    });
+    registerBusytownTools(pi, db, "pi");
 
     // Register commands (slash-command equivalents of the tools)
 
@@ -337,35 +250,41 @@ export default (pi: ExtensionAPI) => {
     if (agentName) {
       const agentsDir = path.join(projectRoot, ".pi", "agents");
       const agentFile = path.join(agentsDir, `${agentName}.md`);
-      const agent = loadAgentDef(agentFile);
+      const agent = loadAgentDef(agentFile, projectRoot);
 
       // Inject agent system prompt on every turn
       pi.on("before_agent_start", async (event) => {
-        const currentAgent = loadAgentDef(agentFile);
-        return {
-          systemPrompt: buildAgentSystemPrompt(
-            event.systemPrompt,
-            currentAgent,
-          ),
-        };
+        const systemPrompt = [
+          event.systemPrompt,
+          "",
+          buildAgentAppendPrompt(agent),
+        ].join("\n");
+        return { systemPrompt };
       });
 
       // Set the model if the agent defines one
       if (agent.type === "pi" && agent.model) {
-        const model = resolveAgentModel(agent.model, ctx.modelRegistry);
-        if (model) {
-          await pi.setModel(model);
-        } else {
+        if (!agent.provider) {
           ctx.ui.notify(
-            `Agent "${agent.id}": model "${agent.model}" not found`,
+            `Agent "${agent.id}": cannot determine provider for model "${agent.model}". Set "provider" in agent frontmatter.`,
             "warning",
           );
+        } else {
+          const model = ctx.modelRegistry.find(agent.provider, agent.model);
+          if (model) {
+            await pi.setModel(model);
+          } else {
+            ctx.ui.notify(
+              `Agent "${agent.id}": model "${agent.provider}/${agent.model}" not found`,
+              "warning",
+            );
+          }
         }
       }
 
       // Register the update-memory tool if agent has memory blocks
       if (Object.keys(agent.memoryBlocks).length > 0) {
-        registerAgentMemoryTool(pi, agentFile);
+        registerAgentMemoryTool(pi, projectRoot, agent.id, agentFile);
       }
 
       // Register lifecycle hooks for pi agents

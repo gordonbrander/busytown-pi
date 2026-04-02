@@ -177,14 +177,45 @@ export const getEventsSince = (
   return rows.map(parseEvent);
 };
 
+export const getNextEvents = (
+  db: DatabaseSync,
+  sinceId: number,
+  limit: number = 100,
+): Array<Event> => {
+  const rows = db
+    .prepare(`SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?`)
+    .all(sinceId, limit) as Array<RawEventRow>;
+  return rows.map(parseEvent);
+};
+
 export const getNextEvent = (
   db: DatabaseSync,
   sinceId: number,
+): Event | undefined => getNextEvents(db, sinceId, 1).at(0);
+
+export const pullNextMatchingEvent = (
+  db: DatabaseSync,
+  id: string,
+  filter: (event: Event) => boolean,
+  maxScan: number = 100,
 ): Event | undefined => {
-  const row = db
-    .prepare(`SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT 1`)
-    .get(sinceId) as RawEventRow | undefined;
-  return row ? parseEvent(row) : undefined;
+  const sinceId = getOrCreateCursor(db, id);
+  const events = getNextEvents(db, sinceId, maxScan);
+  if (events.length === 0) {
+    return undefined;
+  }
+
+  for (const event of events) {
+    if (filter(event) && !isClaimed(db, event.id)) {
+      // Advance cursor to the matched event
+      updateCursor(db, id, event.id);
+      return event;
+    }
+  }
+
+  // No match — advance cursor past all scanned events
+  updateCursor(db, id, events[events.length - 1].id);
+  return undefined;
 };
 
 export const pollEvents = (
@@ -227,6 +258,15 @@ export const claimEvent = (
     db.exec("ROLLBACK");
     throw err;
   }
+};
+
+/** Check if event has been claimed */
+export const isClaimed = (db: DatabaseSync, eventId: number): boolean => {
+  return (
+    db
+      .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
+      .get(eventId) !== undefined
+  );
 };
 
 export const getClaimant = (

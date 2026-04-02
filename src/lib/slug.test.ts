@@ -1,6 +1,84 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { toSlug, pathToSlug } from "./slug.ts";
+import { isSlug, parseSlug, toSlug, pathToSlug } from "./slug.ts";
+
+describe("isSlug", () => {
+  it("accepts lowercase alphanumeric", () => {
+    assert.equal(isSlug("hello"), true);
+  });
+
+  it("accepts lowercase with hyphens", () => {
+    assert.equal(isSlug("hello-world"), true);
+  });
+
+  it("accepts single character", () => {
+    assert.equal(isSlug("a"), true);
+  });
+
+  it("accepts numbers", () => {
+    assert.equal(isSlug("abc123"), true);
+  });
+
+  it("rejects uppercase", () => {
+    assert.equal(isSlug("Hello"), false);
+  });
+
+  it("rejects leading hyphen", () => {
+    assert.equal(isSlug("-hello"), false);
+  });
+
+  it("rejects trailing hyphen", () => {
+    assert.equal(isSlug("hello-"), false);
+  });
+
+  it("rejects consecutive hyphens", () => {
+    assert.equal(isSlug("hello--world"), false);
+  });
+
+  it("rejects spaces", () => {
+    assert.equal(isSlug("hello world"), false);
+  });
+
+  it("accepts underscores", () => {
+    assert.equal(isSlug("hello_world"), true);
+  });
+
+  it("rejects empty string", () => {
+    assert.equal(isSlug(""), false);
+  });
+
+  it("rejects special characters", () => {
+    assert.equal(isSlug("hello@world"), false);
+  });
+});
+
+describe("parseSlug", () => {
+  it("returns valid slug unchanged", () => {
+    assert.equal(parseSlug("hello-world"), "hello-world");
+  });
+
+  it("returns single word slug", () => {
+    assert.equal(parseSlug("hello"), "hello");
+  });
+
+  it("throws on invalid slug", () => {
+    assert.throws(() => parseSlug("Hello World"), TypeError);
+  });
+
+  it("throws on empty string", () => {
+    assert.throws(() => parseSlug(""), TypeError);
+  });
+
+  it("throws on leading hyphen", () => {
+    assert.throws(() => parseSlug("-hello"), TypeError);
+  });
+
+  it("includes invalid value in error message", () => {
+    assert.throws(() => parseSlug("BAD!"), {
+      message: /BAD!/,
+    });
+  });
+});
 
 describe("toSlug", () => {
   it("lowercases and replaces spaces with hyphens", () => {

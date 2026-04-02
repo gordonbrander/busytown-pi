@@ -26,7 +26,7 @@
     ]
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.56.3",
+    "@mariozechner/pi-coding-agent": "^0.63.1",
     "@sinclair/typebox": "^0.34.48",
     "@types/picomatch": "^4.0.2",
     "chokidar": "^4.0.0",
@@ -36,11 +36,12 @@
     "picomatch": "^4.0.3"
   },
   "scripts": {
+    "coverage": "node --experimental-test-coverage --test",
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "eslint 'src/**/*.ts'",
-    "format:check": "prettier --check .",
-    "format": "prettier --write ."
+    "check-fmt": "prettier --check .",
+    "fmt": "prettier --write ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

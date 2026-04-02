@@ -18,7 +18,7 @@ export const any =
 export const DEFAULT_IGNORED = [
   "**/node_modules/**",
   "**/.git/**",
-  "**/.busytown/**",
+  "**/.pi/**",
   "**/.DS_Store",
 ];
 

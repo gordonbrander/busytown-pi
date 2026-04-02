@@ -1,24 +1,42 @@
-type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+export type LogDriver = {
+  debug: (message: string) => void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+};
 
 export type Logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => void;
-  info: (msg: string, data?: Record<string, unknown>) => void;
-  warn: (msg: string, data?: Record<string, unknown>) => void;
-  error: (msg: string, data?: Record<string, unknown>) => void;
+  debug: (message: string, data?: Record<string, unknown>) => void;
+  info: (message: string, data?: Record<string, unknown>) => void;
+  warn: (message: string, data?: Record<string, unknown>) => void;
+  error: (message: string, data?: Record<string, unknown>) => void;
 };
 
-const log = (
+const jsonLogOf = (
   level: LogLevel,
-  msg: string,
+  message: string,
+  context?: Record<string, unknown>,
   data?: Record<string, unknown>,
-): void => {
-  const entry = { timestamp: Date.now(), level, msg, ...data };
-  console.log(JSON.stringify(entry));
+): string => {
+  const entry = { timestamp: Date.now(), level, message, ...context, ...data };
+  return JSON.stringify(entry);
 };
 
-export const logger: Logger = {
-  debug: (msg, data) => log("debug", msg, data),
-  info: (msg, data) => log("info", msg, data),
-  warn: (msg, data) => log("warn", msg, data),
-  error: (msg, data) => log("error", msg, data),
-};
+/** Creates a JSON logger that mixes in the given context into log entries. */
+export const loggerOf = (
+  context: Record<string, unknown> = {},
+  driver: LogDriver = console,
+): Logger => ({
+  debug: (message, data) =>
+    driver.debug(jsonLogOf("debug", message, context, data)),
+  info: (message, data) =>
+    driver.info(jsonLogOf("info", message, context, data)),
+  warn: (message, data) =>
+    driver.warn(jsonLogOf("warn", message, context, data)),
+  error: (message, data) =>
+    driver.error(jsonLogOf("error", message, context, data)),
+});
+
+export const logger = loggerOf();

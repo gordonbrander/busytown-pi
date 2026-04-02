@@ -1,6 +1,6 @@
 /**
  * Shared agent setup logic used by both the headless agent extension
- * (agent-extension.ts) and the interactive --agent flag (index.ts).
+ * (pi-agent-extension.ts) and the interactive --agent flag (index.ts).
  * @module
  */
 import type {
@@ -8,20 +8,36 @@ import type {
   ExtensionContext,
   ExecResult,
 } from "@mariozechner/pi-coding-agent";
+import type { DatabaseSync } from "node:sqlite";
 import { Type } from "@sinclair/typebox";
 import {
+  claimEvent,
+  getClaimant,
+  getEventsSince,
+  pushEvent,
+} from "./event-queue.ts";
+import {
   loadAgentDef,
-  updateAgentFrontmatter,
   type AgentDef,
   type PiAgentDef,
   type Hooks,
   type HookName,
-} from "./agent.ts";
-import { applyMemoryUpdate, renderMemoryBlocksPrompt } from "./memory.ts";
+} from "./file-agent.ts";
+import {
+  applyMemoryUpdate,
+  readMemoryBlockValue,
+  writeMemoryBlockValue,
+  renderMemoryBlocksPrompt,
+} from "./memory/memory.ts";
 import { nextTick } from "./lib/promise.ts";
-import * as Lines from "./lib/lines.ts";
 import { renderTemplate } from "./lib/template.ts";
-import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+
+/** Best-guess provider from a model ID string. */
+export const guessProvider = (model: string): string | undefined => {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (/^(gpt-|o[1-9]-)/.test(model)) return "openai";
+  return undefined;
+};
 
 const HOOK_TIMEOUT = 30_000;
 
@@ -37,7 +53,7 @@ const buildHookContext = (
   ...extras,
 });
 
-const execHook = async (
+export const execHook = async (
   pi: ExtensionAPI,
   hooks: Hooks,
   hookName: HookName,
@@ -54,20 +70,127 @@ const execHook = async (
 export const buildAgentSystemPrompt = (
   basePrompt: string,
   agent: AgentDef,
-): string =>
-  Lines.join([
-    basePrompt,
-    "",
+): string => {
+  return [basePrompt, "", buildAgentAppendPrompt(agent)].join("\n");
+};
+
+/** Build the agent-specific system prompt (without base prompt). */
+export const buildAgentAppendPrompt = (agent: AgentDef): string => {
+  return [
     `You are the "${agent.id}" agent. ${agent.description}`,
     "",
     agent.body,
     "",
     renderMemoryBlocksPrompt(agent.memoryBlocks),
-  ]);
+  ].join("\n");
+};
+
+/** Register the three busytown queue tools (push, events, claim). */
+export const registerBusytownTools = (
+  pi: ExtensionAPI,
+  db: DatabaseSync,
+  defaultAgentId: string,
+): void => {
+  pi.registerTool({
+    name: "busytown-push",
+    label: "Busytown Push",
+    description:
+      "Push an event to the Busytown event queue to trigger agent workflows. " +
+      "Common event types: plan.request, code.request, review.request",
+    parameters: Type.Object({
+      type: Type.String({ description: "Event type (e.g. 'plan.request')" }),
+      payload: Type.Optional(
+        Type.String({ description: "JSON payload string (default: '{}')" }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      await nextTick();
+      const payload = params.payload
+        ? JSON.parse(params.payload as string)
+        : {};
+      const event = pushEvent(
+        db,
+        defaultAgentId,
+        params.type as string,
+        payload,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(event, null, 2) }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "busytown-events",
+    label: "Busytown Events",
+    description: "List recent events from the Busytown event queue",
+    parameters: Type.Object({
+      type: Type.Optional(Type.String({ description: "Filter by event type" })),
+      tail: Type.Optional(
+        Type.Integer({
+          description: "Number of recent events to show (default: 20)",
+        }),
+      ),
+      since: Type.Optional(
+        Type.Integer({
+          description:
+            "List events since this event ID (mutually exclusive with tail)",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      await nextTick();
+      const sinceId = params.since as number | undefined;
+      const events = getEventsSince(db, {
+        ...(sinceId != null
+          ? { sinceId }
+          : { tail: (params.tail as number) ?? 20 }),
+        filterType: params.type as string,
+      });
+      const ljson = events.map((e) => JSON.stringify(e)).join("\n");
+      return {
+        content: [{ type: "text", text: ljson }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "busytown-claim",
+    label: "Busytown Claim",
+    description: "Claim an event so no other agent processes it",
+    parameters: Type.Object({
+      event_id: Type.Integer({ description: "Event ID to claim" }),
+      agent: Type.Optional(
+        Type.String({
+          description: `Agent ID claiming the event (default: "${defaultAgentId}")`,
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      await nextTick();
+      const claimingAgent = (params.agent as string) ?? defaultAgentId;
+      const claimed = claimEvent(db, claimingAgent, params.event_id as number);
+      const claimant = getClaimant(db, params.event_id as number);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ claimed, claimant }, null, 2),
+          },
+        ],
+        details: {},
+      };
+    },
+  });
+};
 
 /** Register the update-memory tool for agents with memory blocks. */
 export const registerAgentMemoryTool = (
   pi: ExtensionAPI,
+  cwd: string,
+  agentId: string,
   agentFile: string,
 ): void => {
   pi.registerTool({
@@ -97,8 +220,8 @@ export const registerAgentMemoryTool = (
       const newText = params.newText as string;
       const oldText = params.oldText as string | undefined;
 
-      // Re-read agent file to get current state
-      const currentAgent = loadAgentDef(agentFile);
+      // Re-read agent def to get block schema (description, charLimit)
+      const currentAgent = loadAgentDef(agentFile, cwd);
       const block = currentAgent.memoryBlocks[blockKey];
 
       if (!block) {
@@ -115,21 +238,17 @@ export const registerAgentMemoryTool = (
       }
 
       try {
+        // Read current value from disk
+        const currentValue = readMemoryBlockValue(cwd, agentId, blockKey);
         const result = applyMemoryUpdate(
-          block.value,
+          currentValue,
           block.charLimit,
           newText,
           oldText,
         );
 
-        // Write back to agent file
-        updateAgentFrontmatter(agentFile, (frontmatter) => {
-          const mb = frontmatter.memory_blocks ?? {};
-          if (Object.hasOwn(mb, blockKey)) {
-            mb[blockKey].value = result.text;
-          }
-          return { ...frontmatter, memory_blocks: mb };
-        });
+        // Write back to disk
+        writeMemoryBlockValue(cwd, agentId, blockKey, result.text);
 
         return {
           content: [
@@ -298,44 +417,4 @@ export const registerAgentHooks = (
       }
     });
   }
-};
-
-/**
- * Resolve a short model pattern (e.g. "sonnet") to a Model object
- * from the registry. Uses fuzzy matching: exact id > partial id/name match.
- * Returns the model object directly so it can be passed to `pi.setModel()`.
- */
-export const resolveAgentModel = (
-  modelPattern: string,
-  modelRegistry: ModelRegistry,
-): ReturnType<ModelRegistry["getAvailable"]>[number] | undefined => {
-  const models = modelRegistry.getAvailable();
-
-  // Exact id match (case-insensitive)
-  const exact = models.find(
-    (m) => m.id.toLowerCase() === modelPattern.toLowerCase(),
-  );
-  if (exact) return exact;
-
-  // Partial match on id or name
-  const lower = modelPattern.toLowerCase();
-  const matches = models.filter(
-    (m) =>
-      m.id.toLowerCase().includes(lower) ||
-      (m.name && m.name.toLowerCase().includes(lower)),
-  );
-  if (matches.length === 0) return undefined;
-
-  // Prefer aliases (no date suffix) over dated versions
-  const isAlias = (id: string): boolean => !/\d{8}$/.test(id);
-  const aliases = matches.filter((m) => isAlias(m.id));
-  const dated = matches.filter((m) => !isAlias(m.id));
-
-  if (aliases.length > 0) {
-    aliases.sort((a, b) => b.id.localeCompare(a.id));
-    return aliases[0];
-  }
-
-  dated.sort((a, b) => b.id.localeCompare(a.id));
-  return dated[0];
 };

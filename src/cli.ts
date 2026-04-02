@@ -10,11 +10,10 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadAllAgents, updateAgentFrontmatter } from "./agent.ts";
-import { applyMemoryUpdate } from "./memory.ts";
-import { createAgentSystem, agent } from "./agent-system.ts";
-import { makeAgentRunner } from "./pi-process.ts";
+import { loadFileAgentOf, listAgentPaths } from "./file-agent.ts";
+import { type AgentSystem, agentSystemOf } from "./agent-system.ts";
 import { watchFiles } from "./file-watcher.ts";
+import { virtualAgentOf } from "./virtual-agent.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
@@ -22,7 +21,12 @@ import {
   removePidfile,
   isProcessAlive,
 } from "./pidfile.ts";
-import { logger } from "./lib/json-logger.ts";
+import { loggerOf } from "./lib/json-logger.ts";
+import { asyncDispose } from "./lib/dispose.ts";
+import { cleanupGroupAsync } from "./lib/cleanup.ts";
+import { toOption, unwrap } from "./lib/option.ts";
+
+const logger = loggerOf({ source: "cli.ts" });
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -34,7 +38,8 @@ const globalArgs = {
   },
   db: {
     type: "string" as const,
-    description: "Path to SQLite database (default: <dir>/.busytown/events.db)",
+    description:
+      "Path to SQLite database (default: <dir>/.pi/busytown/events.db)",
   },
 };
 
@@ -43,7 +48,7 @@ const globalArgs = {
 const resolveDbPath = (dir?: string, db?: string): string => {
   if (db) return db;
   const root = dir ?? process.cwd();
-  return path.join(root, ".busytown", "events.db");
+  return path.join(root, ".pi", "busytown", "events.db");
 };
 
 const resolveAgentsDir = (dir?: string, agentsDir?: string): string => {
@@ -77,14 +82,17 @@ const startCommand = defineCommand({
     },
   },
   run: async ({ args }) => {
+    const cleanupEverything = cleanupGroupAsync();
+
     const projectRoot = resolveProjectRoot(args.dir);
     const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
 
     // Check for existing daemon
     const status = getDaemonStatus(projectRoot);
     if (status.running) {
-      console.error(
-        `Busytown daemon already running (pid ${status.pid}). Use 'busytown stop' first.`,
+      logger.error(
+        `Busytown daemon already running. Use 'busytown stop' first.`,
+        { pid: status.pid },
       );
       process.exit(1);
     }
@@ -104,76 +112,73 @@ const startCommand = defineCommand({
 
     // Write pidfile
     writePidfile(projectRoot);
+    cleanupEverything.add(() => removePidfile(projectRoot));
 
     const db = resolveDb(args.dir, args.db);
-    const system = createAgentSystem(db);
+    cleanupEverything.add(() => db.close());
 
-    const spawnAll = (): number => {
-      const agents = loadAllAgents(agentsDir);
-      const toAgent = makeAgentRunner(db, projectRoot);
-      let spawned = 0;
+    let system: AgentSystem | undefined = undefined;
 
-      for (const a of agents) {
-        if (a.listen.length === 0) continue;
-        try {
-          system.spawn(toAgent(a));
-          spawned++;
-          logger.info("Agent spawned", {
-            agent: a.id,
-            listen: a.listen,
-          });
-        } catch (err) {
-          logger.error("Agent spawn failed", {
-            agent: a.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
+    // Cleans up whichever system is active during shutdown
+    cleanupEverything.add(async () => {
+      if (system) {
+        await asyncDispose(system);
+      }
+    });
+
+    const reloadSystem = async (): Promise<void> => {
+      // Dispose the old system, if it exists
+      if (system) {
+        logger.info("Agent system shutting down...", { stats: system.stats() });
+        await asyncDispose(system);
       }
 
-      const reload = async () => {
-        await system.stop();
-        const count = spawnAll();
-        logger.info("Agents reloaded", { count });
-      };
+      // Create a new system
+      logger.info("Agent system starting...");
+      system = agentSystemOf(db);
 
-      system.spawn(
-        agent({
-          id: "_sys_reload",
+      const dbPath = unwrap(toOption(db.location()), "No database location");
+      for await (const agentPath of listAgentPaths(agentsDir)) {
+        const agent = loadFileAgentOf({
+          path: agentPath,
+          dbPath,
+          cwd: projectRoot,
+        });
+        system.registerAgent(agent);
+      }
+
+      system.registerAgent(
+        virtualAgentOf({
+          id: "_sys-reload",
           listen: ["sys.reload"],
-          hidden: true,
-          ignoreSelf: true,
-          run: async () => {
-            void reload();
-          },
+          handler: () => reloadSystem(),
         }),
       );
 
-      return spawned;
+      logger.info("Agent system started", { stats: system.stats() });
     };
 
-    const spawned = spawnAll();
     const stopFileWatcher = watchFiles(db, projectRoot);
+    cleanupEverything.add(stopFileWatcher);
 
-    pushEvent(db, "sys", "sys.lifecycle.start");
-    logger.info("Busytown daemon started", {
+    pushEvent(db, "sys", "sys.daemon.start");
+    logger.info("Daemon start", {
       pid: process.pid,
-      agents: spawned,
       db: db.location(),
       agents_dir: agentsDir,
     });
 
+    await reloadSystem();
+
     const shutdown = async () => {
-      logger.info("Shutting down");
-      pushEvent(db, "sys", "sys.lifecycle.finish");
-      removePidfile(projectRoot);
-      await stopFileWatcher();
-      await system.stop();
-      db.close();
+      logger.info("Shutting down daemon", { pid: process.pid });
+      pushEvent(db, "sys", "sys.daemon.finish");
+      await cleanupEverything();
       process.exit(0);
     };
 
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
 
     await forever();
   },
@@ -235,22 +240,6 @@ const statusCommand = defineCommand({
     }
 
     console.log(`Busytown daemon is running (pid ${status.pid}).`);
-
-    // Show some info from the DB
-    try {
-      const db = resolveDb(args.dir, args.db);
-      const tip = getEventsSince(db, { tail: 1 });
-      if (tip.length > 0) {
-        console.log(`  last event: #${tip[0]!.id} (${tip[0]!.type})`);
-      }
-      const agentsDir = resolveAgentsDir(args.dir);
-      const agents = loadAllAgents(agentsDir);
-      const listening = agents.filter((a) => a.listen.length > 0);
-      console.log(`  agents:     ${listening.length} listening`);
-      db.close();
-    } catch {
-      // DB might not exist yet, that's fine
-    }
   },
 });
 
@@ -337,35 +326,6 @@ const eventsCommand = defineCommand({
   },
 });
 
-const agentsCommand = defineCommand({
-  meta: { name: "agents", description: "List loaded agent definitions" },
-  args: {
-    ...globalArgs,
-    "agents-dir": {
-      type: "string",
-      description: "Agent definitions directory (default: <dir>/.pi/agents)",
-    },
-  },
-  run: ({ args }) => {
-    const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAllAgents(agentsDir);
-    if (agents.length === 0) {
-      console.log(`No agents found in ${agentsDir}`);
-      return;
-    }
-    for (const agent of agents) {
-      const listen =
-        agent.listen.length > 0 ? agent.listen.join(", ") : "(none)";
-      const emits = agent.emits.length > 0 ? agent.emits.join(", ") : "(none)";
-      console.log(`${agent.id} (${agent.type})`);
-      if (agent.description) console.log(`  ${agent.description}`);
-      console.log(`  listen: ${listen}`);
-      console.log(`  emits:  ${emits}`);
-      console.log();
-    }
-  },
-});
-
 const claimCommand = defineCommand({
   meta: { name: "claim", description: "Claim an event" },
   args: {
@@ -414,81 +374,6 @@ const checkClaimCommand = defineCommand({
   },
 });
 
-const updateMemoryCommand = defineCommand({
-  meta: {
-    name: "update-memory",
-    description: "Update a memory block in an agent file",
-  },
-  args: {
-    ...globalArgs,
-    "agents-dir": {
-      type: "string",
-      description: "Agent definitions directory (default: <dir>/.pi/agents)",
-    },
-    agent: {
-      type: "string",
-      description: "Agent ID (matches filename or name field)",
-      required: true,
-    },
-    block: {
-      type: "string",
-      description: "Memory block key",
-      required: true,
-    },
-    "new-text": {
-      type: "string",
-      description: "New text (replacement or append)",
-      required: true,
-    },
-    "old-text": {
-      type: "string",
-      description: "Text to find and replace (omit to append)",
-    },
-  },
-  run: ({ args }) => {
-    const agentsDir = resolveAgentsDir(args.dir, args["agents-dir"]);
-    const agents = loadAllAgents(agentsDir);
-    const agent = agents.find((a) => a.id === args.agent);
-    if (!agent) {
-      console.error(`Agent "${args.agent}" not found in ${agentsDir}`);
-      process.exit(1);
-    }
-
-    const block = agent.memoryBlocks[args.block];
-    if (!block) {
-      const available = Object.keys(agent.memoryBlocks).join(", ");
-      console.error(
-        `Block "${args.block}" not found. Available: ${available || "(none)"}`,
-      );
-      process.exit(1);
-    }
-
-    const result = applyMemoryUpdate(
-      block.value,
-      block.charLimit,
-      args["new-text"],
-      args["old-text"],
-    );
-
-    updateAgentFrontmatter(agent.filePath, (frontmatter) => {
-      const mb = frontmatter.memory_blocks ?? {};
-      if (mb[args.block]) {
-        mb[args.block].value = result.text;
-      }
-      return { ...frontmatter, memory_blocks: mb };
-    });
-
-    console.log(
-      JSON.stringify({
-        blockKey: args.block,
-        usage: `${result.text.length}/${block.charLimit}`,
-        truncated: result.truncated,
-        value: result.text,
-      }),
-    );
-  },
-});
-
 const reloadCommand = defineCommand({
   meta: {
     name: "reload",
@@ -522,10 +407,8 @@ const main = defineCommand({
     status: statusCommand,
     push: pushCommand,
     events: eventsCommand,
-    agents: agentsCommand,
     claim: claimCommand,
     "check-claim": checkClaimCommand,
-    "update-memory": updateMemoryCommand,
     reload: reloadCommand,
   },
 });
