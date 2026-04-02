@@ -20,25 +20,25 @@ All events within a run carry a `correlation_id` field that matches
 the originating `user_message` id, for correlating events back to the
 request that generated them.
 
-| Event                      | Key fields                                       |
-|----------------------------|--------------------------------------------------|
-| `user_message`             | `id`, content                                    |
-| `agent_start`              | `correlation_id`                                 |
-| `turn_start`               | `correlation_id`                                 |
-| `thinking_start`           | `correlation_id`, `contentIndex`                 |
-| `thinking_end`             | `correlation_id`, `contentIndex`, text            |
-| `text_start`               | `correlation_id`, `contentIndex`                 |
-| `text_end`                 | `correlation_id`, `contentIndex`, text            |
-| `toolcall_start`           | `correlation_id`, `contentIndex`, `tool_call_id`, name |
-| `toolcall_end`             | `correlation_id`, `contentIndex`, `tool_call_id`, name, args |
-| `tool_execution_end`       | `correlation_id`, `tool_call_id`, output/error   |
-| `error`                    | `correlation_id`, error details                  |
-| `turn_end`                 | `correlation_id`, input_tokens, output_tokens    |
-| `compaction_start`         | `correlation_id`, reason (`manual` / `threshold` / `overflow`) |
-| `compaction_end`           | `correlation_id`, reason, result, aborted, willRetry |
-| `auto_retry_start`         | `correlation_id`, attempt, maxAttempts, delayMs, errorMessage |
-| `auto_retry_end`           | `correlation_id`, success, finalError            |
-| `agent_end`                | `correlation_id`, messages, total_input_tokens, total_output_tokens |
+| Event                | Key fields                                                          |
+| -------------------- | ------------------------------------------------------------------- |
+| `user_message`       | `id`, content                                                       |
+| `agent_start`        | `correlation_id`                                                    |
+| `turn_start`         | `correlation_id`                                                    |
+| `thinking_start`     | `correlation_id`, `contentIndex`                                    |
+| `thinking_end`       | `correlation_id`, `contentIndex`, text                              |
+| `text_start`         | `correlation_id`, `contentIndex`                                    |
+| `text_end`           | `correlation_id`, `contentIndex`, text                              |
+| `toolcall_start`     | `correlation_id`, `contentIndex`, `tool_call_id`, name              |
+| `toolcall_end`       | `correlation_id`, `contentIndex`, `tool_call_id`, name, args        |
+| `tool_execution_end` | `correlation_id`, `tool_call_id`, output/error                      |
+| `error`              | `correlation_id`, error details                                     |
+| `turn_end`           | `correlation_id`, input_tokens, output_tokens                       |
+| `compaction_start`   | `correlation_id`, reason (`manual` / `threshold` / `overflow`)      |
+| `compaction_end`     | `correlation_id`, reason, result, aborted, willRetry                |
+| `auto_retry_start`   | `correlation_id`, attempt, maxAttempts, delayMs, errorMessage       |
+| `auto_retry_end`     | `correlation_id`, success, finalError                               |
+| `agent_end`          | `correlation_id`, messages, total_input_tokens, total_output_tokens |
 
 ## Lifecycle
 
@@ -129,34 +129,34 @@ model omits.
 
 #### Structural differences
 
-| Concept            | Simplified                              | Pi                                                        |
-|--------------------|-----------------------------------------|-----------------------------------------------------------|
-| Granularity        | Coalesced — no deltas, just start/end   | Streaming — full start/delta/end triples                  |
-| Message wrapper    | None — content events are turn children | `message_start` / `message_update` / `message_end`        |
-| Content delivery   | `text_end` carries full text directly   | `message_update` sub-event with `text_end` carries text   |
-| Tool execution     | Single `tool_execution_end`             | `tool_execution_start` / `_update` / `_end` (streaming)   |
-| Correlation        | `correlation_id` on every event         | Implicit via nesting within the `agent.send()` stream     |
-| Token accounting   | On `turn_end` and `agent_end`           | On `turn_end` or left to the consumer                     |
+| Concept          | Simplified                              | Pi                                                      |
+| ---------------- | --------------------------------------- | ------------------------------------------------------- |
+| Granularity      | Coalesced — no deltas, just start/end   | Streaming — full start/delta/end triples                |
+| Message wrapper  | None — content events are turn children | `message_start` / `message_update` / `message_end`      |
+| Content delivery | `text_end` carries full text directly   | `message_update` sub-event with `text_end` carries text |
+| Tool execution   | Single `tool_execution_end`             | `tool_execution_start` / `_update` / `_end` (streaming) |
+| Correlation      | `correlation_id` on every event         | Implicit via nesting within the `agent.send()` stream   |
+| Token accounting | On `turn_end` and `agent_end`           | On `turn_end` or left to the consumer                   |
 
 #### Event mapping
 
-| Simplified Event        | Pi Event(s)                              | Notes                                                        |
-|-------------------------|------------------------------------------|--------------------------------------------------------------|
-| `user_message`          | *(implicit — event passed to `send()`)*  | Simplified makes this explicit with an `id` → `correlation_id` |
-| `agent_start`           | `agent_start`                            | Same                                                         |
-| `agent_end`             | `agent_end`                              | Both carry `messages`; simplified adds total token counts     |
-| `turn_start`            | `turn_start`                             | Pi adds `turnIndex`                                          |
-| `turn_end`              | `turn_end`                               | Simplified carries tokens; Pi carries `message` + `toolResults` |
-| `thinking_start`        | `message_update { thinking_start }`      | Same content, different envelope                             |
-| `thinking_end`          | `message_update { thinking_end }`        | Both carry full assembled text                               |
-| `text_start`            | `message_update { text_start }`          | Same                                                         |
-| `text_end`              | `message_update { text_end }`            | Both carry full assembled text                               |
-| `toolcall_start`        | `message_update { toolcall_start }`      | Simplified includes `tool_call_id` and `name` upfront        |
-| `toolcall_end`          | `message_update { toolcall_end }`        | Both carry name + args; Pi nests under `toolCall` object     |
-| `tool_execution_end`    | `tool_execution_end`                     | Both carry `tool_call_id`, output/error                      |
-| `error`                 | `message_update { error }`               | Pi scopes to message; simplified is a top-level turn event   |
-| `compaction_start/end`  | `compaction_start/end`                   | Same fields                                                  |
-| `auto_retry_start/end`  | `auto_retry_start/end`                   | Same fields                                                  |
+| Simplified Event       | Pi Event(s)                             | Notes                                                           |
+| ---------------------- | --------------------------------------- | --------------------------------------------------------------- |
+| `user_message`         | _(implicit — event passed to `send()`)_ | Simplified makes this explicit with an `id` → `correlation_id`  |
+| `agent_start`          | `agent_start`                           | Same                                                            |
+| `agent_end`            | `agent_end`                             | Both carry `messages`; simplified adds total token counts       |
+| `turn_start`           | `turn_start`                            | Pi adds `turnIndex`                                             |
+| `turn_end`             | `turn_end`                              | Simplified carries tokens; Pi carries `message` + `toolResults` |
+| `thinking_start`       | `message_update { thinking_start }`     | Same content, different envelope                                |
+| `thinking_end`         | `message_update { thinking_end }`       | Both carry full assembled text                                  |
+| `text_start`           | `message_update { text_start }`         | Same                                                            |
+| `text_end`             | `message_update { text_end }`           | Both carry full assembled text                                  |
+| `toolcall_start`       | `message_update { toolcall_start }`     | Simplified includes `tool_call_id` and `name` upfront           |
+| `toolcall_end`         | `message_update { toolcall_end }`       | Both carry name + args; Pi nests under `toolCall` object        |
+| `tool_execution_end`   | `tool_execution_end`                    | Both carry `tool_call_id`, output/error                         |
+| `error`                | `message_update { error }`              | Pi scopes to message; simplified is a top-level turn event      |
+| `compaction_start/end` | `compaction_start/end`                  | Same fields                                                     |
+| `auto_retry_start/end` | `auto_retry_start/end`                  | Same fields                                                     |
 
 Pi events with no simplified equivalent: `message_start`, `message_end`,
 `message_update { start }`, `message_update { done }`, all `*_delta` events,
