@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentSessionEvent as PiAgentSessionEvent } from "@mariozechner/pi-coding-agent";
+export { type PiAgentSessionEvent };
 
 export type UserMessage = {
   type: "user_message";

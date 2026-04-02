@@ -10,10 +10,10 @@ import {
   writeJsonLine,
 } from "./lib/web-stream.ts";
 import {
-  mapPiEvent,
+  fromPiAgentSessionEvent,
+  type AgentSessionEvent,
   type PiAgentSessionEvent,
-  type ResponseEvent,
-} from "./pi-events.ts";
+} from "./agent-session-event.ts";
 import { type EventDraft, type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
@@ -110,10 +110,9 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   };
 
   // Convert stdout to a web ReadableStream of JSONL lines
-  const output: ReadableStream<ResponseEvent> = stdout(proc)
+  const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)
     .pipeThrough(lineStream())
-    .pipeThrough(mapStream(JSON.parse))
-    .pipeThrough(mapStream((json) => mapPiEvent(json as PiAgentSessionEvent)));
+    .pipeThrough(mapStream(JSON.parse));
 
   // Pipe stderr lines to onError callback
   stderr(proc)
@@ -176,11 +175,14 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
               return;
             }
 
-            // Enqueue the value.
-            controller.enqueue({
-              type: `agent.${id}.response`,
-              payload: value,
-            });
+            const sessionEvent = fromPiAgentSessionEvent(value, `${event.id}`);
+            if (sessionEvent) {
+              // Enqueue the value.
+              controller.enqueue({
+                type: `agent.${id}.messages`,
+                payload: value,
+              });
+            }
 
             // If it's the agent_end, then we clean up (release the lock on upstream)
             // and close this step's stream.
