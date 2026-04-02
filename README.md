@@ -77,9 +77,10 @@ npm install -g busytown-pi
 your-project/
 ├── .pi/
 │   ├── settings.json    # Package config (if using pi install -l)
-│   └── agents/          # Agent definitions (markdown files)
+│   ├── agents/          # Agent definitions (markdown files)
 │   └── busytown/
-│       └── events.db    # SQLite event queue (auto-created)
+│       ├── events.db    # SQLite event queue (auto-created)
+│       └── memory_blocks/  # Persistent memory (per-agent, per-block)
 ```
 
 ## Building an agent factory
@@ -128,23 +129,32 @@ Then push a `task.summarized` event.
 
 ### Frontmatter fields
 
-| Field         | Type                     | Default | Description                                          |
-| ------------- | ------------------------ | ------- | ---------------------------------------------------- |
-| `type`        | `"pi"` \| `"shell"`      | `"pi"`  | Agent type                                           |
-| `name`        | `string`                 | ""      | Name of the agent                                    |
-| `description` | `string`                 | `""`    | What this agent does                                 |
-| `listen`      | `string[]`               | `[]`    | Event patterns to listen for                         |
-| `emits`       | `string[]`               | `[]`    | Event types this agent can emit (documentation only) |
-| `ignore_self` | `boolean`                | `true`  | Ignore events this agent emitted                     |
-| `tools`       | `string[]`               | `[]`    | Pi tools available to the agent                      |
-| `model`       | `string`                 | —       | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
-| `hooks`       | `Record<string, string>` | —       | Shell scripts to run during pi lifecycle events      |
+| Field         | Type                                            | Default | Description                                          |
+| ------------- | ----------------------------------------------- | ------- | ---------------------------------------------------- |
+| `type`        | `"pi"` \| `"pi-rpc"` \| `"shell"` \| `"claude"` | `"pi"`  | Agent type                                           |
+| `name`        | `string`                                        | ""      | Name of the agent                                    |
+| `description` | `string`                                        | `""`    | What this agent does                                 |
+| `listen`      | `string[]`                                      | `[]`    | Event patterns to listen for                         |
+| `emits`       | `string[]`                                      | `[]`    | Event types this agent can emit (documentation only) |
+| `ignore_self` | `boolean`                                       | `true`  | Ignore events this agent emitted                     |
+| `tools`       | `string[]`                                      | `[]`    | Pi tools available to the agent                      |
+| `model`       | `string`                                        | —       | Model override (e.g., `"opus"`, `"sonnet:high"`)     |
+| `hooks`       | `Record<string, string>`                        | —       | Shell scripts to run during pi lifecycle events      |
 
 ### Agent types
 
-**Pi agents** (`type: "pi"`, the default) run as `pi --mode json` subprocesses.
-The event JSON is piped to stdin, and the agent's markdown body becomes its
-system prompt. Pi agents can use tools and the CLI to push events and claim work.
+All agent types share a common `AgentProcess` interface—`stream(event)` returns a `ReadableStream` of response events, `disposed` signals teardown, and `[Symbol.asyncDispose]()` cleans up. This means short-lived and long-lived agents are interchangeable within the system.
+
+**Pi agents** (`type: "pi"`, the default) are short-lived: a fresh `pi --mode json`
+subprocess is spawned for each event. The event JSON is piped to stdin, and the
+agent's markdown body becomes its system prompt. The process exits after
+responding. Pi agents have no memory of previous invocations beyond their
+memory blocks.
+
+**Pi RPC agents** (`type: "pi-rpc"`) are long-lived: a single Pi process is
+spawned and kept alive across invocations. Events are sent as RPC commands over
+stdin, and responses stream back. This preserves the full conversation context
+between events, making it suitable for agents that need continuity.
 
 **Shell agents** (`type: "shell"`) run the body as a shell script via `sh -c`.
 The body is rendered as a Mustache-style template with access to the triggering
@@ -224,7 +234,7 @@ All hooks share a base set of template variables: `cwd`, `sessionFile`, `model`,
 
 ### Memory blocks
 
-Agents can have [Letta-style](https://docs.letta.com/guides/core-concepts/memory/memory-blocks/) memory blocks that persist across invocations. This lets the agent learn and grow a personality over time. Memory blocks are defined in agent frontmatter and updates are written back directly to the agent file.
+Agents can have [Letta-style](https://docs.letta.com/guides/core-concepts/memory/memory-blocks/) memory blocks that persist across invocations. This lets the agent learn and grow a personality over time. Memory block schemas are defined in agent frontmatter, and block values are stored as separate files under `.pi/busytown/memory_blocks/<agent_id>/<block_key>.md`.
 
 You can define any number of custom memory blocks. Two common blocks are `user` and `agent`, which help the agent learn about the user and grow a personality:
 
@@ -237,23 +247,26 @@ memory_blocks:
   user:
     description: "Key facts about the user and their preferences"
     char_limit: 2000
-    value: "Name: Lady 3Jane. Lives in Freeside. Third clone of original Jane."
   agent:
     description: "Your role, personality, and preferences"
     char_limit: 4000
-    value: "I try to plan, but that isn’t my basic mode really. I improvise. It’s my greatest talent. I prefer situations to plans."
 ---
 
 You are an AI at Tessier-Ashpool...
 ```
 
-Memory block fields:
+The block values live at `.pi/busytown/memory_blocks/wintermute/user.md` and
+`.pi/busytown/memory_blocks/wintermute/agent.md`. They’re created automatically
+on first run and updated as the agent learns.
+
+Memory block fields (frontmatter):
 
 | Field         | Type     | Default | Description                            |
 | ------------- | -------- | ------- | -------------------------------------- |
 | `description` | `string` | `""`    | What this block is for                 |
-| `value`       | `string` | `""`    | Current contents of the block          |
 | `char_limit`  | `number` | `2000`  | Maximum characters stored in the block |
+
+Block values are stored separately at `.pi/busytown/memory_blocks/<agent_id>/<block_key>.md`, keeping agent definition files clean and making blocks easy to inspect or edit directly.
 
 Pi agents update their memory blocks automatically, using an `update-memory` tool that is registered by the agent extension. Shell agents and external scripts can use the CLI:
 
