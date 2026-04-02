@@ -152,10 +152,16 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
       }
     };
 
+    const correlationId = `${event.id}`;
+
     return new ReadableStream<EventDraft>(
       {
-        async start() {
+        async start(controller) {
           try {
+            controller.enqueue({
+              type: `agent.${id}.start`,
+              payload: { correlation_id: correlationId, event_type: event.type },
+            });
             // Write the prompt command to Pi's stdin
             await sendEventPromptCommand(event);
           } catch (e) {
@@ -170,12 +176,16 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
             // If done, it means the pi process exited.
             // Clean up and close this stream.
             if (done) {
+              controller.enqueue({
+                type: `agent.${id}.end`,
+                payload: { correlation_id: correlationId },
+              });
               cleanup();
               controller.close();
               return;
             }
 
-            const sessionEvent = fromPiAgentSessionEvent(value, `${event.id}`);
+            const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
             if (sessionEvent) {
               // Enqueue the value.
               controller.enqueue({
@@ -187,11 +197,19 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
             // If it's the agent_end, then we clean up (release the lock on upstream)
             // and close this step's stream.
             if (value.type === "agent_end") {
+              controller.enqueue({
+                type: `agent.${id}.end`,
+                payload: { correlation_id: correlationId },
+              });
               cleanup();
               controller.close();
               return;
             }
           } catch (e) {
+            controller.enqueue({
+              type: `agent.${id}.error`,
+              payload: { correlation_id: correlationId, error: String(e) },
+            });
             cleanup();
             controller.error(e);
           }

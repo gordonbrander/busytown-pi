@@ -62,8 +62,16 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
       reader.releaseLock();
     };
 
+    const correlationId = `${event.id}`;
+
     return new ReadableStream<EventDraft>(
       {
+        start(controller) {
+          controller.enqueue({
+            type: `agent.${id}.start`,
+            payload: { correlation_id: correlationId, event_type: event.type },
+          });
+        },
         async pull(controller) {
           try {
             const { done, value } = await reader.read();
@@ -72,9 +80,13 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
               if (code !== 0 && code !== null) {
                 controller.enqueue({
                   type: `agent.${id}.error`,
-                  payload: { code, signal },
+                  payload: { correlation_id: correlationId, code, signal },
                 });
               }
+              controller.enqueue({
+                type: `agent.${id}.end`,
+                payload: { correlation_id: correlationId },
+              });
               cleanup();
               controller.close();
               return;
@@ -84,6 +96,10 @@ export const shellAgentOf = (config: ShellAgentConfig): Agent => {
               payload: { line: value },
             });
           } catch (e) {
+            controller.enqueue({
+              type: `agent.${id}.error`,
+              payload: { correlation_id: correlationId, error: String(e) },
+            });
             cleanup();
             controller.error(e);
           }

@@ -61,15 +61,17 @@ describe("stream", () => {
 
     const drafts = await collect(agent.stream(testEvent()));
 
-    assert.equal(drafts.length, 2);
-    assert.deepEqual(drafts[0], {
+    assert.equal(drafts.length, 4);
+    assert.equal(drafts[0].type, "agent.echo-agent.start");
+    assert.deepEqual(drafts[1], {
       type: "agent.echo-agent.response",
       payload: { line: "line one" },
     });
-    assert.deepEqual(drafts[1], {
+    assert.deepEqual(drafts[2], {
       type: "agent.echo-agent.response",
       payload: { line: "line two" },
     });
+    assert.equal(drafts[3].type, "agent.echo-agent.end");
   });
 
   it(
@@ -85,11 +87,13 @@ describe("stream", () => {
       const event = testEvent({ type: "task.created" });
       const drafts = await collect(agent.stream(event));
 
-      assert.equal(drafts.length, 1);
-      assert.deepEqual(drafts[0], {
+      assert.equal(drafts.length, 3);
+      assert.equal(drafts[0].type, "agent.template-agent.start");
+      assert.deepEqual(drafts[1], {
         type: "agent.template-agent.response",
         payload: { line: "task.created" },
       });
+      assert.equal(drafts[2].type, "agent.template-agent.end");
     },
   );
 
@@ -103,11 +107,13 @@ describe("stream", () => {
     const event = testEvent({ payload: { message: "hello" } });
     const drafts = await collect(agent.stream(event));
 
-    assert.equal(drafts.length, 1);
-    assert.deepEqual(drafts[0], {
+    assert.equal(drafts.length, 3);
+    assert.equal(drafts[0].type, "agent.nested-agent.start");
+    assert.deepEqual(drafts[1], {
       type: "agent.nested-agent.response",
       payload: { line: "hello" },
     });
+    assert.equal(drafts[2].type, "agent.nested-agent.end");
   });
 
   it(
@@ -122,13 +128,15 @@ describe("stream", () => {
 
       const drafts = await collect(agent.stream(testEvent()));
 
-      assert.equal(drafts.length, 2);
-      assert.deepEqual(drafts[0], {
+      assert.equal(drafts.length, 4);
+      assert.equal(drafts[0].type, "agent.fail-agent.start");
+      assert.deepEqual(drafts[1], {
         type: "agent.fail-agent.response",
         payload: { line: "before" },
       });
-      assert.equal(drafts[1].type, "agent.fail-agent.error");
-      assert.equal((drafts[1].payload as { code: number }).code, 1);
+      assert.equal(drafts[2].type, "agent.fail-agent.error");
+      assert.equal((drafts[2].payload as { code: number }).code, 1);
+      assert.equal(drafts[3].type, "agent.fail-agent.end");
     },
   );
 
@@ -143,7 +151,9 @@ describe("stream", () => {
       });
 
       const drafts = await collect(agent.stream(testEvent()));
-      assert.equal(drafts.length, 0);
+      assert.equal(drafts.length, 2);
+      assert.equal(drafts[0].type, "agent.silent-agent.start");
+      assert.equal(drafts[1].type, "agent.silent-agent.end");
     },
   );
 

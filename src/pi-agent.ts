@@ -119,8 +119,16 @@ export const piAgentOf = (config: PiAgentConfig): Agent => {
       reader.releaseLock();
     };
 
+    const correlationId = `${event.id}`;
+
     return new ReadableStream<EventDraft>(
       {
+        start(controller) {
+          controller.enqueue({
+            type: `agent.${id}.start`,
+            payload: { correlation_id: correlationId, event_type: event.type },
+          });
+        },
         async pull(controller) {
           try {
             const { done, value } = await reader.read();
@@ -129,15 +137,19 @@ export const piAgentOf = (config: PiAgentConfig): Agent => {
               if (code !== 0 && code !== null) {
                 controller.enqueue({
                   type: `agent.${id}.error`,
-                  payload: { code, signal },
+                  payload: { correlation_id: correlationId, code, signal },
                 });
               }
+              controller.enqueue({
+                type: `agent.${id}.end`,
+                payload: { correlation_id: correlationId },
+              });
               cleanup();
               controller.close();
               return;
             }
 
-            const sessionEvent = fromPiAgentSessionEvent(value, `${event.id}`);
+            const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
             if (sessionEvent) {
               controller.enqueue({
                 type: `agent.${id}.message`,
@@ -146,11 +158,19 @@ export const piAgentOf = (config: PiAgentConfig): Agent => {
             }
 
             if (value.type === "agent_end") {
+              controller.enqueue({
+                type: `agent.${id}.end`,
+                payload: { correlation_id: correlationId },
+              });
               cleanup();
               controller.close();
               return;
             }
           } catch (e) {
+            controller.enqueue({
+              type: `agent.${id}.error`,
+              payload: { correlation_id: correlationId, error: String(e) },
+            });
             cleanup();
             controller.error(e);
           }

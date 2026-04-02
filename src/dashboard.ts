@@ -44,7 +44,7 @@ type DashboardAction =
 // Event helpers
 // ---------------------------------------------------------------------------
 
-const AGENT_EVENT_RE = /^sys\.agent\.(.+)\.(start|finish|error|progress)$/;
+const AGENT_EVENT_RE = /^agent\.(.+)\.(start|end|error)$/;
 
 const applyAgentEvent = (
   agent: AgentState,
@@ -61,13 +61,7 @@ const applyAgentEvent = (
       progressChars: undefined,
     };
   }
-  if (action === "progress") {
-    const chars = (payload as Record<string, unknown>)?.chars as
-      | number
-      | undefined;
-    return { ...agent, progressChars: chars };
-  }
-  if (action === "finish") {
+  if (action === "end") {
     return {
       ...agent,
       status: "idle",
