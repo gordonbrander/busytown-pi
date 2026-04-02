@@ -11,18 +11,15 @@ import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import { type MemoryBlock } from "./memory/memory.ts";
+import {
+  type MemoryBlock,
+  MemoryBlockEntrySchema,
+  parseMemoryBlockEntries,
+  hydrateMemoryBlocks,
+} from "./memory/memory.ts";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
-
-export const MemoryBlockEntrySchema = Type.Object({
-  description: Type.String({ default: "" }),
-  value: Type.String({ default: "" }),
-  char_limit: Type.Number({ default: 2000 }),
-});
-
-export type MemoryBlockEntry = Static<typeof MemoryBlockEntrySchema>;
 
 export const HOOK_NAMES = [
   "session_start",
@@ -84,23 +81,6 @@ export type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
 
 export type MemoryBlockDef = MemoryBlock;
 
-const MemoryBlocksRecordSchema = Type.Record(Type.String(), Type.Unknown());
-
-const parseMemoryBlocks = (raw: unknown): Record<string, MemoryBlockDef> => {
-  if (!Value.Check(MemoryBlocksRecordSchema, raw)) return {};
-  const result: Record<string, MemoryBlockDef> = {};
-  for (const [key, block] of Object.entries(raw)) {
-    Value.Default(MemoryBlockEntrySchema, block);
-    const entry = block as MemoryBlockEntry;
-    result[key] = {
-      description: entry.description,
-      value: entry.value,
-      charLimit: entry.char_limit,
-    };
-  }
-  return result;
-};
-
 /** Normalize a raw hooks record: strip nulls, keep only valid hook names. */
 export const parseHooks = (raw: unknown): Hooks => {
   if (!raw || typeof raw !== "object") return {};
@@ -119,8 +99,8 @@ const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
   const d = data as Record<string, unknown>;
 
   d.hooks = parseHooks(d.hooks);
+  d.memory_blocks = parseMemoryBlockEntries(d.memory_blocks);
 
-  parseMemoryBlocks(d.memory_blocks);
   if (!Value.Check(AgentFrontmatterSchema, data)) {
     const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
     throw new Error(
@@ -194,7 +174,7 @@ export type AgentDef =
   | ShellAgentDef
   | ClaudeAgentDef;
 
-export const loadAgentDef = (filePath: string): AgentDef => {
+export const loadAgentDef = (filePath: string, cwd?: string): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
   const fm = parseAgentFrontmatter(data);
@@ -203,7 +183,9 @@ export const loadAgentDef = (filePath: string): AgentDef => {
     throw new Error(`Cannot derive agent ID from path: ${filePath}`);
   }
 
-  const memoryBlocks = parseMemoryBlocks(fm.memory_blocks);
+  const memoryBlocks = cwd
+    ? hydrateMemoryBlocks(cwd, id, parseMemoryBlockEntries(fm.memory_blocks))
+    : {};
 
   if (fm.type === "shell") {
     return {
@@ -270,26 +252,14 @@ export const loadAgentDef = (filePath: string): AgentDef => {
   };
 };
 
-/** Updates the frontmatter of an agent file in-place. */
-export const updateAgentFrontmatter = (
-  filePath: string,
-  updater: (frontmatter: AgentFrontmatter) => AgentFrontmatter,
-): void => {
-  const raw = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(raw);
-  const fm = parseAgentFrontmatter(data);
-  const updated = updater({ ...fm });
-  const output = matter.stringify(content, updated);
-  fs.writeFileSync(filePath, output);
-};
-
 export type AgentConfig = {
   path: string;
   dbPath: string;
+  cwd: string;
 };
 
 export const loadFileAgentOf = (config: AgentConfig): Agent => {
-  const agentDef = loadAgentDef(config.path);
+  const agentDef = loadAgentDef(config.path, config.cwd);
 
   const system = buildAgentAppendPrompt(agentDef);
 

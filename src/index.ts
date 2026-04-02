@@ -250,11 +250,11 @@ export default (pi: ExtensionAPI) => {
     if (agentName) {
       const agentsDir = path.join(projectRoot, ".pi", "agents");
       const agentFile = path.join(agentsDir, `${agentName}.md`);
-      const agent = loadAgentDef(agentFile);
+      const agent = loadAgentDef(agentFile, projectRoot);
 
       // Inject agent system prompt on every turn
       pi.on("before_agent_start", async (event) => {
-        const currentAgent = loadAgentDef(agentFile);
+        const currentAgent = loadAgentDef(agentFile, projectRoot);
         return {
           systemPrompt: buildAgentSystemPrompt(
             event.systemPrompt,
@@ -285,7 +285,7 @@ export default (pi: ExtensionAPI) => {
 
       // Register the update-memory tool if agent has memory blocks
       if (Object.keys(agent.memoryBlocks).length > 0) {
-        registerAgentMemoryTool(pi, agentFile);
+        registerAgentMemoryTool(pi, projectRoot, agent.id, agentFile);
       }
 
       // Register lifecycle hooks for pi agents

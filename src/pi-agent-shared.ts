@@ -18,7 +18,6 @@ import {
 } from "./event-queue.ts";
 import {
   loadAgentDef,
-  updateAgentFrontmatter,
   type AgentDef,
   type PiAgentDef,
   type Hooks,
@@ -26,6 +25,8 @@ import {
 } from "./file-agent.ts";
 import {
   applyMemoryUpdate,
+  readMemoryBlockValue,
+  writeMemoryBlockValue,
   renderMemoryBlocksPrompt,
 } from "./memory/memory.ts";
 import { nextTick } from "./lib/promise.ts";
@@ -188,6 +189,8 @@ export const registerBusytownTools = (
 /** Register the update-memory tool for agents with memory blocks. */
 export const registerAgentMemoryTool = (
   pi: ExtensionAPI,
+  cwd: string,
+  agentId: string,
   agentFile: string,
 ): void => {
   pi.registerTool({
@@ -217,7 +220,7 @@ export const registerAgentMemoryTool = (
       const newText = params.newText as string;
       const oldText = params.oldText as string | undefined;
 
-      // Re-read agent file to get current state
+      // Re-read agent def to get block schema (description, charLimit)
       const currentAgent = loadAgentDef(agentFile);
       const block = currentAgent.memoryBlocks[blockKey];
 
@@ -235,21 +238,17 @@ export const registerAgentMemoryTool = (
       }
 
       try {
+        // Read current value from disk
+        const currentValue = readMemoryBlockValue(cwd, agentId, blockKey);
         const result = applyMemoryUpdate(
-          block.value,
+          currentValue,
           block.charLimit,
           newText,
           oldText,
         );
 
-        // Write back to agent file
-        updateAgentFrontmatter(agentFile, (frontmatter) => {
-          const mb = frontmatter.memory_blocks ?? {};
-          if (Object.hasOwn(mb, blockKey)) {
-            mb[blockKey].value = result.text;
-          }
-          return { ...frontmatter, memory_blocks: mb };
-        });
+        // Write back to disk
+        writeMemoryBlockValue(cwd, agentId, blockKey, result.text);
 
         return {
           content: [

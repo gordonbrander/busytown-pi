@@ -1,10 +1,106 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import {
   applyMemoryUpdate,
+  hydrateMemoryBlocks,
+  memoryBlockPath,
+  parseMemoryBlockEntries,
+  readMemoryBlockValue,
+  writeMemoryBlockValue,
   renderMemoryBlockEntry,
   renderMemoryBlocksPrompt,
 } from "./memory.ts";
+
+let tmpDir: string;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "busytown-memory-test-"));
+});
+
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("parseMemoryBlockEntries", () => {
+  it("applies defaults for missing fields", () => {
+    const entries = parseMemoryBlockEntries({ notes: {} });
+    assert.deepEqual(entries.notes, {
+      description: "",
+      char_limit: 2000,
+    });
+  });
+
+  it("returns empty record for non-object input", () => {
+    assert.deepEqual(parseMemoryBlockEntries(undefined), {});
+    assert.deepEqual(parseMemoryBlockEntries(null), {});
+  });
+
+  it("parses provided values", () => {
+    const entries = parseMemoryBlockEntries({
+      agent: { description: "Agent notes", char_limit: 1000 },
+    });
+    assert.deepEqual(entries.agent, {
+      description: "Agent notes",
+      char_limit: 1000,
+    });
+  });
+});
+
+describe("memoryBlockPath", () => {
+  it("returns the expected path", () => {
+    const result = memoryBlockPath("/project", "my-agent", "notes");
+    assert.equal(
+      result,
+      path.join(
+        "/project",
+        ".pi",
+        "busytown",
+        "memory_blocks",
+        "my-agent",
+        "notes.md",
+      ),
+    );
+  });
+});
+
+describe("readMemoryBlockValue / writeMemoryBlockValue", () => {
+  it("returns empty string when file does not exist", () => {
+    assert.equal(readMemoryBlockValue(tmpDir, "agent", "notes"), "");
+  });
+
+  it("writes and reads back a value", () => {
+    writeMemoryBlockValue(tmpDir, "agent", "notes", "hello world");
+    assert.equal(readMemoryBlockValue(tmpDir, "agent", "notes"), "hello world");
+  });
+
+  it("overwrites existing value", () => {
+    writeMemoryBlockValue(tmpDir, "agent", "notes", "first");
+    writeMemoryBlockValue(tmpDir, "agent", "notes", "second");
+    assert.equal(readMemoryBlockValue(tmpDir, "agent", "notes"), "second");
+  });
+});
+
+describe("hydrateMemoryBlocks", () => {
+  it("reads values from disk into blocks", () => {
+    writeMemoryBlockValue(tmpDir, "agent", "notes", "some data");
+    const blocks = hydrateMemoryBlocks(tmpDir, "agent", {
+      notes: { description: "Agent notes", char_limit: 1000 },
+    });
+    assert.equal(blocks.notes.value, "some data");
+    assert.equal(blocks.notes.description, "Agent notes");
+    assert.equal(blocks.notes.charLimit, 1000);
+  });
+
+  it("returns empty value when no file exists", () => {
+    const blocks = hydrateMemoryBlocks(tmpDir, "agent", {
+      notes: { description: "Agent notes", char_limit: 1000 },
+    });
+    assert.equal(blocks.notes.value, "");
+  });
+});
 
 describe("applyMemoryUpdate", () => {
   it("replaces old text with new text", () => {

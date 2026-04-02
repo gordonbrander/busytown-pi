@@ -142,6 +142,7 @@ const startCommand = defineCommand({
         const agent = loadFileAgentOf({
           path: agentPath,
           dbPath,
+          cwd: projectRoot,
         });
         system.registerAgent(agent);
       }

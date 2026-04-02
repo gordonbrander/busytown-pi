@@ -27,7 +27,8 @@ export default (pi: ExtensionAPI) => {
   registerBusytownTools(pi, db, agentId);
 
   // Register lifecycle hooks + memory tool
-  const agent = loadAgentDef(agentFile);
+  const cwd = process.cwd();
+  const agent = loadAgentDef(agentFile, cwd);
 
   // Execute before_agent_start hook if defined
   if (agent.type === "pi" && agent.hooks.before_agent_start) {
@@ -56,7 +57,7 @@ export default (pi: ExtensionAPI) => {
   }
 
   if (Object.keys(agent.memoryBlocks).length > 0) {
-    registerAgentMemoryTool(pi, agentFile);
+    registerAgentMemoryTool(pi, cwd, agentId, agentFile);
   }
 
   // Log session file path as a busytown event
