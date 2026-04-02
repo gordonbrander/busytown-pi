@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 
 /**
  * Create a `ReadableStream<Uint8Array>` from a child process's stdout.
@@ -14,6 +14,22 @@ export const stdout = (proc: ChildProcess): ReadableStream<Uint8Array> =>
  */
 export const stderr = (proc: ChildProcess): ReadableStream<Uint8Array> =>
   processStream(proc, proc.stderr!);
+
+/**
+ * Create a `WritableStream<Uint8Array>` from a child process's stdin.
+ * The stream is aborted when the process exits to prevent hanging writes.
+ */
+export const stdin = (proc: ChildProcess): WritableStream<Uint8Array> => {
+  const webStream = Writable.toWeb(
+    proc.stdin! as Writable,
+  ) as WritableStream<Uint8Array>;
+
+  proc.once("exit", () => {
+    webStream.abort().catch(() => {});
+  });
+
+  return webStream;
+};
 
 /**
  * Wrap a child process's readable stream as a web `ReadableStream<Uint8Array>`
