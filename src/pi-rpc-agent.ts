@@ -12,7 +12,7 @@ import {
 import {
   fromPiAgentSessionEvent,
   type PiAgentSessionEvent,
-} from "./agent-session-event.ts";
+} from "./lib/agent-session-event.ts";
 import { type EventDraft, type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
@@ -178,7 +178,7 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
             if (sessionEvent) {
               // Enqueue the value.
               controller.enqueue({
-                type: `agent.${id}.messages`,
+                type: `agent.${id}.message`,
                 payload: value,
               });
             }
