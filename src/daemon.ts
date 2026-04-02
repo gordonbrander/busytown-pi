@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { getDaemonStatus, type DaemonStatus } from "./pidfile.ts";
@@ -18,6 +19,7 @@ export const spawnDaemon = async (
 
   const cliBin = resolveCliBin();
   const logPath = path.join(projectRoot, ".pi", "busytown", "daemon.log");
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
   const child = spawn(
     "node",
