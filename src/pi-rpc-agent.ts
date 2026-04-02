@@ -67,6 +67,8 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
 const onErrorNoOp = (): void => {};
 
 export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
+  logger.debug("Creating agent", { id: config.id });
+
   const {
     listen,
     ignoreSelf = true,
@@ -211,13 +213,18 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
   };
 
   const dispose = async (): Promise<void> => {
+    logger.debug("Disposing agent", { id: config.id });
     if (processAbortController.signal.aborted) return;
     // Abort immediately
     processAbortController.abort(new Error(`Pi process aborted via kill()`));
     await sendAbortCommandBestEffort();
     // Promise for completion of teardown
     return new Promise<void>((resolve) => {
-      proc.once("exit", resolve);
+      const onExit = (code: number): void => {
+        logger.debug("Agent process exited", { id: config.id, code });
+        resolve();
+      };
+      proc.once("exit", onExit);
       proc.kill("SIGTERM");
     });
   };
