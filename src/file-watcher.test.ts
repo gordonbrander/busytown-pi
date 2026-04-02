@@ -5,7 +5,8 @@ import { glob, any, DEFAULT_IGNORED } from "./file-watcher.ts";
 describe("glob", () => {
   it("matches a glob pattern", () => {
     assert(glob("*.ts")("file-watcher.ts"));
-    assert(glob("**/.pi/busytown/**")(".pi/busytown/events.db-wal"));
+    assert(glob("**/.pi/**")(".pi/busytown/events.db-wal"));
+    assert(glob("**/.pi/**")(".pi/sandbox.json"));
   });
 });
 
