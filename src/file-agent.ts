@@ -6,6 +6,7 @@ import path from "node:path";
 import { glob as globDir } from "node:fs/promises";
 import { pathToSlug } from "./lib/slug.ts";
 import { type Agent } from "./agent.ts";
+import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
 import { guessProvider } from "./pi-agent-shared.ts";
@@ -52,7 +53,12 @@ export const AgentFrontmatterSchema = Type.Object(
   {
     name: Type.Optional(Type.String()),
     type: Type.Union(
-      [Type.Literal("pi"), Type.Literal("shell"), Type.Literal("claude")],
+      [
+        Type.Literal("pi"),
+        Type.Literal("pi-rpc"),
+        Type.Literal("shell"),
+        Type.Literal("claude"),
+      ],
       { default: "pi" },
     ),
     description: Type.String({ default: "" }),
@@ -136,6 +142,22 @@ export type PiAgentDef = {
   hooks: Hooks;
 };
 
+export type PiRpcAgentDef = {
+  id: string;
+  filePath: string;
+  type: "pi-rpc";
+  description: string;
+  listen: string[];
+  ignoreSelf: boolean;
+  emits: string[];
+  tools: string[];
+  body: string;
+  model?: string;
+  provider?: string;
+  memoryBlocks: Record<string, MemoryBlockDef>;
+  hooks: Hooks;
+};
+
 export type ShellAgentDef = {
   id: string;
   filePath: string;
@@ -162,7 +184,11 @@ export type ClaudeAgentDef = {
   memoryBlocks: Record<string, MemoryBlockDef>;
 };
 
-export type AgentDef = PiAgentDef | ShellAgentDef | ClaudeAgentDef;
+export type AgentDef =
+  | PiAgentDef
+  | PiRpcAgentDef
+  | ShellAgentDef
+  | ClaudeAgentDef;
 
 export const loadAgentDef = (filePath: string): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
@@ -202,6 +228,24 @@ export const loadAgentDef = (filePath: string): AgentDef => {
       body: content.trim(),
       model: fm.model,
       memoryBlocks,
+    };
+  }
+
+  if (fm.type === "pi-rpc") {
+    return {
+      id,
+      filePath,
+      type: "pi-rpc",
+      description: fm.description,
+      listen: fm.listen,
+      ignoreSelf: fm.ignore_self,
+      emits: fm.emits,
+      tools: fm.tools,
+      body: content.trim(),
+      model: fm.model,
+      provider: fm.provider ?? (fm.model ? guessProvider(fm.model) : undefined),
+      memoryBlocks,
+      hooks: fm.hooks ?? {},
     };
   }
 
@@ -245,6 +289,19 @@ export const loadFileAgentOf = (config: AgentConfig): Agent => {
 
   switch (agentDef.type) {
     case "pi":
+      return piAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
+        model: agentDef.model,
+        provider: agentDef.provider,
+        env: {
+          BUSYTOWN_DB_PATH: config.dbPath,
+          BUSYTOWN_AGENT_ID: agentDef.id,
+          BUSYTOWN_AGENT_FILE: config.path,
+        },
+      });
+    case "pi-rpc":
       return piRpcAgentOf({
         id: agentDef.id,
         listen: agentDef.listen,
