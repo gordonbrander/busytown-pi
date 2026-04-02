@@ -62,7 +62,9 @@ export default (pi: ExtensionAPI) => {
 
   // Log session file path as a busytown event
   pi.on("session_start", async (_event, ctx) => {
-    const sessionFile = ctx.sessionManager.getSessionFile() ?? "";
-    pushEvent(db, agentId, `agent.${agentId}.session_start`, { sessionFile });
+    const sessionFile = ctx.sessionManager.getSessionFile();
+    if (sessionFile) {
+      pushEvent(db, agentId, `agent.${agentId}.session_start`, { sessionFile });
+    }
   });
 };
