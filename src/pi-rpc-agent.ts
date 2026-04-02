@@ -11,7 +11,6 @@ import {
 } from "./lib/web-stream.ts";
 import {
   fromPiAgentSessionEvent,
-  type AgentSessionEvent,
   type PiAgentSessionEvent,
 } from "./agent-session-event.ts";
 import { type EventDraft, type Event } from "./lib/event.ts";
