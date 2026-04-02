@@ -6,7 +6,6 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getOrOpenDb, pushEvent } from "./event-queue.ts";
 import { loadAgentDef } from "./file-agent.ts";
 import {
-  buildAgentSystemPrompt,
   execHook,
   registerAgentMemoryTool,
   registerAgentHooks,
@@ -23,17 +22,16 @@ export default (pi: ExtensionAPI) => {
     return;
   }
 
-  // Build system prompt via before_agent_start
-  pi.on("before_agent_start", async (event, ctx) => {
-    const agent = loadAgentDef(agentFile);
-    const systemPrompt = buildAgentSystemPrompt(event.systemPrompt, agent);
+  // Register busytown tools (push, events, claim)
+  const db = getOrOpenDb(dbPath);
+  registerBusytownTools(pi, db, agentId);
 
-    const result: {
-      systemPrompt: string;
-      message?: { customType: string; content: string; display: boolean };
-    } = { systemPrompt };
+  // Register lifecycle hooks + memory tool
+  const agent = loadAgentDef(agentFile);
 
-    if (agent.type === "pi" && agent.hooks.before_agent_start) {
+  // Execute before_agent_start hook if defined
+  if (agent.type === "pi" && agent.hooks.before_agent_start) {
+    pi.on("before_agent_start", async (event, ctx) => {
       const hookResult = await execHook(
         pi,
         agent.hooks,
@@ -42,23 +40,16 @@ export default (pi: ExtensionAPI) => {
         { prompt: event.prompt },
       );
       if (hookResult && hookResult.code === 0 && hookResult.stdout.trim()) {
-        result.message = {
-          customType: "busytown-hook",
-          content: hookResult.stdout,
-          display: true,
+        return {
+          message: {
+            customType: "busytown-hook",
+            content: hookResult.stdout,
+            display: true,
+          },
         };
       }
-    }
-
-    return result;
-  });
-
-  // Register busytown tools (push, events, claim)
-  const db = getOrOpenDb(dbPath);
-  registerBusytownTools(pi, db, agentId);
-
-  // Register lifecycle hooks + memory tool
-  const agent = loadAgentDef(agentFile);
+    });
+  }
 
   if (agent.type === "pi") {
     registerAgentHooks(pi, agent);

@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   lineStream,
   mapStream,
@@ -29,6 +27,8 @@ type PiCliFlagConfig = {
   provider?: string;
   /** Extension file paths to load via -e <path>. */
   extensions?: string[];
+  /** Appended to the system prompt via --append-system. */
+  system?: string;
 };
 
 export type PiAgentConfig = PiCliFlagConfig & {
@@ -43,18 +43,12 @@ export type PiAgentConfig = PiCliFlagConfig & {
   env?: Record<string, string | undefined>;
 };
 
-/** This directory */
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-
-/** Extension that installs Busytown Pi tools for agent */
-const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
-
 const buildCliArgs = (config: PiCliFlagConfig): string[] => {
   const args = ["--mode", "json", "-p", "--no-session"];
   if (config.provider) args.push("--provider", config.provider);
   if (config.model) args.push("--model", config.model);
   if (config.sessionDir) args.push("--session-dir", config.sessionDir);
-  args.push("-e", AGENT_EXTENSION_PATH);
+  if (config.system) args.push("--append-system", config.system);
   if (config.extensions) {
     for (const ext of config.extensions) {
       args.push("-e", ext);

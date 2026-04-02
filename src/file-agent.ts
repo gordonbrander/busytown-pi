@@ -3,14 +3,18 @@ import { Value } from "@sinclair/typebox/value";
 import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { glob as globDir } from "node:fs/promises";
 import { pathToSlug } from "./lib/slug.ts";
 import { type Agent } from "./agent.ts";
 import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
-import { guessProvider } from "./pi-agent-shared.ts";
+import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
 import { type MemoryBlock } from "./memory/memory.ts";
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
 
 export const MemoryBlockEntrySchema = Type.Object({
   description: Type.String({ default: "" }),
@@ -287,6 +291,8 @@ export type AgentConfig = {
 export const loadFileAgentOf = (config: AgentConfig): Agent => {
   const agentDef = loadAgentDef(config.path);
 
+  const system = buildAgentAppendPrompt(agentDef);
+
   switch (agentDef.type) {
     case "pi":
       return piAgentOf({
@@ -295,6 +301,8 @@ export const loadFileAgentOf = (config: AgentConfig): Agent => {
         ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
+        system,
+        extensions: [AGENT_EXTENSION_PATH],
         env: {
           BUSYTOWN_DB_PATH: config.dbPath,
           BUSYTOWN_AGENT_ID: agentDef.id,
@@ -308,6 +316,8 @@ export const loadFileAgentOf = (config: AgentConfig): Agent => {
         ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
+        system,
+        extensions: [AGENT_EXTENSION_PATH],
         env: {
           BUSYTOWN_DB_PATH: config.dbPath,
           BUSYTOWN_AGENT_ID: agentDef.id,

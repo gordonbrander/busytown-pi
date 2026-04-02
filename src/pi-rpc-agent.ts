@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Writable } from "node:stream";
 import {
   lineStream,
@@ -36,6 +34,8 @@ type PiRpcCliFlagConfig = {
   provider?: string;
   /** Extension file paths to load via -e <path>. */
   extensions?: string[];
+  /** Appended to the system prompt via --append-system. */
+  system?: string;
 };
 
 export type PiRpcAgentConfig = AgentConfig &
@@ -48,12 +48,6 @@ export type PiRpcAgentConfig = AgentConfig &
     env?: Record<string, string | undefined>;
   };
 
-/** This directory */
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-
-/** Extension that installs Busytown Pi tools for agent */
-const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
-
 const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   const args = ["--mode", "rpc"];
   if (config.provider) args.push("--provider", config.provider);
@@ -61,7 +55,12 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   if (config.sessionDir) {
     args.push("--session-dir", config.sessionDir);
   }
-  args.push("-e", AGENT_EXTENSION_PATH);
+  if (config.system) args.push("--append-system", config.system);
+  if (config.extensions) {
+    for (const ext of config.extensions) {
+      args.push("-e", ext);
+    }
+  }
   return args;
 };
 

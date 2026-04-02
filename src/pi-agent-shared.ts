@@ -70,9 +70,12 @@ export const buildAgentSystemPrompt = (
   basePrompt: string,
   agent: AgentDef,
 ): string => {
+  return [basePrompt, "", buildAgentAppendPrompt(agent)].join("\n");
+};
+
+/** Build the agent-specific system prompt (without base prompt). */
+export const buildAgentAppendPrompt = (agent: AgentDef): string => {
   return [
-    basePrompt,
-    "",
     `You are the "${agent.id}" agent. ${agent.description}`,
     "",
     agent.body,
