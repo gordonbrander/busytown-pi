@@ -36,6 +36,7 @@
     "picomatch": "^4.0.3"
   },
   "scripts": {
+    "coverage": "node --experimental-test-coverage --test",
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "eslint 'src/**/*.ts'",
