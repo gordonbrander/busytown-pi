@@ -479,7 +479,8 @@ const formatChars = (chars: number): string => {
 type FgColor = Parameters<Theme["fg"]>[0];
 
 const typeColor = (type: string): FgColor => {
-  if (type.startsWith("sys.agent.")) {
+  if (type.startsWith("agent.")) {
+    if (type.endsWith(".message")) return "error";
     if (type.endsWith(".error")) return "error";
     if (type.endsWith(".start")) return "accent";
     if (type.endsWith(".finish")) return "success";
