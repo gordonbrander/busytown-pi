@@ -38,7 +38,8 @@ const globalArgs = {
   },
   db: {
     type: "string" as const,
-    description: "Path to SQLite database (default: <dir>/.pi/busytown/events.db)",
+    description:
+      "Path to SQLite database (default: <dir>/.pi/busytown/events.db)",
   },
 };
 
