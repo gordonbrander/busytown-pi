@@ -167,6 +167,10 @@ describe("stream", () => {
     const stream = agent.stream(testEvent());
     const reader = stream.getReader();
 
+    // First event is the start lifecycle event
+    const { value: startEvent } = await reader.read();
+    assert.equal(startEvent!.type, "agent.cancel-agent.start");
+
     const { value } = await reader.read();
     assert.deepEqual(value, {
       type: "agent.cancel-agent.response",

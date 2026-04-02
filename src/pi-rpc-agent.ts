@@ -160,7 +160,10 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): Agent => {
           try {
             controller.enqueue({
               type: `agent.${id}.start`,
-              payload: { correlation_id: correlationId, event_type: event.type },
+              payload: {
+                correlation_id: correlationId,
+                event_type: event.type,
+              },
             });
             // Write the prompt command to Pi's stdin
             await sendEventPromptCommand(event);
