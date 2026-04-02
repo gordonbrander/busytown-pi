@@ -120,3 +120,44 @@ agent_end(correlation_id:"msg_1", total_input_tokens:1000, total_output_tokens:5
   by first chunk, end by `finish_reason`)
 - `toolcall_start` maps to first tool call chunk (provides name early)
 - `toolcall_end` maps to completed tool call (args fully accumulated)
+
+### Pi
+
+Pi's `ResponseEvent` stream is a superset of the simplified events — it
+includes streaming deltas and a `message_update` envelope that the simplified
+model omits.
+
+#### Structural differences
+
+| Concept            | Simplified                              | Pi                                                        |
+|--------------------|-----------------------------------------|-----------------------------------------------------------|
+| Granularity        | Coalesced — no deltas, just start/end   | Streaming — full start/delta/end triples                  |
+| Message wrapper    | None — content events are turn children | `message_start` / `message_update` / `message_end`        |
+| Content delivery   | `text_end` carries full text directly   | `message_update` sub-event with `text_end` carries text   |
+| Tool execution     | Single `tool_execution_end`             | `tool_execution_start` / `_update` / `_end` (streaming)   |
+| Correlation        | `correlation_id` on every event         | Implicit via nesting within the `agent.send()` stream     |
+| Token accounting   | On `turn_end` and `agent_end`           | On `turn_end` or left to the consumer                     |
+
+#### Event mapping
+
+| Simplified Event        | Pi Event(s)                              | Notes                                                        |
+|-------------------------|------------------------------------------|--------------------------------------------------------------|
+| `user_message`          | *(implicit — event passed to `send()`)*  | Simplified makes this explicit with an `id` → `correlation_id` |
+| `agent_start`           | `agent_start`                            | Same                                                         |
+| `agent_end`             | `agent_end`                              | Both carry `messages`; simplified adds total token counts     |
+| `turn_start`            | `turn_start`                             | Pi adds `turnIndex`                                          |
+| `turn_end`              | `turn_end`                               | Simplified carries tokens; Pi carries `message` + `toolResults` |
+| `thinking_start`        | `message_update { thinking_start }`      | Same content, different envelope                             |
+| `thinking_end`          | `message_update { thinking_end }`        | Both carry full assembled text                               |
+| `text_start`            | `message_update { text_start }`          | Same                                                         |
+| `text_end`              | `message_update { text_end }`            | Both carry full assembled text                               |
+| `toolcall_start`        | `message_update { toolcall_start }`      | Simplified includes `tool_call_id` and `name` upfront        |
+| `toolcall_end`          | `message_update { toolcall_end }`        | Both carry name + args; Pi nests under `toolCall` object     |
+| `tool_execution_end`    | `tool_execution_end`                     | Both carry `tool_call_id`, output/error                      |
+| `error`                 | `message_update { error }`               | Pi scopes to message; simplified is a top-level turn event   |
+| `compaction_start/end`  | `compaction_start/end`                   | Same fields                                                  |
+| `auto_retry_start/end`  | `auto_retry_start/end`                   | Same fields                                                  |
+
+Pi events with no simplified equivalent: `message_start`, `message_end`,
+`message_update { start }`, `message_update { done }`, all `*_delta` events,
+`tool_execution_start`, and `tool_execution_update`.
