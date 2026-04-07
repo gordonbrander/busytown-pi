@@ -10,6 +10,7 @@ import { type Agent } from "./agent.ts";
 import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
+import { claudeAgentOf } from "./claude-agent.ts";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
 import {
   type MemoryBlock,
@@ -309,7 +310,20 @@ export const loadFileAgentOf = (config: AgentConfig): Agent => {
         },
       });
     case "claude":
-      throw new Error("Claude agent not implemented yet");
+      return claudeAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
+        model: agentDef.model,
+        tools: agentDef.tools,
+        system,
+        cwd: config.cwd,
+        env: {
+          BUSYTOWN_DB_PATH: config.dbPath,
+          BUSYTOWN_AGENT_ID: agentDef.id,
+          BUSYTOWN_AGENT_FILE: config.path,
+        },
+      });
   }
 };
 
