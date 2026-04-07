@@ -14,7 +14,7 @@ import {
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
-import type { AgentSetup, SendFn } from "./agent.ts";
+import type { AgentSetup } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
