@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { virtualAgentOf } from "./virtual-agent.ts";
 import type { Event } from "./lib/event.ts";
-import { collect } from "./lib/generator.ts";
+import type { SendFn } from "./agent.ts";
 
 const testEvent = (overrides: Partial<Event> = {}): Event => ({
   id: 1,
@@ -13,114 +13,65 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
   ...overrides,
 });
 
+const noopSend: SendFn = async () => {};
+
 describe("virtualAgentOf", () => {
-  it("returns an agent with the configured properties", () => {
-    const agent = virtualAgentOf({
-      id: "my-agent",
-      listen: ["sys.reload"],
-      handler: () => {},
-    });
+  it("returns an AgentSetup that creates an agent", async () => {
+    const setup = virtualAgentOf(() => {});
+    const agent = await setup("my-agent", noopSend);
 
-    assert.equal(agent.id, "my-agent");
-    assert.deepEqual(agent.listen, ["sys.reload"]);
-    assert.equal(agent.ignoreSelf, true);
-    assert.equal(agent.disposed.aborted, false);
-  });
-
-  it("defaults ignoreSelf to true", () => {
-    const agent = virtualAgentOf({
-      id: "agent",
-      listen: [],
-      handler: () => {},
-    });
-    assert.equal(agent.ignoreSelf, true);
-  });
-
-  it("respects ignoreSelf config", () => {
-    const agent = virtualAgentOf({
-      id: "agent",
-      listen: [],
-      ignoreSelf: false,
-      handler: () => {},
-    });
-    assert.equal(agent.ignoreSelf, false);
-  });
-
-  it("validates id as slug", () => {
-    assert.throws(
-      () =>
-        virtualAgentOf({
-          id: "My Agent",
-          listen: [],
-          handler: () => {},
-        }),
-      /Invalid slug/,
-    );
+    assert.equal(typeof agent.handle, "function");
+    assert.equal(typeof agent[Symbol.asyncDispose], "function");
   });
 });
 
-describe("stream", () => {
-  it("calls handler with the event", () => {
+describe("handle", () => {
+  it("calls handler with send and event", async () => {
     const received: Event[] = [];
-    const agent = virtualAgentOf({
-      id: "handler-agent",
-      listen: ["*"],
-      handler: (event) => {
-        received.push(event);
-      },
+    const setup = virtualAgentOf((_send, event) => {
+      received.push(event);
     });
 
+    const agent = await setup("handler-agent", noopSend);
     const event = testEvent();
-    agent.stream(event);
+    await agent.handle(event);
+
     assert.equal(received.length, 1);
     assert.deepEqual(received[0], event);
   });
 
-  it("returns an empty stream", async () => {
-    const agent = virtualAgentOf({
-      id: "empty-agent",
-      listen: ["*"],
-      handler: () => {},
+  it("passes send function to handler", async () => {
+    const sent: Array<{ type: string; payload: unknown }> = [];
+    const fakeSend: SendFn = async (type, payload) => {
+      sent.push({ type, payload });
+    };
+
+    const setup = virtualAgentOf(async (send) => {
+      await send("test.response", { ok: true });
     });
 
-    const drafts = await collect(agent.stream(testEvent()));
-    assert.equal(drafts.length, 0);
+    const agent = await setup("sender-agent", fakeSend);
+    await agent.handle(testEvent());
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, "test.response");
   });
 
   it("throws after dispose", async () => {
-    const agent = virtualAgentOf({
-      id: "disposed-agent",
-      listen: ["*"],
-      handler: () => {},
-    });
+    const setup = virtualAgentOf(() => {});
+    const agent = await setup("disposed-agent", noopSend);
 
     await agent[Symbol.asyncDispose]();
-    assert.throws(() => agent.stream(testEvent()));
+    await assert.rejects(() => agent.handle(testEvent()), /disposed/i);
   });
 });
 
 describe("dispose", () => {
-  it("sets disposed signal to aborted", async () => {
-    const agent = virtualAgentOf({
-      id: "dispose-agent",
-      listen: ["*"],
-      handler: () => {},
-    });
-
-    assert.equal(agent.disposed.aborted, false);
-    await agent[Symbol.asyncDispose]();
-    assert.equal(agent.disposed.aborted, true);
-  });
-
   it("is idempotent", async () => {
-    const agent = virtualAgentOf({
-      id: "dispose-agent",
-      listen: ["*"],
-      handler: () => {},
-    });
+    const setup = virtualAgentOf(() => {});
+    const agent = await setup("dispose-agent", noopSend);
 
     await agent[Symbol.asyncDispose]();
-    await agent[Symbol.asyncDispose]();
-    assert.equal(agent.disposed.aborted, true);
+    await agent[Symbol.asyncDispose](); // Should not throw
   });
 });

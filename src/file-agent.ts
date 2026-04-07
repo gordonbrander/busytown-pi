@@ -6,11 +6,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { glob as globDir } from "node:fs/promises";
 import { pathToSlug } from "./lib/slug.ts";
-import { type Agent } from "./agent.ts";
 import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
+import type { AgentSetup } from "./agent.ts";
+import type { SpawnAgentConfig } from "./agent-system.ts";
 import {
   type MemoryBlock,
   MemoryBlockEntrySchema,
@@ -260,57 +261,50 @@ export type AgentConfig = {
   cwd: string;
 };
 
-export const loadFileAgentOf = (config: AgentConfig): Agent => {
-  const agentDef = loadAgentDef(config.path, config.cwd);
-
+const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
   const system = buildAgentAppendPrompt(agentDef);
+  const env = {
+    BUSYTOWN_DB_PATH: config.dbPath,
+    BUSYTOWN_AGENT_ID: agentDef.id,
+    BUSYTOWN_AGENT_FILE: config.path,
+  };
 
   switch (agentDef.type) {
     case "pi":
       return piAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
         system,
         extensions: [AGENT_EXTENSION_PATH],
-        env: {
-          BUSYTOWN_DB_PATH: config.dbPath,
-          BUSYTOWN_AGENT_ID: agentDef.id,
-          BUSYTOWN_AGENT_FILE: config.path,
-        },
+        env,
       });
     case "pi-rpc":
       return piRpcAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
         system,
         extensions: [AGENT_EXTENSION_PATH],
-        env: {
-          BUSYTOWN_DB_PATH: config.dbPath,
-          BUSYTOWN_AGENT_ID: agentDef.id,
-          BUSYTOWN_AGENT_FILE: config.path,
-        },
+        env,
       });
     case "shell":
       return shellAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
         shellScript: agentDef.body,
-        env: {
-          BUSYTOWN_DB_PATH: config.dbPath,
-          BUSYTOWN_AGENT_ID: agentDef.id,
-          BUSYTOWN_AGENT_FILE: config.path,
-        },
+        env,
       });
     case "claude":
       throw new Error("Claude agent not implemented yet");
   }
+};
+
+export const loadFileAgentOf = (config: AgentConfig): SpawnAgentConfig => {
+  const agentDef = loadAgentDef(config.path, config.cwd);
+
+  return {
+    id: agentDef.id,
+    listen: agentDef.listen,
+    ignoreSelf: agentDef.ignoreSelf,
+    setup: agentSetupOf(agentDef, config),
+  };
 };
 
 /**
