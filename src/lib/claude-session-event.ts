@@ -15,15 +15,19 @@ import type { AgentSessionEvent } from "./agent-session-event.ts";
 // Claude CLI stream-json event shapes (subset we care about)
 // ---------------------------------------------------------------------------
 
+export type ClaudeThinkingBlock = { type: "thinking"; thinking: string };
+export type ClaudeTextBlock = { type: "text"; text: string };
+export type ClaudeToolUseBlock = {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
+
 export type ClaudeContentBlock =
-  | { type: "thinking"; thinking: string }
-  | { type: "text"; text: string }
-  | {
-      type: "tool_use";
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-    }
+  | ClaudeThinkingBlock
+  | ClaudeTextBlock
+  | ClaudeToolUseBlock
   | { type: string; [key: string]: unknown };
 
 export type ClaudeStreamEvent =
@@ -85,7 +89,8 @@ export const fromClaudeStreamEvent = (
       for (let i = prevContentLength; i < content.length; i++) {
         const block = content[i];
         switch (block.type) {
-          case "thinking":
+          case "thinking": {
+            const b = block as ClaudeThinkingBlock;
             events.push({
               type: "thinking_start",
               correlation_id: correlationId,
@@ -95,10 +100,12 @@ export const fromClaudeStreamEvent = (
               type: "thinking_end",
               correlation_id: correlationId,
               contentIndex: i,
-              text: block.thinking,
+              text: b.thinking,
             });
             break;
-          case "text":
+          }
+          case "text": {
+            const b = block as ClaudeTextBlock;
             events.push({
               type: "text_start",
               correlation_id: correlationId,
@@ -108,26 +115,29 @@ export const fromClaudeStreamEvent = (
               type: "text_end",
               correlation_id: correlationId,
               contentIndex: i,
-              text: block.text,
+              text: b.text,
             });
             break;
-          case "tool_use":
+          }
+          case "tool_use": {
+            const b = block as ClaudeToolUseBlock;
             events.push({
               type: "toolcall_start",
               correlation_id: correlationId,
               contentIndex: i,
-              tool_call_id: block.id,
-              name: block.name,
+              tool_call_id: b.id,
+              name: b.name,
             });
             events.push({
               type: "toolcall_end",
               correlation_id: correlationId,
               contentIndex: i,
-              tool_call_id: block.id,
-              name: block.name,
-              args: block.input,
+              tool_call_id: b.id,
+              name: b.name,
+              args: b.input,
             });
             break;
+          }
         }
       }
 
