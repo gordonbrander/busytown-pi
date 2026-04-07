@@ -18,7 +18,12 @@ import type { AgentSessionEvent } from "./agent-session-event.ts";
 export type ClaudeContentBlock =
   | { type: "thinking"; thinking: string }
   | { type: "text"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    }
   | { type: string; [key: string]: unknown };
 
 export type ClaudeStreamEvent =
