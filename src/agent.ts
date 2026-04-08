@@ -9,7 +9,7 @@ export type HandleOptions = {
  * The agent receives a `send` function at construction time, allowing it to
  * emit events at any point in its lifecycle.
  */
-export type Agent = {
+export type AgentProc = {
   /**
    * Effectful event handler.
    * Promise signals when effects are complete. This can be used for
@@ -27,4 +27,11 @@ export type SendFn = (type: string, payload: unknown) => Promise<void>;
  * and returns an agent. This allows agents to emit events during
  * construction, and to know their own id for lifecycle events.
  */
-export type AgentSetup = (id: string, send: SendFn) => Promise<Agent>;
+export type AgentSetup = (id: string, send: SendFn) => Promise<AgentProc>;
+
+export type Agent = {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+  setup: AgentSetup;
+};

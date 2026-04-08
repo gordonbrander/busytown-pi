@@ -13,7 +13,7 @@ import {
 } from "./lib/agent-session-event.ts";
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import type { AgentSetup, HandleOptions } from "./agent.ts";
+import type { Agent, AgentSetup, HandleOptions } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });
 
@@ -58,7 +58,7 @@ const onErrorNoOp = (): void => {};
 /** A signal that will never abort */
 const neverAbortSignal = new AbortController().signal;
 
-export const piAgentOf = (config: PiAgentConfig): AgentSetup => {
+export const piAgentSetupOf = (config: PiAgentConfig): AgentSetup => {
   return async (id, send) => {
     const disposeController = new AbortController();
     const { onError = onErrorNoOp, env, cwd = process.cwd() } = config;
@@ -174,4 +174,15 @@ export const piAgentOf = (config: PiAgentConfig): AgentSetup => {
       [Symbol.asyncDispose]: dispose,
     };
   };
+};
+
+export type PiAgentFactoryConfig = PiAgentConfig & {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+};
+
+export const piAgentOf = (config: PiAgentFactoryConfig): Agent => {
+  const { id, listen, ignoreSelf, ...setupConfig } = config;
+  return { id, listen, ignoreSelf, setup: piAgentSetupOf(setupConfig) };
 };

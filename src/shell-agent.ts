@@ -3,7 +3,7 @@ import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { renderTemplate } from "./lib/template.ts";
 import { stderr, stdout, lineStream } from "./lib/web-stream.ts";
-import type { AgentSetup, HandleOptions } from "./agent.ts";
+import type { Agent, AgentSetup, HandleOptions } from "./agent.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });
 
@@ -15,7 +15,7 @@ export type ShellAgentConfig = {
 /** A signal that will never abort */
 const neverAbortSignal = new AbortController().signal;
 
-export const shellAgentOf = (config: ShellAgentConfig): AgentSetup => {
+export const shellAgentSetupOf = (config: ShellAgentConfig): AgentSetup => {
   return async (id, send) => {
     const disposeController = new AbortController();
     const { shellScript, env = {} } = config;
@@ -115,4 +115,15 @@ export const shellAgentOf = (config: ShellAgentConfig): AgentSetup => {
       [Symbol.asyncDispose]: dispose,
     };
   };
+};
+
+export type ShellAgentFactoryConfig = ShellAgentConfig & {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+};
+
+export const shellAgentOf = (config: ShellAgentFactoryConfig): Agent => {
+  const { id, listen, ignoreSelf, ...setupConfig } = config;
+  return { id, listen, ignoreSelf, setup: shellAgentSetupOf(setupConfig) };
 };

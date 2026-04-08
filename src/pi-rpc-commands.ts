@@ -4,4 +4,5 @@
  */
 export type PromptCommand = { type: "prompt"; message: string };
 export type AbortCommand = { type: "abort" };
-export type PiRpcCommand = PromptCommand | AbortCommand;
+export type CompactCommand = { type: "compact" };
+export type PiRpcCommand = PromptCommand | AbortCommand | CompactCommand;
