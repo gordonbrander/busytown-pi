@@ -10,7 +10,7 @@ import { piAgentOf } from "./pi-agent.ts";
 import { piRpcAgentOf, piRpcAgentSetupOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import type { AgentSetup, SpawnAgentConfig } from "./agent.ts";
+import type { AgentSetup, Agent } from "./agent.ts";
 import {
   type MemoryBlock,
   MemoryBlockEntrySchema,
@@ -295,7 +295,7 @@ const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
   }
 };
 
-export const loadFileAgentOf = (config: AgentConfig): SpawnAgentConfig => {
+export const loadFileAgentOf = (config: AgentConfig): Agent => {
   const agentDef = loadAgentDef(config.path, config.cwd);
 
   if (agentDef.type === "pi-rpc") {

@@ -14,7 +14,7 @@ import {
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
-import type { AgentSetup, SpawnAgentConfig } from "./agent.ts";
+import type { AgentSetup, Agent } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -56,7 +56,7 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => {};
+const onErrorNoOp = (): void => { };
 
 export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
   return async (id, send) => {
@@ -109,7 +109,7 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
           },
         }),
       )
-      .catch(() => {});
+      .catch(() => { });
 
     let disposed = false;
 
@@ -201,7 +201,7 @@ export type PiRpcAgentFactoryConfig = PiRpcAgentConfig & {
 
 export const piRpcAgentOf = (
   config: PiRpcAgentFactoryConfig,
-): SpawnAgentConfig => {
+): Agent => {
   const { id, listen, ignoreSelf, ...setupConfig } = config;
   return {
     id,

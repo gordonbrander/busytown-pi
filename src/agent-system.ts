@@ -4,9 +4,9 @@ import { pullNextMatchingEvent, pushEvent } from "./event-queue.ts";
 import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import {
-  type Agent,
+  type AgentProc,
   type SendFn,
-  type SpawnAgentConfig,
+  type Agent,
 } from "./agent.ts";
 import { parseSlug } from "./lib/slug.ts";
 
@@ -17,7 +17,7 @@ export type SystemStats = {
 };
 
 export type AgentSystem = {
-  spawnAgent(config: SpawnAgentConfig): Promise<string>;
+  spawnAgent(config: Agent): Promise<string>;
   disposeAgent(id: string): Promise<void>;
   stats(): SystemStats;
   [Symbol.asyncDispose](): Promise<void>;
@@ -27,7 +27,7 @@ type SpawnedAgent = {
   id: string;
   listen: string[];
   ignoreSelf: boolean;
-  agent: Agent;
+  agent: AgentProc;
   abortController: AbortController;
 };
 
@@ -85,7 +85,7 @@ export const agentSystemOf = (
     }
   };
 
-  const spawnAgent = async (config: SpawnAgentConfig): Promise<string> => {
+  const spawnAgent = async (config: Agent): Promise<string> => {
     systemAbortController.signal.throwIfAborted();
     const { ignoreSelf = true, listen, setup } = config;
     // Make sure ID is valid slug
