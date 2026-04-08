@@ -11,10 +11,9 @@ import {
   fromPiAgentSessionEvent,
   type PiAgentSessionEvent,
 } from "./lib/agent-session-event.ts";
-import { type EventDraft, type Event } from "./lib/event.ts";
+import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import type { Agent } from "./agent.ts";
-import { parseSlug } from "./lib/slug.ts";
+import type { AgentSetup, HandleOptions } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });
 
@@ -32,9 +31,6 @@ type PiCliFlagConfig = {
 };
 
 export type PiAgentConfig = PiCliFlagConfig & {
-  id: string;
-  listen: string[];
-  ignoreSelf?: boolean;
   /** Working directory for the Pi process. Defaults to process.cwd(). */
   cwd?: string;
   /** Called for each line written to stderr by the Pi process. */
@@ -59,142 +55,123 @@ const buildCliArgs = (config: PiCliFlagConfig): string[] => {
 
 const onErrorNoOp = (): void => {};
 
-export const piAgentOf = (config: PiAgentConfig): Agent => {
-  const {
-    listen,
-    ignoreSelf = true,
-    onError = onErrorNoOp,
-    env,
-    cwd = process.cwd(),
-  } = config;
+/** A signal that will never abort */
+const neverAbortSignal = new AbortController().signal;
 
-  const id = parseSlug(config.id);
-  const agentAbortController = new AbortController();
+export const piAgentOf = (config: PiAgentConfig): AgentSetup => {
+  return async (id, send) => {
+    const disposeController = new AbortController();
+    const { onError = onErrorNoOp, env, cwd = process.cwd() } = config;
 
-  const stream = (event: Event): ReadableStream<EventDraft> => {
-    agentAbortController.signal.throwIfAborted();
+    const handle = async (
+      event: Event,
+      { signal: handleAbortSignal = neverAbortSignal }: HandleOptions = {},
+    ): Promise<void> => {
+      if (disposeController.signal.aborted) {
+        throw new Error("Pi agent disposed");
+      }
 
-    const proc = spawn("pi", buildCliArgs(config), {
-      stdio: ["pipe", "pipe", "pipe"],
-      cwd,
-      env: { ...process.env, ...env },
-    });
+      const abortSignal = AbortSignal.any([
+        disposeController.signal,
+        handleAbortSignal,
+      ]);
+      const correlationId = `${event.id}`;
 
-    // Write the event as the prompt to stdin, then close stdin
-    const stdinWriter = stdin(proc).getWriter();
-    writeJsonLine(stdinWriter, event)
-      .then(() => stdinWriter.close())
-      .catch(() => {});
-
-    // Pipe stderr to onError (fire-and-forget)
-    stderr(proc)
-      .pipeThrough(lineStream())
-      .pipeTo(
-        new WritableStream({
-          write(line) {
-            onError({ type: "error", message: line });
-            logger.error("stderr", { agent: id, line });
-          },
-        }),
-      )
-      .catch((e) => {
-        logger.error("stderr", { agent: id, error: `${e}` });
+      const proc = spawn("pi", buildCliArgs(config), {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+        env: { ...process.env, ...env },
       });
 
-    // Parse stdout as JSONL PiAgentSessionEvent
-    const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)
-      .pipeThrough(lineStream())
-      .pipeThrough(mapStream(JSON.parse));
+      const onAbort = (): void => {
+        proc.kill("SIGTERM");
+      };
+      abortSignal.addEventListener("abort", onAbort, { once: true });
 
-    const reader = output.getReader();
+      // Write the event as the prompt to stdin, then close stdin
+      const stdinWriter = stdin(proc).getWriter();
+      writeJsonLine(stdinWriter, event)
+        .then(() => stdinWriter.close())
+        .catch(() => {});
 
-    const exitPromise = new Promise<{
-      code: number | null;
-      signal: string | null;
-    }>((resolve) => {
-      proc.once("exit", (code, signal) => resolve({ code, signal }));
-    });
+      // Pipe stderr to onError (fire-and-forget)
+      stderr(proc)
+        .pipeThrough(lineStream())
+        .pipeTo(
+          new WritableStream({
+            write(line) {
+              onError({ type: "error", message: line });
+              logger.error("stderr", { agent: id, line });
+            },
+          }),
+        )
+        .catch((e) => {
+          logger.error("stderr", { agent: id, error: `${e}` });
+        });
 
-    const cleanup = () => {
-      reader.releaseLock();
+      // Parse stdout as JSONL PiAgentSessionEvent
+      const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)
+        .pipeThrough(lineStream())
+        .pipeThrough(mapStream(JSON.parse));
+
+      const reader = output.getReader();
+
+      const exitPromise = new Promise<{
+        code: number | null;
+        signal: string | null;
+      }>((resolve) => {
+        proc.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+
+      await send(`agent.${id}.start`, {
+        correlation_id: correlationId,
+        event_type: event.type,
+      });
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            const { code, signal } = await exitPromise;
+            if (code !== 0 && code !== null) {
+              await send(`agent.${id}.error`, {
+                error: `Process exited unexpectedly (code ${code})`,
+                correlation_id: correlationId,
+                code,
+                signal,
+              });
+            }
+            break;
+          }
+
+          const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
+          if (sessionEvent) {
+            await send(`agent.${id}.message`, sessionEvent);
+          }
+
+          if (value.type === "agent_end") {
+            await send(`agent.${id}.end`, { correlation_id: correlationId });
+            break;
+          }
+        }
+      } catch (e) {
+        await send(`agent.${id}.error`, {
+          error: `${e}`,
+          correlation_id: correlationId,
+        });
+      } finally {
+        abortSignal.removeEventListener("abort", onAbort);
+        reader.releaseLock();
+      }
     };
 
-    const correlationId = `${event.id}`;
+    const dispose = async (): Promise<void> => {
+      disposeController.abort(new Error("Dispose pi-agent"));
+    };
 
-    return new ReadableStream<EventDraft>(
-      {
-        start(controller) {
-          controller.enqueue({
-            type: `agent.${id}.start`,
-            payload: { correlation_id: correlationId, event_type: event.type },
-          });
-        },
-        async pull(controller) {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              const { code, signal } = await exitPromise;
-              if (code !== 0 && code !== null) {
-                controller.enqueue({
-                  type: `agent.${id}.error`,
-                  payload: { correlation_id: correlationId, code, signal },
-                });
-              }
-              controller.enqueue({
-                type: `agent.${id}.end`,
-                payload: { correlation_id: correlationId },
-              });
-              cleanup();
-              controller.close();
-              return;
-            }
-
-            const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
-            if (sessionEvent) {
-              controller.enqueue({
-                type: `agent.${id}.message`,
-                payload: value,
-              });
-            }
-
-            if (value.type === "agent_end") {
-              controller.enqueue({
-                type: `agent.${id}.end`,
-                payload: { correlation_id: correlationId },
-              });
-              cleanup();
-              controller.close();
-              return;
-            }
-          } catch (e) {
-            controller.enqueue({
-              type: `agent.${id}.error`,
-              payload: { correlation_id: correlationId, error: String(e) },
-            });
-            cleanup();
-            controller.error(e);
-          }
-        },
-        cancel() {
-          proc.kill("SIGTERM");
-          cleanup();
-        },
-      },
-      { highWaterMark: 0 },
-    );
-  };
-
-  const dispose = async (): Promise<void> => {
-    if (agentAbortController.signal.aborted) return;
-    agentAbortController.abort(new Error("Pi agent disposed"));
-  };
-
-  return {
-    id,
-    listen,
-    ignoreSelf,
-    stream,
-    disposed: agentAbortController.signal,
-    [Symbol.asyncDispose]: dispose,
+    return {
+      handle,
+      [Symbol.asyncDispose]: dispose,
+    };
   };
 };

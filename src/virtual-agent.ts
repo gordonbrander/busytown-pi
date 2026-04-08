@@ -1,43 +1,38 @@
-import type { Agent } from "./agent.ts";
 import type { Event } from "./lib/event.ts";
-import type { EventDraft } from "./lib/event.ts";
-import { parseSlug } from "./lib/slug.ts";
+import type { AgentSetup, HandleOptions, SendFn } from "./agent.ts";
 
-export type VirtualAgentHandler = (event: Event) => void | Promise<void>;
+export type AgentHandler = (
+  send: SendFn,
+  event: Event,
+  options: HandleOptions,
+) => void | Promise<void>;
 
-export type VirtualAgentConfig = {
-  id: string;
-  listen: string[];
-  ignoreSelf?: boolean;
-  handler: VirtualAgentHandler;
-};
+const neverAbortSignal = new AbortController().signal;
 
-export const virtualAgentOf = (config: VirtualAgentConfig): Agent => {
-  const { listen, ignoreSelf = true, handler } = config;
-  const id = parseSlug(config.id);
-  const abortController = new AbortController();
+export const virtualAgentOf =
+  (handler: AgentHandler): AgentSetup =>
+  async (_id, send) => {
+    const disposedController = new AbortController();
 
-  const stream = (event: Event): ReadableStream<EventDraft> => {
-    abortController.signal.throwIfAborted();
-    return new ReadableStream<EventDraft>({
-      async start(controller) {
-        await handler(event);
-        controller.close();
-      },
-    });
+    const handle = async (
+      event: Event,
+      { signal: abortHandleSignal = neverAbortSignal }: HandleOptions = {},
+    ): Promise<void> => {
+      if (disposedController.signal.aborted)
+        throw new Error("Agent is disposed");
+      const abortSignal = AbortSignal.any([
+        disposedController.signal,
+        abortHandleSignal,
+      ]);
+      await handler(send, event, { signal: abortSignal });
+    };
+
+    const dispose = async (): Promise<void> => {
+      disposedController.abort(new Error("Abort virtual-agent"));
+    };
+
+    return {
+      handle,
+      [Symbol.asyncDispose]: dispose,
+    };
   };
-
-  const asyncDispose = async (): Promise<void> => {
-    if (abortController.signal.aborted) return;
-    abortController.abort(new Error("Virtual agent disposed"));
-  };
-
-  return {
-    id,
-    listen,
-    ignoreSelf,
-    stream,
-    disposed: abortController.signal,
-    [Symbol.asyncDispose]: asyncDispose,
-  };
-};

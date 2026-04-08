@@ -139,21 +139,19 @@ const startCommand = defineCommand({
 
       const dbPath = unwrap(toOption(db.location()), "No database location");
       for await (const agentPath of listAgentPaths(agentsDir)) {
-        const agent = loadFileAgentOf({
+        const config = loadFileAgentOf({
           path: agentPath,
           dbPath,
           cwd: projectRoot,
         });
-        system.registerAgent(agent);
+        await system.spawnAgent(config);
       }
 
-      system.registerAgent(
-        virtualAgentOf({
-          id: "_sys-reload",
-          listen: ["sys.reload"],
-          handler: () => reloadSystem(),
-        }),
-      );
+      await system.spawnAgent({
+        id: "_sys-reload",
+        listen: ["sys.reload"],
+        setup: virtualAgentOf(() => reloadSystem()),
+      });
 
       logger.info("Agent system started", { stats: system.stats() });
     };

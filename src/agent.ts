@@ -1,41 +1,30 @@
-import type { Event, EventDraft } from "./lib/event.ts";
+import type { Event } from "./lib/event.ts";
+
+export type HandleOptions = {
+  signal?: AbortSignal;
+};
 
 /**
- * An agent process
- * Underlying implementation may be short lived or long-lived.
+ * An agent that handles events effectfully.
+ * The agent receives a `send` function at construction time, allowing it to
+ * emit events at any point in its lifecycle.
  */
-export type AgentProcess = {
+export type Agent = {
   /**
-   * Send an event and stream responses from the agent.
-   * Stream represents the responses for a single agent cycle, e.g.:
-   * ```
-   * user message -> (response -> tool call -> tool result -> response... -> final response)
-   * ```
-   * @throws {Error} if called after the disposed signal has been aborted.
-   * @returns a readable stream of event drafts.
+   * Effectful event handler.
+   * Promise signals when effects are complete. This can be used for
+   * backpressure.
    */
-  stream(event: Event): ReadableStream<EventDraft>;
-
-  /**
-   * Signals when the process is disposed.
-   * Implementors should abort the signal immediately when `agent.dispose()` is
-   * called, and not wait for disposal completion.
-   * Other methods such as `stream()` should throw an error when called after
-   * the disposed signal has been aborted.
-   */
-  disposed: AbortSignal;
-
-  /**
-   * Teardown and clean up any internal long-lived resources.
-   * Implementors should make this method idempotent.
-   * Calling this should also cause the `disposed` AbortSignal to be aborted.
-   * @returns promise for the completion of the teardown.
-   */
+  handle(event: Event, options?: HandleOptions): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
 };
 
-export type Agent = AgentProcess & {
-  id: string;
-  listen: string[];
-  ignoreSelf: boolean;
-};
+/** Push an event to the queue */
+export type SendFn = (type: string, payload: unknown) => Promise<void>;
+
+/**
+ * Agent setup function. Receives the agent's id and a `send` function,
+ * and returns an agent. This allows agents to emit events during
+ * construction, and to know their own id for lifecycle events.
+ */
+export type AgentSetup = (id: string, send: SendFn) => Promise<Agent>;

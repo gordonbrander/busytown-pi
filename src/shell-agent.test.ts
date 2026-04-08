@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { shellAgentOf } from "./shell-agent.ts";
 import type { Event } from "./lib/event.ts";
-import { collect } from "./lib/generator.ts";
+import type { SendFn } from "./agent.ts";
 
 const testEvent = (overrides: Partial<Event> = {}): Event => ({
   id: 1,
@@ -13,130 +13,104 @@ const testEvent = (overrides: Partial<Event> = {}): Event => ({
   ...overrides,
 });
 
+const collectSent = (): {
+  sent: Array<{ type: string; payload: unknown }>;
+  send: SendFn;
+} => {
+  const sent: Array<{ type: string; payload: unknown }> = [];
+  const send: SendFn = async (type, payload) => {
+    sent.push({ type, payload });
+  };
+  return { sent, send };
+};
+
 describe("shellAgentOf", () => {
   it(
-    "returns an agent with the configured properties",
+    "returns an AgentSetup that creates an agent",
     { timeout: 2000 },
-    () => {
-      const agent = shellAgentOf({
-        id: "my-agent",
-        listen: ["test.*"],
-        shellScript: "echo hi",
-      });
+    async () => {
+      const setup = shellAgentOf({ shellScript: "echo hi" });
+      const { send } = collectSent();
+      const agent = await setup("my-agent", send);
 
-      assert.equal(agent.id, "my-agent");
-      assert.deepEqual(agent.listen, ["test.*"]);
-      assert.equal(agent.ignoreSelf, true);
-      assert.equal(agent.disposed.aborted, false);
+      assert.equal(typeof agent.handle, "function");
+      assert.equal(typeof agent[Symbol.asyncDispose], "function");
     },
   );
-
-  it("defaults ignoreSelf to true", { timeout: 2000 }, () => {
-    const agent = shellAgentOf({
-      id: "agent",
-      listen: [],
-      shellScript: "echo hi",
-    });
-    assert.equal(agent.ignoreSelf, true);
-  });
-
-  it("respects ignoreSelf config", { timeout: 2000 }, () => {
-    const agent = shellAgentOf({
-      id: "agent",
-      listen: [],
-      ignoreSelf: true,
-      shellScript: "echo hi",
-    });
-    assert.equal(agent.ignoreSelf, true);
-  });
 });
 
-describe("stream", () => {
-  it("streams stdout lines as response events", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "echo-agent",
-      listen: ["*"],
+describe("handle", () => {
+  it("sends stdout lines as response events", { timeout: 2000 }, async () => {
+    const setup = shellAgentOf({
       shellScript: 'echo "line one" && echo "line two"',
     });
+    const { sent, send } = collectSent();
+    const agent = await setup("echo-agent", send);
 
-    const drafts = await collect(agent.stream(testEvent()));
+    await agent.handle(testEvent());
 
-    assert.equal(drafts.length, 4);
-    assert.equal(drafts[0].type, "agent.echo-agent.start");
-    assert.deepEqual(drafts[1], {
-      type: "agent.echo-agent.response",
-      payload: { line: "line one" },
-    });
-    assert.deepEqual(drafts[2], {
-      type: "agent.echo-agent.response",
-      payload: { line: "line two" },
-    });
-    assert.equal(drafts[3].type, "agent.echo-agent.end");
+    const types = sent.map((s) => s.type);
+    assert.ok(types.includes("agent.echo-agent.start"));
+    assert.ok(types.includes("agent.echo-agent.end"));
+
+    const responses = sent.filter((s) => s.type === "agent.echo-agent.output");
+    assert.equal(responses.length, 2);
+    assert.deepEqual(responses[0].payload, { line: "line one" });
+    assert.deepEqual(responses[1].payload, { line: "line two" });
   });
 
   it(
     "templates event fields into the shell script",
     { timeout: 2000 },
     async () => {
-      const agent = shellAgentOf({
-        id: "template-agent",
-        listen: ["*"],
-        shellScript: "echo {{type}}",
-      });
+      const setup = shellAgentOf({ shellScript: "echo {{type}}" });
+      const { sent, send } = collectSent();
+      const agent = await setup("template-agent", send);
 
-      const event = testEvent({ type: "task.created" });
-      const drafts = await collect(agent.stream(event));
+      await agent.handle(testEvent({ type: "task.created" }));
 
-      assert.equal(drafts.length, 3);
-      assert.equal(drafts[0].type, "agent.template-agent.start");
-      assert.deepEqual(drafts[1], {
-        type: "agent.template-agent.response",
-        payload: { line: "task.created" },
-      });
-      assert.equal(drafts[2].type, "agent.template-agent.end");
+      const responses = sent.filter(
+        (s) => s.type === "agent.template-agent.output",
+      );
+      assert.equal(responses.length, 1);
+      assert.deepEqual(responses[0].payload, { line: "task.created" });
     },
   );
 
   it("templates nested payload fields", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "nested-agent",
-      listen: ["*"],
+    const setup = shellAgentOf({
       shellScript: "echo {{{payload.message}}}",
     });
+    const { sent, send } = collectSent();
+    const agent = await setup("nested-agent", send);
 
-    const event = testEvent({ payload: { message: "hello" } });
-    const drafts = await collect(agent.stream(event));
+    await agent.handle(testEvent({ payload: { message: "hello" } }));
 
-    assert.equal(drafts.length, 3);
-    assert.equal(drafts[0].type, "agent.nested-agent.start");
-    assert.deepEqual(drafts[1], {
-      type: "agent.nested-agent.response",
-      payload: { line: "hello" },
-    });
-    assert.equal(drafts[2].type, "agent.nested-agent.end");
+    const responses = sent.filter(
+      (s) => s.type === "agent.nested-agent.output",
+    );
+    assert.equal(responses.length, 1);
+    assert.deepEqual(responses[0].payload, { line: "hello" });
   });
 
   it(
-    "emits an error event on non-zero exit code",
+    "sends an error event on non-zero exit code",
     { timeout: 2000 },
     async () => {
-      const agent = shellAgentOf({
-        id: "fail-agent",
-        listen: ["*"],
+      const setup = shellAgentOf({
         shellScript: "echo before && exit 1",
       });
+      const { sent, send } = collectSent();
+      const agent = await setup("fail-agent", send);
 
-      const drafts = await collect(agent.stream(testEvent()));
+      await agent.handle(testEvent());
 
-      assert.equal(drafts.length, 4);
-      assert.equal(drafts[0].type, "agent.fail-agent.start");
-      assert.deepEqual(drafts[1], {
-        type: "agent.fail-agent.response",
-        payload: { line: "before" },
-      });
-      assert.equal(drafts[2].type, "agent.fail-agent.error");
-      assert.equal((drafts[2].payload as { code: number }).code, 1);
-      assert.equal(drafts[3].type, "agent.fail-agent.end");
+      const errors = sent.filter((s) => s.type === "agent.fail-agent.error");
+      assert.equal(errors.length, 1);
+      assert.equal((errors[0].payload as { code: number }).code, 1);
+
+      const ends = sent.filter((s) => s.type === "agent.fail-agent.end");
+      assert.equal(ends.length, 0);
     },
   );
 
@@ -144,77 +118,40 @@ describe("stream", () => {
     "closes cleanly for a script with no output",
     { timeout: 2000 },
     async () => {
-      const agent = shellAgentOf({
-        id: "silent-agent",
-        listen: ["*"],
-        shellScript: "true",
-      });
+      const setup = shellAgentOf({ shellScript: "true" });
+      const { sent, send } = collectSent();
+      const agent = await setup("silent-agent", send);
 
-      const drafts = await collect(agent.stream(testEvent()));
-      assert.equal(drafts.length, 2);
-      assert.equal(drafts[0].type, "agent.silent-agent.start");
-      assert.equal(drafts[1].type, "agent.silent-agent.end");
+      await agent.handle(testEvent());
+
+      const types = sent.map((s) => s.type);
+      assert.ok(types.includes("agent.silent-agent.start"));
+      assert.ok(types.includes("agent.silent-agent.end"));
+
+      const responses = sent.filter(
+        (s) => s.type === "agent.silent-agent.response",
+      );
+      assert.equal(responses.length, 0);
     },
   );
-
-  it("supports cancellation via stream cancel", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "cancel-agent",
-      listen: ["*"],
-      shellScript: "echo start && sleep 60",
-    });
-
-    const stream = agent.stream(testEvent());
-    const reader = stream.getReader();
-
-    // First event is the start lifecycle event
-    const { value: startEvent } = await reader.read();
-    assert.equal(startEvent!.type, "agent.cancel-agent.start");
-
-    const { value } = await reader.read();
-    assert.deepEqual(value, {
-      type: "agent.cancel-agent.response",
-      payload: { line: "start" },
-    });
-
-    // Cancel the stream, which should kill the process
-    await reader.cancel();
-  });
 });
 
 describe("dispose", () => {
-  it("sets disposed signal to aborted", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "dispose-agent",
-      listen: ["*"],
-      shellScript: "echo hi",
-    });
+  it("throws on handle after dispose", { timeout: 2000 }, async () => {
+    const setup = shellAgentOf({ shellScript: "echo hi" });
+    const { send } = collectSent();
+    const agent = await setup("disposed-agent", send);
 
-    assert.equal(agent.disposed.aborted, false);
     await agent[Symbol.asyncDispose]();
-    assert.equal(agent.disposed.aborted, true);
+    await assert.rejects(() => agent.handle(testEvent()), /disposed/i);
   });
 
   it("is idempotent", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "dispose-agent",
-      listen: ["*"],
-      shellScript: "echo hi",
-    });
+    const setup = shellAgentOf({ shellScript: "echo hi" });
+    const { send } = collectSent();
+    const agent = await setup("dispose-agent", send);
 
     await agent[Symbol.asyncDispose]();
-    await agent[Symbol.asyncDispose]();
-    assert.equal(agent.disposed.aborted, true);
-  });
-
-  it("throws on stream after dispose", { timeout: 2000 }, async () => {
-    const agent = shellAgentOf({
-      id: "disposed-agent",
-      listen: ["*"],
-      shellScript: "echo hi",
-    });
-
-    await agent[Symbol.asyncDispose]();
-    assert.throws(() => agent.stream(testEvent()));
+    await agent[Symbol.asyncDispose](); // Should not throw
   });
 });

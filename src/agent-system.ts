@@ -1,10 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { eventMatches, type Event } from "./lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "./event-queue.ts";
-import { abortableSleep } from "./lib/promise.ts";
-import { asyncDispose } from "./lib/dispose.ts";
+import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import { type Agent } from "./agent.ts";
+import { type Agent, type AgentSetup, type SendFn } from "./agent.ts";
+import { parseSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "agent-system.ts" });
 
@@ -12,12 +12,37 @@ export type SystemStats = {
   agents: string[];
 };
 
+export type SpawnAgentConfig = {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+  setup: AgentSetup;
+};
+
 export type AgentSystem = {
-  registerAgent: (agent: Agent) => string;
-  disposeAgent: (id: string) => Promise<void>;
-  stats: () => SystemStats;
+  spawnAgent(config: SpawnAgentConfig): Promise<string>;
+  disposeAgent(id: string): Promise<void>;
+  stats(): SystemStats;
   [Symbol.asyncDispose](): Promise<void>;
 };
+
+type SpawnedAgent = {
+  id: string;
+  listen: string[];
+  ignoreSelf: boolean;
+  agent: Agent;
+  abortController: AbortController;
+};
+
+/** Create a predicate function that checks if agent should handle event. */
+export const shouldHandleEventOf =
+  (id: string, ignoreSelf: boolean, listen: string[]) =>
+  (event: Event): boolean => {
+    if (ignoreSelf && event.agent_id === id) {
+      return false;
+    }
+    return eventMatches(event, listen);
+  };
 
 export const agentSystemOf = (
   db: DatabaseSync,
@@ -25,97 +50,105 @@ export const agentSystemOf = (
 ): AgentSystem => {
   logger.debug("Agent system created");
   const systemAbortController = new AbortController();
-  // Registry of agents
-  const agents: Map<string, Agent> = new Map();
 
-  const stats = (): SystemStats => {
-    return {
-      agents: Array.from(agents.keys()),
-    };
-  };
+  // Registry of spawned agents
+  const agents: Map<string, SpawnedAgent> = new Map();
 
-  const forkAgentPollLoop = async (agent: Agent): Promise<void> => {
-    // If either the agent or the system is disposed, abort the loop
+  const stats = (): SystemStats => ({
+    agents: Array.from(agents.keys()),
+  });
+
+  const forkAgentPollLoop = async (entry: SpawnedAgent): Promise<void> => {
+    const { id, listen, ignoreSelf, agent, abortController } = entry;
+
     const signal = AbortSignal.any([
-      agent.disposed,
+      abortController.signal,
       systemAbortController.signal,
     ]);
 
-    const shouldHandleEvent = (event: Event) => {
-      if (agent.ignoreSelf && event.agent_id === agent.id) {
-        return false;
-      }
-      return eventMatches(event, agent.listen);
-    };
+    const shouldHandleEvent = shouldHandleEventOf(id, ignoreSelf, listen);
 
     try {
       while (!signal.aborted) {
-        const event = pullNextMatchingEvent(db, agent.id, shouldHandleEvent);
+        const event = pullNextMatchingEvent(db, id, shouldHandleEvent);
 
         if (!event) {
           await abortableSleep(timeout, signal);
           continue;
         }
 
-        for await (const draft of agent.stream(event)) {
-          // Break the stream if either agent or system aborted.
-          // This will run ReadableStream.cancel() and clean up resources.
-          if (signal.aborted) {
-            break;
-          }
-          pushEvent(db, agent.id, draft.type, draft.payload);
-        }
+        if (signal.aborted) break;
+
+        await agent.handle(event, { signal });
       }
     } catch (e) {
-      logger.warn("Agent poll loop error", { error: `${e}` });
-    } finally {
-      await asyncDispose(agent);
+      if (!signal.aborted) {
+        logger.warn("Agent poll loop error", { agent_id: id, error: `${e}` });
+      }
     }
   };
 
-  const registerAgent = (agent: Agent): string => {
+  const spawnAgent = async (config: SpawnAgentConfig): Promise<string> => {
     systemAbortController.signal.throwIfAborted();
-    agent.disposed.throwIfAborted();
+    const { ignoreSelf = true, listen, setup } = config;
+    // Make sure ID is valid slug
+    const id = parseSlug(config.id);
 
-    if (agents.has(agent.id)) {
-      throw new Error(`Agent with id ${agent.id} already registered`);
+    if (agents.has(id)) {
+      throw new Error(`Agent with id ${id} already registered`);
     }
 
-    logger.debug("Register agent", { id: agent.id });
+    logger.debug("Spawning agent", { id });
 
-    // Automatically unregister agent if killed
-    agent.disposed.addEventListener(
-      "abort",
-      () => {
-        agents.delete(agent.id);
-      },
-      { once: true },
-    );
+    const send: SendFn = async (type, payload) => {
+      await nextTick();
+      pushEvent(db, id, type, payload);
+    };
 
-    forkAgentPollLoop(agent);
+    try {
+      const agent = await setup(id, send);
+      const abortController = new AbortController();
 
-    agents.set(agent.id, agent);
+      const entry: SpawnedAgent = {
+        id,
+        listen,
+        ignoreSelf,
+        agent,
+        abortController,
+      };
 
-    return agent.id;
+      agents.set(id, entry);
+      forkAgentPollLoop(entry);
+
+      return id;
+    } catch (e) {
+      logger.error("Error spawning agent", {
+        id,
+        error: `${e}`,
+      });
+      throw e;
+    }
   };
 
   const disposeAgent = async (id: string): Promise<void> => {
     logger.debug("Disposing agent", { id });
-    const agent = agents.get(id);
-    if (!agent) {
-      return;
-    }
-    // Clean up and automatically unregister via abort event
-    await asyncDispose(agent);
+    const entry = agents.get(id);
+    if (!entry) return;
+
+    // First abort the poll loop
+    entry.abortController.abort(new Error("Agent disposed"));
+    // Then dispose the agent
+    await entry.agent[Symbol.asyncDispose]();
+    // Then delete reference. Waiting to delete ref lets us retry dispose if it fails.
+    agents.delete(id);
     logger.debug("Disposed agent", { id });
   };
 
   const disposeSystem = async (): Promise<void> => {
     logger.debug("Disposing agent system");
-    if (systemAbortController.signal.aborted) {
-      return;
-    }
+    if (systemAbortController.signal.aborted) return;
     systemAbortController.abort(new Error("System stopped"));
+
     const kills = Array.from(agents.keys()).map(disposeAgent);
     await Promise.allSettled(kills);
     agents.clear();
@@ -123,7 +156,7 @@ export const agentSystemOf = (
   };
 
   return {
-    registerAgent,
+    spawnAgent,
     disposeAgent,
     stats,
     [Symbol.asyncDispose]: disposeSystem,

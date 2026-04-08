@@ -1,47 +1,29 @@
-import type { Event, EventDraft } from "./lib/event.ts";
-import type { Agent } from "./agent.ts";
+import type { Event } from "./lib/event.ts";
+import type { AgentSetup, SendFn } from "./agent.ts";
 
-export type MockAgentOpts = {
-  id: string;
-  listen?: string[];
-  ignoreSelf?: boolean;
-  onEvent?: (event: Event) => EventDraft[];
-};
-
-export type MockAgent = Agent & {
+export type MockAgent = {
   received: Event[];
+  setup: AgentSetup;
 };
 
-export const mockAgentOf = (opts: MockAgentOpts): MockAgent => {
-  const abortController = new AbortController();
+export const mockAgentOf = (
+  onEvent?: (send: SendFn, event: Event) => void | Promise<void>,
+): MockAgent => {
   const received: Event[] = [];
 
-  return {
-    id: opts.id,
-    listen: opts.listen ?? ["*"],
-    ignoreSelf: opts.ignoreSelf ?? true,
-    received,
-
-    stream(event: Event): ReadableStream<EventDraft> {
-      abortController.signal.throwIfAborted();
-      received.push(event);
-      const drafts = opts.onEvent?.(event) ?? [];
-      return new ReadableStream({
-        start(controller) {
-          for (const draft of drafts) {
-            controller.enqueue(draft);
-          }
-          controller.close();
-        },
-      });
-    },
-
-    disposed: abortController.signal,
-
-    async [Symbol.asyncDispose](): Promise<void> {
-      if (!abortController.signal.aborted) {
-        abortController.abort(new Error("Mock agent disposed"));
-      }
-    },
+  const setup: AgentSetup = async (_id, send) => {
+    let disposed = false;
+    return {
+      async handle(event) {
+        if (disposed) throw new Error("Mock agent disposed");
+        received.push(event);
+        await onEvent?.(send, event);
+      },
+      async [Symbol.asyncDispose]() {
+        disposed = true;
+      },
+    };
   };
+
+  return { received, setup };
 };
