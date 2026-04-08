@@ -119,7 +119,7 @@ export const agentSystemOf = (
       agents.set(id, entry);
       forkAgentPollLoop(entry);
 
-      return config.id;
+      return id;
     } catch (e) {
       logger.error("Error spawning agent", {
         id,
