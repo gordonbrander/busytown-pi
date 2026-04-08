@@ -13,7 +13,7 @@ import {
 } from "./lib/agent-session-event.ts";
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import type { AgentSetup, HandleOptions, SendFn } from "./agent.ts";
+import type { AgentSetup, HandleOptions } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });
 
@@ -65,12 +65,12 @@ export const piAgentOf = (config: PiAgentConfig): AgentSetup => {
 
     const handle = async (
       event: Event,
-      options: HandleOptions = {},
+      { signal: handleAbortSignal = neverAbortSignal }: HandleOptions = {},
     ): Promise<void> => {
-      if (disposeController.signal.aborted)
+      if (disposeController.signal.aborted) {
         throw new Error("Pi agent disposed");
+      }
 
-      const { signal: handleAbortSignal = neverAbortSignal } = options;
       const abortSignal = AbortSignal.any([
         disposeController.signal,
         handleAbortSignal,
