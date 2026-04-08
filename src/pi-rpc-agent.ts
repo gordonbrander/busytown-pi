@@ -56,7 +56,7 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   return args;
 };
 
-const onErrorNoOp = (): void => { };
+const onErrorNoOp = (): void => {};
 
 export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
   return async (id, send) => {
@@ -109,7 +109,7 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
           },
         }),
       )
-      .catch(() => { });
+      .catch(() => {});
 
     let disposed = false;
 
@@ -199,9 +199,7 @@ export type PiRpcAgentFactoryConfig = PiRpcAgentConfig & {
   ignoreSelf?: boolean;
 };
 
-export const piRpcAgentOf = (
-  config: PiRpcAgentFactoryConfig,
-): Agent => {
+export const piRpcAgentOf = (config: PiRpcAgentFactoryConfig): Agent => {
   const { id, listen, ignoreSelf, ...setupConfig } = config;
   return {
     id,
