@@ -1,12 +1,76 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { openDb, pushEvent, getEventsSince } from "./event-queue.ts";
-import { agentSystemOf } from "./agent-system.ts";
+import { agentSystemOf, shouldHandleEventOf } from "./agent-system.ts";
+import { type Event } from "./lib/event.ts";
 import { mockAgentOf } from "./mock-agent.ts";
 import { asyncDispose } from "./lib/dispose.ts";
 
+const eventOf = (type: string, agent_id: string): Event => ({
+  id: 1,
+  timestamp: Date.now(),
+  type,
+  agent_id,
+  payload: {},
+});
+
 const createTestDb = () => openDb(":memory:");
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
+
+describe("shouldHandleEventOf", () => {
+  it("matches exact event type", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, ["task.start"]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-b")), true);
+  });
+
+  it("rejects non-matching event type", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, ["task.start"]);
+    assert.equal(shouldHandle(eventOf("task.end", "agent-b")), false);
+  });
+
+  it("matches wildcard pattern", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, ["*"]);
+    assert.equal(shouldHandle(eventOf("anything", "agent-b")), true);
+  });
+
+  it("matches prefix pattern", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, ["task.*"]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-b")), true);
+    assert.equal(shouldHandle(eventOf("task.end", "agent-b")), true);
+    assert.equal(shouldHandle(eventOf("agent.ready", "agent-b")), false);
+  });
+
+  it("ignores self events when ignoreSelf is true", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", true, ["*"]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-a")), false);
+  });
+
+  it("does not ignore self events when ignoreSelf is false", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, ["*"]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-a")), true);
+  });
+
+  it("ignores self but handles events from other agents", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", true, ["task.*"]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-a")), false);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-b")), true);
+  });
+
+  it("returns false when listen list is empty", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, []);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-b")), false);
+  });
+
+  it("matches any of multiple listen patterns", () => {
+    const shouldHandle = shouldHandleEventOf("agent-a", false, [
+      "task.start",
+      "agent.ready",
+    ]);
+    assert.equal(shouldHandle(eventOf("task.start", "agent-b")), true);
+    assert.equal(shouldHandle(eventOf("agent.ready", "agent-b")), true);
+    assert.equal(shouldHandle(eventOf("task.end", "agent-b")), false);
+  });
+});
 
 describe("agentSystemOf", () => {
   describe("spawnAgent", () => {

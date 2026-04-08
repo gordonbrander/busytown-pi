@@ -34,6 +34,16 @@ type SpawnedAgent = {
   abortController: AbortController;
 };
 
+/** Create a predicate function that checks if agent should handle event. */
+export const shouldHandleEventOf =
+  (id: string, ignoreSelf: boolean, listen: string[]) =>
+  (event: Event): boolean => {
+    if (ignoreSelf === true && event.agent_id === id) {
+      return false;
+    }
+    return eventMatches(event, listen);
+  };
+
 export const agentSystemOf = (
   db: DatabaseSync,
   timeout = 1000,
@@ -56,12 +66,7 @@ export const agentSystemOf = (
       systemAbortController.signal,
     ]);
 
-    const shouldHandleEvent = (event: Event) => {
-      if (ignoreSelf !== false && event.agent_id === id) {
-        return false;
-      }
-      return eventMatches(event, listen);
-    };
+    const shouldHandleEvent = shouldHandleEventOf(id, ignoreSelf, listen);
 
     try {
       while (!signal.aborted) {
