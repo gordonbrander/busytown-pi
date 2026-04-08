@@ -3,7 +3,7 @@ import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { renderTemplate } from "./lib/template.ts";
 import { stderr, stdout, lineStream } from "./lib/web-stream.ts";
-import type { AgentSetup, SendFn } from "./agent.ts";
+import type { AgentSetup, HandleOptions, SendFn } from "./agent.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });
 
@@ -17,6 +17,7 @@ const handleEvent = async (
   send: SendFn,
   config: ShellAgentConfig,
   event: Event,
+  options?: HandleOptions,
 ): Promise<void> => {
   const { shellScript, env = {} } = config;
   const correlationId = `${event.id}`;
@@ -30,6 +31,11 @@ const handleEvent = async (
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, ...env },
   });
+
+  const onAbort = (): void => {
+    proc.kill("SIGTERM");
+  };
+  options?.signal?.addEventListener("abort", onAbort, { once: true });
 
   // Pipe stderr to logger (fire-and-forget)
   stderr(proc)
@@ -75,6 +81,7 @@ const handleEvent = async (
       await send(`agent.${id}.response`, { line: value });
     }
   } finally {
+    options?.signal?.removeEventListener("abort", onAbort);
     reader.releaseLock();
     await send(`agent.${id}.end`, { correlation_id: correlationId });
   }
@@ -85,9 +92,9 @@ export const shellAgentOf =
   async (id, send) => {
     let disposed = false;
     return {
-      async handle(event) {
+      async handle(event, options) {
         if (disposed) throw new Error("Shell agent disposed");
-        await handleEvent(id, send, config, event);
+        await handleEvent(id, send, config, event, options);
       },
       async [Symbol.asyncDispose]() {
         disposed = true;

@@ -115,13 +115,17 @@ export const piRpcAgentOf =
     let disposed = false;
 
     return {
-      async handle(event) {
+      async handle(event, options) {
         if (disposed) throw new Error("Pi RPC agent disposed");
 
         const correlationId = `${event.id}`;
 
         // Acquire exclusive lock on the output stream for this agent step
         const reader = output.getReader();
+
+        options?.signal?.addEventListener("abort", sendAbortCommandBestEffort, {
+          once: true,
+        });
 
         await send(`agent.${id}.start`, {
           correlation_id: correlationId,
@@ -153,6 +157,10 @@ export const piRpcAgentOf =
           });
           throw e;
         } finally {
+          options?.signal?.removeEventListener(
+            "abort",
+            sendAbortCommandBestEffort,
+          );
           reader.releaseLock();
           await send(`agent.${id}.end`, { correlation_id: correlationId });
         }

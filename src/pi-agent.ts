@@ -13,7 +13,7 @@ import {
 } from "./lib/agent-session-event.ts";
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import type { AgentSetup, SendFn } from "./agent.ts";
+import type { AgentSetup, HandleOptions, SendFn } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });
 
@@ -60,6 +60,7 @@ const handleEvent = async (
   send: SendFn,
   config: PiAgentConfig,
   event: Event,
+  options?: HandleOptions,
 ): Promise<void> => {
   const { onError = onErrorNoOp, env, cwd = process.cwd() } = config;
 
@@ -70,6 +71,11 @@ const handleEvent = async (
     cwd,
     env: { ...process.env, ...env },
   });
+
+  const onAbort = (): void => {
+    proc.kill("SIGTERM");
+  };
+  options?.signal?.addEventListener("abort", onAbort, { once: true });
 
   // Write the event as the prompt to stdin, then close stdin
   const stdinWriter = stdin(proc).getWriter();
@@ -136,6 +142,7 @@ const handleEvent = async (
       }
     }
   } finally {
+    options?.signal?.removeEventListener("abort", onAbort);
     reader.releaseLock();
     await send(`agent.${id}.end`, { correlation_id: correlationId });
   }
@@ -146,9 +153,9 @@ export const piAgentOf =
   async (id, send) => {
     let disposed = false;
     return {
-      async handle(event) {
+      async handle(event, options) {
         if (disposed) throw new Error("Pi agent disposed");
-        await handleEvent(id, send, config, event);
+        await handleEvent(id, send, config, event, options);
       },
       async [Symbol.asyncDispose]() {
         disposed = true;
