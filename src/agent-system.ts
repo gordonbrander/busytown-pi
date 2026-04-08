@@ -16,8 +16,6 @@ export type SystemStats = {
   agents: string[];
 };
 
-export type { SpawnAgentConfig };
-
 export type AgentSystem = {
   spawnAgent(config: SpawnAgentConfig): Promise<string>;
   disposeAgent(id: string): Promise<void>;
