@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { eventMatches, type Event } from "./lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "./event-queue.ts";
-import { abortableSleep } from "./lib/promise.ts";
+import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { type Agent, type AgentSetup, type SendFn } from "./agent.ts";
 import { parseSlug } from "./lib/slug.ts";
@@ -101,6 +101,7 @@ export const agentSystemOf = (
     logger.debug("Spawning agent", { id });
 
     const send: SendFn = async (type, payload) => {
+      await nextTick();
       pushEvent(db, id, type, payload);
     };
 
@@ -134,9 +135,12 @@ export const agentSystemOf = (
     const entry = agents.get(id);
     if (!entry) return;
 
+    // First abort the poll loop
     entry.abortController.abort(new Error("Agent disposed"));
-    agents.delete(id);
+    // Then dispose the agent
     await entry.agent[Symbol.asyncDispose]();
+    // Then delete reference. Waiting to delete ref lets us retry dispose if it fails.
+    agents.delete(id);
     logger.debug("Disposed agent", { id });
   };
 

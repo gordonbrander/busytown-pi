@@ -17,7 +17,7 @@ export const virtualAgentOf =
     const handle = async (
       event: Event,
       { signal: abortHandleSignal = neverAbortSignal }: HandleOptions = {},
-    ) => {
+    ): Promise<void> => {
       if (disposedController.signal.aborted)
         throw new Error("Agent is disposed");
       const abortSignal = AbortSignal.any([

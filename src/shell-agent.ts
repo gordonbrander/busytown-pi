@@ -24,8 +24,9 @@ export const shellAgentOf = (config: ShellAgentConfig): AgentSetup => {
       event: Event,
       { signal: handleAbortSignal = neverAbortSignal }: HandleOptions = {},
     ): Promise<void> => {
-      if (disposeController.signal.aborted)
+      if (disposeController.signal.aborted) {
         throw new Error("Shell agent disposed");
+      }
 
       const abortSignal = AbortSignal.any([
         disposeController.signal,
