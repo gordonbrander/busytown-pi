@@ -51,7 +51,7 @@ export type ThinkingEnd = {
   type: "thinking_end";
   correlation_id: string;
   contentIndex: number;
-  text: string;
+  content: string;
 };
 
 export type TextStart = {
@@ -64,7 +64,7 @@ export type TextEnd = {
   type: "text_end";
   correlation_id: string;
   contentIndex: number;
-  text: string;
+  content: string;
 };
 
 export type ToolcallStart = {
@@ -281,7 +281,7 @@ const fromAssistantMessageEvent = (
         type: "thinking_end",
         correlation_id: correlationId,
         contentIndex: event.contentIndex,
-        text: event.content,
+        content: event.content,
       };
 
     case "text_start":
@@ -296,7 +296,7 @@ const fromAssistantMessageEvent = (
         type: "text_end",
         correlation_id: correlationId,
         contentIndex: event.contentIndex,
-        text: event.content,
+        content: event.content,
       };
 
     case "toolcall_start":

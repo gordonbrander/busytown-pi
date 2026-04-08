@@ -115,7 +115,7 @@ describe("fromPiAgentSessionEvent", () => {
           type: "thinking_end",
           correlation_id: CID,
           contentIndex: 0,
-          text: "I should search first",
+          content: "I should search first",
         },
       );
     });
@@ -147,7 +147,7 @@ describe("fromPiAgentSessionEvent", () => {
           type: "text_end",
           correlation_id: CID,
           contentIndex: 1,
-          text: "Hello world",
+          content: "Hello world",
         },
       );
     });
