@@ -53,9 +53,7 @@ describe("handle", () => {
     assert.ok(types.includes("agent.echo-agent.start"));
     assert.ok(types.includes("agent.echo-agent.end"));
 
-    const responses = sent.filter(
-      (s) => s.type === "agent.echo-agent.response",
-    );
+    const responses = sent.filter((s) => s.type === "agent.echo-agent.output");
     assert.equal(responses.length, 2);
     assert.deepEqual(responses[0].payload, { line: "line one" });
     assert.deepEqual(responses[1].payload, { line: "line two" });
@@ -72,7 +70,7 @@ describe("handle", () => {
       await agent.handle(testEvent({ type: "task.created" }));
 
       const responses = sent.filter(
-        (s) => s.type === "agent.template-agent.response",
+        (s) => s.type === "agent.template-agent.output",
       );
       assert.equal(responses.length, 1);
       assert.deepEqual(responses[0].payload, { line: "task.created" });
@@ -89,7 +87,7 @@ describe("handle", () => {
     await agent.handle(testEvent({ payload: { message: "hello" } }));
 
     const responses = sent.filter(
-      (s) => s.type === "agent.nested-agent.response",
+      (s) => s.type === "agent.nested-agent.output",
     );
     assert.equal(responses.length, 1);
     assert.deepEqual(responses[0].payload, { line: "hello" });
@@ -112,7 +110,7 @@ describe("handle", () => {
       assert.equal((errors[0].payload as { code: number }).code, 1);
 
       const ends = sent.filter((s) => s.type === "agent.fail-agent.end");
-      assert.equal(ends.length, 1);
+      assert.equal(ends.length, 0);
     },
   );
 
