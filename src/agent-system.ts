@@ -3,7 +3,11 @@ import { eventMatches, type Event } from "./lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "./event-queue.ts";
 import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import { type Agent, type AgentSetup, type SendFn } from "./agent.ts";
+import {
+  type Agent,
+  type SendFn,
+  type SpawnAgentConfig,
+} from "./agent.ts";
 import { parseSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "agent-system.ts" });
@@ -12,12 +16,7 @@ export type SystemStats = {
   agents: string[];
 };
 
-export type SpawnAgentConfig = {
-  id: string;
-  listen: string[];
-  ignoreSelf?: boolean;
-  setup: AgentSetup;
-};
+export type { SpawnAgentConfig };
 
 export type AgentSystem = {
   spawnAgent(config: SpawnAgentConfig): Promise<string>;
@@ -37,12 +36,12 @@ type SpawnedAgent = {
 /** Create a predicate function that checks if agent should handle event. */
 export const shouldHandleEventOf =
   (id: string, ignoreSelf: boolean, listen: string[]) =>
-  (event: Event): boolean => {
-    if (ignoreSelf && event.agent_id === id) {
-      return false;
-    }
-    return eventMatches(event, listen);
-  };
+    (event: Event): boolean => {
+      if (ignoreSelf && event.agent_id === id) {
+        return false;
+      }
+      return eventMatches(event, listen);
+    };
 
 export const agentSystemOf = (
   db: DatabaseSync,

@@ -28,3 +28,10 @@ export type SendFn = (type: string, payload: unknown) => Promise<void>;
  * construction, and to know their own id for lifecycle events.
  */
 export type AgentSetup = (id: string, send: SendFn) => Promise<Agent>;
+
+export type SpawnAgentConfig = {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+  setup: AgentSetup;
+};

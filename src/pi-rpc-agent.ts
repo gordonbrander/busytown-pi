@@ -14,7 +14,7 @@ import {
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import type { PiRpcCommand } from "./pi-rpc-commands.ts";
-import type { AgentSetup } from "./agent.ts";
+import type { AgentSetup, SpawnAgentConfig } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -58,7 +58,7 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
 
 const onErrorNoOp = (): void => {};
 
-export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentSetup => {
+export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
   return async (id, send) => {
     logger.debug("Creating RPC agent", { id });
 
@@ -131,8 +131,14 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentSetup => {
           event_type: event.type,
         });
 
+        const isCompact = event.type === `agent.${id}.compact`;
+
         try {
-          await sendEventPromptCommand(event);
+          if (isCompact) {
+            await sendCommand({ type: "compact" });
+          } else {
+            await sendEventPromptCommand(event);
+          }
 
           while (true) {
             const { done, value } = await reader.read();
@@ -145,7 +151,11 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentSetup => {
               await send(`agent.${id}.message`, sessionEvent);
             }
 
-            if (value.type === "agent_end") {
+            const isDone = isCompact
+              ? value.type === "compaction_end"
+              : value.type === "agent_end";
+
+            if (isDone) {
               await send(`agent.${id}.end`, {
                 correlation_id: correlationId,
               });
@@ -180,5 +190,23 @@ export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentSetup => {
         });
       },
     };
+  };
+};
+
+export type PiRpcAgentFactoryConfig = PiRpcAgentConfig & {
+  id: string;
+  listen: string[];
+  ignoreSelf?: boolean;
+};
+
+export const piRpcAgentOf = (
+  config: PiRpcAgentFactoryConfig,
+): SpawnAgentConfig => {
+  const { id, listen, ignoreSelf, ...setupConfig } = config;
+  return {
+    id,
+    listen: [...listen, `agent.${id}.compact`],
+    ignoreSelf,
+    setup: piRpcAgentSetupOf(setupConfig),
   };
 };
