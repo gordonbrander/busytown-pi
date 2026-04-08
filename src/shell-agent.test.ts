@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { shellAgentOf } from "./shell-agent.ts";
+import { shellAgentSetupOf } from "./shell-agent.ts";
 import type { Event } from "./lib/event.ts";
 import type { SendFn } from "./agent.ts";
 
@@ -24,12 +24,12 @@ const collectSent = (): {
   return { sent, send };
 };
 
-describe("shellAgentOf", () => {
+describe("shellAgentSetupOf", () => {
   it(
     "returns an AgentSetup that creates an agent",
     { timeout: 2000 },
     async () => {
-      const setup = shellAgentOf({ shellScript: "echo hi" });
+      const setup = shellAgentSetupOf({ shellScript: "echo hi" });
       const { send } = collectSent();
       const agent = await setup("my-agent", send);
 
@@ -41,7 +41,7 @@ describe("shellAgentOf", () => {
 
 describe("handle", () => {
   it("sends stdout lines as response events", { timeout: 2000 }, async () => {
-    const setup = shellAgentOf({
+    const setup = shellAgentSetupOf({
       shellScript: 'echo "line one" && echo "line two"',
     });
     const { sent, send } = collectSent();
@@ -63,7 +63,7 @@ describe("handle", () => {
     "templates event fields into the shell script",
     { timeout: 2000 },
     async () => {
-      const setup = shellAgentOf({ shellScript: "echo {{type}}" });
+      const setup = shellAgentSetupOf({ shellScript: "echo {{type}}" });
       const { sent, send } = collectSent();
       const agent = await setup("template-agent", send);
 
@@ -78,7 +78,7 @@ describe("handle", () => {
   );
 
   it("templates nested payload fields", { timeout: 2000 }, async () => {
-    const setup = shellAgentOf({
+    const setup = shellAgentSetupOf({
       shellScript: "echo {{{payload.message}}}",
     });
     const { sent, send } = collectSent();
@@ -97,7 +97,7 @@ describe("handle", () => {
     "sends an error event on non-zero exit code",
     { timeout: 2000 },
     async () => {
-      const setup = shellAgentOf({
+      const setup = shellAgentSetupOf({
         shellScript: "echo before && exit 1",
       });
       const { sent, send } = collectSent();
@@ -118,7 +118,7 @@ describe("handle", () => {
     "closes cleanly for a script with no output",
     { timeout: 2000 },
     async () => {
-      const setup = shellAgentOf({ shellScript: "true" });
+      const setup = shellAgentSetupOf({ shellScript: "true" });
       const { sent, send } = collectSent();
       const agent = await setup("silent-agent", send);
 
@@ -138,7 +138,7 @@ describe("handle", () => {
 
 describe("dispose", () => {
   it("throws on handle after dispose", { timeout: 2000 }, async () => {
-    const setup = shellAgentOf({ shellScript: "echo hi" });
+    const setup = shellAgentSetupOf({ shellScript: "echo hi" });
     const { send } = collectSent();
     const agent = await setup("disposed-agent", send);
 
@@ -147,7 +147,7 @@ describe("dispose", () => {
   });
 
   it("is idempotent", { timeout: 2000 }, async () => {
-    const setup = shellAgentOf({ shellScript: "echo hi" });
+    const setup = shellAgentSetupOf({ shellScript: "echo hi" });
     const { send } = collectSent();
     const agent = await setup("dispose-agent", send);
 

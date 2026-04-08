@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 import { glob as globDir } from "node:fs/promises";
 import { pathToSlug } from "./lib/slug.ts";
 import { piAgentOf } from "./pi-agent.ts";
-import { piRpcAgentOf, piRpcAgentSetupOf } from "./pi-rpc-agent.ts";
+import { piRpcAgentOf } from "./pi-rpc-agent.ts";
 import { shellAgentOf } from "./shell-agent.ts";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import type { AgentSetup, Agent } from "./agent.ts";
+import type { Agent } from "./agent.ts";
 import {
   type MemoryBlock,
   MemoryBlockEntrySchema,
@@ -260,7 +260,8 @@ export type AgentConfig = {
   cwd: string;
 };
 
-const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
+export const loadFileAgentOf = (config: AgentConfig): Agent => {
+  const agentDef = loadAgentDef(config.path, config.cwd);
   const system = buildAgentAppendPrompt(agentDef);
   const env = {
     BUSYTOWN_DB_PATH: config.dbPath,
@@ -271,6 +272,9 @@ const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
   switch (agentDef.type) {
     case "pi":
       return piAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
         system,
@@ -278,7 +282,10 @@ const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
         env,
       });
     case "pi-rpc":
-      return piRpcAgentSetupOf({
+      return piRpcAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
         model: agentDef.model,
         provider: agentDef.provider,
         system,
@@ -287,42 +294,15 @@ const agentSetupOf = (agentDef: AgentDef, config: AgentConfig): AgentSetup => {
       });
     case "shell":
       return shellAgentOf({
+        id: agentDef.id,
+        listen: agentDef.listen,
+        ignoreSelf: agentDef.ignoreSelf,
         shellScript: agentDef.body,
         env,
       });
     case "claude":
       throw new Error("Claude agent not implemented yet");
   }
-};
-
-export const loadFileAgentOf = (config: AgentConfig): Agent => {
-  const agentDef = loadAgentDef(config.path, config.cwd);
-
-  if (agentDef.type === "pi-rpc") {
-    const system = buildAgentAppendPrompt(agentDef);
-    const env = {
-      BUSYTOWN_DB_PATH: config.dbPath,
-      BUSYTOWN_AGENT_ID: agentDef.id,
-      BUSYTOWN_AGENT_FILE: config.path,
-    };
-    return piRpcAgentOf({
-      id: agentDef.id,
-      listen: agentDef.listen,
-      ignoreSelf: agentDef.ignoreSelf,
-      model: agentDef.model,
-      provider: agentDef.provider,
-      system,
-      extensions: [AGENT_EXTENSION_PATH],
-      env,
-    });
-  }
-
-  return {
-    id: agentDef.id,
-    listen: agentDef.listen,
-    ignoreSelf: agentDef.ignoreSelf,
-    setup: agentSetupOf(agentDef, config),
-  };
 };
 
 /**
