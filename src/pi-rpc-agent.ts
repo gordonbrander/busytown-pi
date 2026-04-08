@@ -58,9 +58,8 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
 
 const onErrorNoOp = (): void => {};
 
-export const piRpcAgentOf =
-  (config: PiRpcAgentConfig): AgentSetup =>
-  async (id, send) => {
+export const piRpcAgentOf = (config: PiRpcAgentConfig): AgentSetup => {
+  return async (id, send) => {
     logger.debug("Creating RPC agent", { id });
 
     const { onError = onErrorNoOp, env, cwd = process.cwd() } = config;
@@ -143,26 +142,27 @@ export const piRpcAgentOf =
 
             const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
             if (sessionEvent) {
-              await send(`agent.${id}.message`, value);
+              await send(`agent.${id}.message`, sessionEvent);
             }
 
             if (value.type === "agent_end") {
+              await send(`agent.${id}.end`, {
+                correlation_id: correlationId,
+              });
               break;
             }
           }
         } catch (e) {
           await send(`agent.${id}.error`, {
-            correlation_id: correlationId,
             error: String(e),
+            correlation_id: correlationId,
           });
-          throw e;
         } finally {
           options?.signal?.removeEventListener(
             "abort",
             sendAbortCommandBestEffort,
           );
           reader.releaseLock();
-          await send(`agent.${id}.end`, { correlation_id: correlationId });
         }
       },
 
@@ -181,3 +181,4 @@ export const piRpcAgentOf =
       },
     };
   };
+};

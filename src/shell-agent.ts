@@ -82,19 +82,26 @@ export const shellAgentOf = (config: ShellAgentConfig): AgentSetup => {
             const { code, signal } = await exitPromise;
             if (code !== 0 && code !== null) {
               await send(`agent.${id}.error`, {
+                error: `Process exited unexpectedly (code ${code})`,
                 correlation_id: correlationId,
                 code,
                 signal,
               });
+            } else {
+              await send(`agent.${id}.end`, { correlation_id: correlationId });
             }
             break;
           }
-          await send(`agent.${id}.response`, { line: value });
+          await send(`agent.${id}.output`, { line: value });
         }
+      } catch (e) {
+        await send(`agent.${id}.error`, {
+          error: `${e}`,
+          correlation_id: correlationId,
+        });
       } finally {
         abortSignal.removeEventListener("abort", onAbort);
         reader.releaseLock();
-        await send(`agent.${id}.end`, { correlation_id: correlationId });
       }
     };
 
