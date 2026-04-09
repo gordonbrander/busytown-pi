@@ -7,13 +7,14 @@ import {
   stdout,
   writeJsonLine,
 } from "./lib/web-stream.ts";
-import {
-  fromPiAgentSessionEvent,
-  type PiAgentSessionEvent,
-} from "./lib/agent-session-event.ts";
+import { fromPiAgentSessionEvent } from "./lib/agent-session-event.ts";
 import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import type { PiRpcCommand } from "./pi-rpc-commands.ts";
+import {
+  isPiRpcResponse,
+  type PiRpcCommand,
+  type PiRpcStdoutLine,
+} from "./lib/pi-rpc-commands.ts";
 import type { AgentSetup, Agent } from "./agent.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
@@ -93,8 +94,9 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
       }
     };
 
-    // Convert stdout to a web ReadableStream of JSONL lines
-    const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)
+    // Convert stdout to a web ReadableStream of JSONL lines. The stream
+    // interleaves streamed session events and synchronous RPC responses.
+    const output: ReadableStream<PiRpcStdoutLine> = stdout(proc)
       .pipeThrough(lineStream())
       .pipeThrough(mapStream(JSON.parse));
 
@@ -132,10 +134,13 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
         });
 
         const isCompact = event.type === `agent.${id}.compact`;
+        const isNewSession = event.type === `agent.${id}.new_session`;
 
         try {
           if (isCompact) {
             await sendCommand({ type: "compact" });
+          } else if (isNewSession) {
+            await sendCommand({ type: "new_session" });
           } else {
             await sendEventPromptCommand(event);
           }
@@ -146,14 +151,25 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
               break;
             }
 
-            const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
-            if (sessionEvent) {
-              await send(`agent.${id}.message`, sessionEvent);
+            // RPC responses can interleave with session events; only forward
+            // session events to listeners.
+            if (!isPiRpcResponse(value)) {
+              const sessionEvent = fromPiAgentSessionEvent(
+                value,
+                correlationId,
+              );
+              if (sessionEvent) {
+                await send(`agent.${id}.message`, sessionEvent);
+              }
             }
 
+            // `new_session` doesn't emit streaming events — its `response`
+            // line is the only signal that the reset is complete.
             const isDone = isCompact
               ? value.type === "compaction_end"
-              : value.type === "agent_end";
+              : isNewSession
+                ? isPiRpcResponse(value) && value.command === "new_session"
+                : value.type === "agent_end";
 
             if (isDone) {
               await send(`agent.${id}.end`, {
@@ -203,7 +219,7 @@ export const piRpcAgentOf = (config: PiRpcAgentFactoryConfig): Agent => {
   const { id, listen, ignoreSelf, ...setupConfig } = config;
   return {
     id,
-    listen: [...listen, `agent.${id}.compact`],
+    listen: [...listen, `agent.${id}.compact`, `agent.${id}.new_session`],
     ignoreSelf,
     setup: piRpcAgentSetupOf(setupConfig),
   };
