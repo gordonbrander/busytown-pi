@@ -7,9 +7,12 @@ import { fromPiAgentSessionEvent } from "./agent-session-event.ts";
 const pi = (obj: object): PiAgentSessionEvent => obj as PiAgentSessionEvent;
 
 // Placeholder values for Pi fields that our mapping strips.
-const AGENT_MSG = { role: "assistant", content: [] };
+const AGENT_MSG = { role: "assistant", content: [], stopReason: "stop" };
 const TOOL_RESULTS = [{ role: "toolResult" }];
 const PARTIAL = { role: "assistant", content: [] };
+
+/** Clone AGENT_MSG with overrides — used for message_end error tests. */
+const assistantMsg = (overrides: object) => ({ ...AGENT_MSG, ...overrides });
 
 const CID = "msg_42";
 
@@ -67,7 +70,7 @@ describe("fromPiAgentSessionEvent", () => {
     });
   });
 
-  describe("message envelope events are dropped", () => {
+  describe("message envelope events", () => {
     it("returns undefined for message_start", () => {
       assert.equal(
         fromPiAgentSessionEvent(
@@ -78,10 +81,95 @@ describe("fromPiAgentSessionEvent", () => {
       );
     });
 
-    it("returns undefined for message_end", () => {
+    it("returns undefined for successful message_end", () => {
       assert.equal(
         fromPiAgentSessionEvent(
           pi({ type: "message_end", message: AGENT_MSG }),
+          CID,
+        ),
+        undefined,
+      );
+    });
+  });
+
+  describe("message_end with failed/aborted assistant message", () => {
+    it("maps stopReason: error with errorMessage to simplified error event", () => {
+      assert.deepEqual(
+        fromPiAgentSessionEvent(
+          pi({
+            type: "message_end",
+            message: assistantMsg({
+              stopReason: "error",
+              errorMessage: '400 {"type":"error", … plan limits …}',
+            }),
+          }),
+          CID,
+        ),
+        {
+          type: "error",
+          correlation_id: CID,
+          message: '400 {"type":"error", … plan limits …}',
+          code: "error",
+        },
+      );
+    });
+
+    it("maps stopReason: aborted without errorMessage, falling back to stopReason", () => {
+      assert.deepEqual(
+        fromPiAgentSessionEvent(
+          pi({
+            type: "message_end",
+            message: assistantMsg({ stopReason: "aborted" }),
+          }),
+          CID,
+        ),
+        {
+          type: "error",
+          correlation_id: CID,
+          message: "aborted",
+          code: "aborted",
+        },
+      );
+    });
+
+    it("returns undefined for assistant message with stopReason: stop", () => {
+      assert.equal(
+        fromPiAgentSessionEvent(
+          pi({
+            type: "message_end",
+            message: assistantMsg({ stopReason: "stop" }),
+          }),
+          CID,
+        ),
+        undefined,
+      );
+    });
+
+    it("returns undefined for user messages (no stopReason)", () => {
+      assert.equal(
+        fromPiAgentSessionEvent(
+          pi({
+            type: "message_end",
+            message: { role: "user", content: "hello" },
+          }),
+          CID,
+        ),
+        undefined,
+      );
+    });
+
+    it("returns undefined for toolResult messages", () => {
+      assert.equal(
+        fromPiAgentSessionEvent(
+          pi({
+            type: "message_end",
+            message: {
+              role: "toolResult",
+              toolCallId: "call_1",
+              content: "ok",
+              isError: false,
+            },
+          }),
           CID,
         ),
         undefined,
@@ -263,13 +351,18 @@ describe("fromPiAgentSessionEvent", () => {
   });
 
   describe("error (flattened from message_update)", () => {
-    it("maps error with reason as message", () => {
+    it("maps error with reason as both message and code", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           update({ type: "error", reason: "aborted", error: AGENT_MSG }),
           CID,
         ),
-        { type: "error", correlation_id: CID, message: "aborted" },
+        {
+          type: "error",
+          correlation_id: CID,
+          message: "aborted",
+          code: "aborted",
+        },
       );
     });
   });

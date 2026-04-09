@@ -96,7 +96,7 @@ export type AgentError = {
   type: "error";
   correlation_id: string;
   message: string;
-  code?: string;
+  code?: "error" | "aborted";
 };
 
 export type CompactionStart = {
@@ -248,10 +248,26 @@ export const fromPiAgentSessionEvent = (
         finalError: event.finalError,
       };
 
-    // message_start, message_end — envelope events, no simplified equivalent
+    // message_start — envelope event, no simplified equivalent
     case "message_start":
-    case "message_end":
       return undefined;
+
+    // message_end — drop on success, surface as `error` on failed/aborted turns.
+    // pi-agent-core's agent-loop delivers LLM errors only via message_end
+    // carrying an AssistantMessage with stopReason: "error" | "aborted".
+    case "message_end": {
+      const msg = event.message;
+      if (msg.role !== "assistant") return undefined;
+      if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
+        return undefined;
+      }
+      return {
+        type: "error",
+        correlation_id: correlationId,
+        message: msg.errorMessage ?? msg.stopReason,
+        code: msg.stopReason,
+      };
+    }
   }
 };
 
@@ -321,6 +337,7 @@ const fromAssistantMessageEvent = (
         type: "error",
         correlation_id: correlationId,
         message: event.reason,
+        code: event.reason,
       };
 
     // Deltas and envelope sub-events — no simplified equivalent

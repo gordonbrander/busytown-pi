@@ -140,24 +140,24 @@ model omits.
 
 #### Event mapping
 
-| Simplified Event       | Pi Event(s)                             | Notes                                                           |
-| ---------------------- | --------------------------------------- | --------------------------------------------------------------- |
-| `user_message`         | _(implicit — event passed to `send()`)_ | Simplified makes this explicit with an `id` → `correlation_id`  |
-| `agent_start`          | `agent_start`                           | Same                                                            |
-| `agent_end`            | `agent_end`                             | Both carry `messages`; simplified adds total token counts       |
-| `turn_start`           | `turn_start`                            | Pi adds `turnIndex`                                             |
-| `turn_end`             | `turn_end`                              | Simplified carries tokens; Pi carries `message` + `toolResults` |
-| `thinking_start`       | `message_update { thinking_start }`     | Same content, different envelope                                |
-| `thinking_end`         | `message_update { thinking_end }`       | Both carry full assembled text                                  |
-| `text_start`           | `message_update { text_start }`         | Same                                                            |
-| `text_end`             | `message_update { text_end }`           | Both carry full assembled text                                  |
-| `toolcall_start`       | `message_update { toolcall_start }`     | Simplified includes `tool_call_id` and `name` upfront           |
-| `toolcall_end`         | `message_update { toolcall_end }`       | Both carry name + args; Pi nests under `toolCall` object        |
-| `tool_execution_end`   | `tool_execution_end`                    | Both carry `tool_call_id`, output/error                         |
-| `error`                | `message_update { error }`              | Pi scopes to message; simplified is a top-level turn event      |
-| `compaction_start/end` | `compaction_start/end`                  | Same fields                                                     |
-| `auto_retry_start/end` | `auto_retry_start/end`                  | Same fields                                                     |
+| Simplified Event       | Pi Event(s)                                                                                              | Notes                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `user_message`         | _(implicit — event passed to `send()`)_                                                                  | Simplified makes this explicit with an `id` → `correlation_id`                                      |
+| `agent_start`          | `agent_start`                                                                                            | Same                                                                                                |
+| `agent_end`            | `agent_end`                                                                                              | Both carry `messages`; simplified adds total token counts                                           |
+| `turn_start`           | `turn_start`                                                                                             | Pi adds `turnIndex`                                                                                 |
+| `turn_end`             | `turn_end`                                                                                               | Simplified carries tokens; Pi carries `message` + `toolResults`                                     |
+| `thinking_start`       | `message_update { thinking_start }`                                                                      | Same content, different envelope                                                                    |
+| `thinking_end`         | `message_update { thinking_end }`                                                                        | Both carry full assembled text                                                                      |
+| `text_start`           | `message_update { text_start }`                                                                          | Same                                                                                                |
+| `text_end`             | `message_update { text_end }`                                                                            | Both carry full assembled text                                                                      |
+| `toolcall_start`       | `message_update { toolcall_start }`                                                                      | Simplified includes `tool_call_id` and `name` upfront                                               |
+| `toolcall_end`         | `message_update { toolcall_end }`                                                                        | Both carry name + args; Pi nests under `toolCall` object                                            |
+| `tool_execution_end`   | `tool_execution_end`                                                                                     | Both carry `tool_call_id`, output/error                                                             |
+| `error`                | `message_end { message.stopReason: "error" \| "aborted" }` (also `message_update { error }` defensively) | Pi reports failed/aborted LLM calls by setting `stopReason` and `errorMessage` on the final message |
+| `compaction_start/end` | `compaction_start/end`                                                                                   | Same fields                                                                                         |
+| `auto_retry_start/end` | `auto_retry_start/end`                                                                                   | Same fields                                                                                         |
 
-Pi events with no simplified equivalent: `message_start`, `message_end`,
-`message_update { start }`, `message_update { done }`, all `*_delta` events,
-`tool_execution_start`, and `tool_execution_update`.
+Pi events with no simplified equivalent: `message_start`, successful
+`message_end`, `message_update { start }`, `message_update { done }`, all
+`*_delta` events, `tool_execution_start`, and `tool_execution_update`.
