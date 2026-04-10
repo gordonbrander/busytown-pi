@@ -63,7 +63,7 @@ describe("handle", () => {
     "templates event fields into the shell script",
     { timeout: 2000 },
     async () => {
-      const setup = shellAgentSetupOf({ shellScript: "echo {{type}}" });
+      const setup = shellAgentSetupOf({ shellScript: "echo {{event.type}}" });
       const { sent, send } = collectSent();
       const agent = await setup("template-agent", send);
 
@@ -79,7 +79,7 @@ describe("handle", () => {
 
   it("templates nested payload fields", { timeout: 2000 }, async () => {
     const setup = shellAgentSetupOf({
-      shellScript: "echo {{{payload.message}}}",
+      shellScript: "echo {{{event.payload.message}}}",
     });
     const { sent, send } = collectSent();
     const agent = await setup("nested-agent", send);
