@@ -4,7 +4,7 @@ import path from "node:path";
 const PIDFILE_NAME = "busytown.pid";
 
 export const pidfilePath = (projectRoot: string): string =>
-  path.join(projectRoot, ".busytown", PIDFILE_NAME);
+  path.join(projectRoot, ".pi", "busytown", PIDFILE_NAME);
 
 /** Write current process PID to the pidfile. Creates .busytown dir if needed. */
 export const writePidfile = (projectRoot: string): void => {
