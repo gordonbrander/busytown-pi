@@ -34,10 +34,11 @@ export const shellAgentSetupOf = (config: ShellAgentConfig): AgentSetup => {
       ]);
       const correlationId = `${event.id}`;
 
-      const rendered = renderTemplate(
-        shellScript,
-        event as unknown as Record<string, unknown>,
-      );
+      // Render `{{placeholders}}` in shell script, making event
+      // available to the script.
+      const rendered = renderTemplate(shellScript, {
+        event,
+      });
 
       const proc = spawn("/bin/sh", ["-c", rendered], {
         stdio: ["ignore", "pipe", "pipe"],
