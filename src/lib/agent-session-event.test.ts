@@ -14,7 +14,7 @@ const PARTIAL = { role: "assistant", content: [] };
 /** Clone AGENT_MSG with overrides — used for message_end error tests. */
 const assistantMsg = (overrides: object) => ({ ...AGENT_MSG, ...overrides });
 
-const CID = "msg_42";
+const CID = 42;
 
 /** Wrap an assistantMessageEvent in a message_update Pi event. */
 const update = (assistantMessageEvent: object) =>

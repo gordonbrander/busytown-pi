@@ -19,57 +19,57 @@ export type UserMessage = {
 
 export type AgentStart = {
   type: "agent_start";
-  correlation_id: string;
+  correlation_id: number;
 };
 
 export type AgentEnd = {
   type: "agent_end";
-  correlation_id: string;
+  correlation_id: number;
   total_input_tokens?: number;
   total_output_tokens?: number;
 };
 
 export type TurnStart = {
   type: "turn_start";
-  correlation_id: string;
+  correlation_id: number;
 };
 
 export type TurnEnd = {
   type: "turn_end";
-  correlation_id: string;
+  correlation_id: number;
   input_tokens?: number;
   output_tokens?: number;
 };
 
 export type ThinkingStart = {
   type: "thinking_start";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
 };
 
 export type ThinkingEnd = {
   type: "thinking_end";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
   content: string;
 };
 
 export type TextStart = {
   type: "text_start";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
 };
 
 export type TextEnd = {
   type: "text_end";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
   content: string;
 };
 
 export type ToolcallStart = {
   type: "toolcall_start";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
   tool_call_id?: string;
   name?: string;
@@ -77,7 +77,7 @@ export type ToolcallStart = {
 
 export type ToolcallEnd = {
   type: "toolcall_end";
-  correlation_id: string;
+  correlation_id: number;
   contentIndex: number;
   tool_call_id: string;
   name: string;
@@ -86,7 +86,7 @@ export type ToolcallEnd = {
 
 export type ToolExecutionEnd = {
   type: "tool_execution_end";
-  correlation_id: string;
+  correlation_id: number;
   tool_call_id: string;
   output: unknown;
   isError: boolean;
@@ -94,20 +94,20 @@ export type ToolExecutionEnd = {
 
 export type AgentError = {
   type: "error";
-  correlation_id: string;
+  correlation_id: number;
   message: string;
   code?: "error" | "aborted";
 };
 
 export type CompactionStart = {
   type: "compaction_start";
-  correlation_id: string;
+  correlation_id: number;
   reason: "manual" | "threshold" | "overflow";
 };
 
 export type CompactionEnd = {
   type: "compaction_end";
-  correlation_id: string;
+  correlation_id: number;
   reason: "manual" | "threshold" | "overflow";
   result:
     | { summary: string; firstKeptEntryId: string; tokensBefore: number }
@@ -118,7 +118,7 @@ export type CompactionEnd = {
 
 export type AutoRetryStart = {
   type: "auto_retry_start";
-  correlation_id: string;
+  correlation_id: number;
   attempt: number;
   maxAttempts: number;
   delayMs: number;
@@ -127,7 +127,7 @@ export type AutoRetryStart = {
 
 export type AutoRetryEnd = {
   type: "auto_retry_end";
-  correlation_id: string;
+  correlation_id: number;
   success: boolean;
   finalError?: string;
 };
@@ -168,7 +168,7 @@ export type AgentSessionEvent =
  */
 export const fromPiAgentSessionEvent = (
   event: PiAgentSessionEvent,
-  correlationId: string,
+  correlationId: number,
 ): AgentSessionEvent | undefined => {
   switch (event.type) {
     case "agent_start":
@@ -282,7 +282,7 @@ type PiAssistantMessageEvent = Extract<
 
 const fromAssistantMessageEvent = (
   event: PiAssistantMessageEvent,
-  correlationId: string,
+  correlationId: number,
 ): AgentSessionEvent | undefined => {
   switch (event.type) {
     case "thinking_start":

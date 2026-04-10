@@ -32,7 +32,7 @@ export const shellAgentSetupOf = (config: ShellAgentConfig): AgentSetup => {
         disposeController.signal,
         handleAbortSignal,
       ]);
-      const correlationId = `${event.id}`;
+      const correlationId = event.id;
 
       // Render `{{placeholders}}` in shell script, making event
       // available to the script.
