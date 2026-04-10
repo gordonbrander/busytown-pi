@@ -26,7 +26,7 @@ type PiCliFlagConfig = {
   provider?: string;
   /** Extension file paths to load via -e <path>. */
   extensions?: string[];
-  /** Appended to the system prompt via --append-system. */
+  /** Appended to the system prompt via --append-system-prompt. */
   system?: string;
 };
 
@@ -44,7 +44,7 @@ const buildCliArgs = (config: PiCliFlagConfig): string[] => {
   if (config.provider) args.push("--provider", config.provider);
   if (config.model) args.push("--model", config.model);
   if (config.sessionDir) args.push("--session-dir", config.sessionDir);
-  if (config.system) args.push("--append-system", config.system);
+  if (config.system) args.push("--append-system-prompt", config.system);
   if (config.extensions) {
     for (const ext of config.extensions) {
       args.push("-e", ext);
