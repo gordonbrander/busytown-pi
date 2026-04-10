@@ -474,10 +474,10 @@ type FgColor = Parameters<Theme["fg"]>[0];
 
 const typeColor = (type: string): FgColor => {
   if (type.startsWith("agent.")) {
-    if (type.endsWith(".message")) return "error";
+    if (type.endsWith(".message")) return "text";
     if (type.endsWith(".error")) return "error";
     if (type.endsWith(".start")) return "accent";
-    if (type.endsWith(".finish")) return "success";
+    if (type.endsWith(".end")) return "success";
     return "muted";
   }
   if (type.startsWith("sys.")) return "dim";
