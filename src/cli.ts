@@ -139,12 +139,19 @@ const startCommand = defineCommand({
 
       const dbPath = unwrap(toOption(db.location()), "No database location");
       for await (const agentPath of listAgentPaths(agentsDir)) {
-        const config = loadFileAgentOf({
-          path: agentPath,
-          dbPath,
-          cwd: projectRoot,
-        });
-        await system.spawnAgent(config);
+        try {
+          const config = loadFileAgentOf({
+            path: agentPath,
+            dbPath,
+            cwd: projectRoot,
+          });
+          await system.spawnAgent(config);
+        } catch (e) {
+          logger.error("Failed to load agent", {
+            path: agentPath,
+            error: `${e}`,
+          });
+        }
       }
 
       await system.spawnAgent({
