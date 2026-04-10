@@ -61,8 +61,8 @@ export const agentSystemOf = (
 
     const shouldHandleEvent = shouldHandleEventOf(id, ignoreSelf, listen);
 
-    try {
-      while (!signal.aborted) {
+    while (!signal.aborted) {
+      try {
         const event = pullNextMatchingEvent(db, id, shouldHandleEvent);
 
         if (!event) {
@@ -73,10 +73,11 @@ export const agentSystemOf = (
         if (signal.aborted) break;
 
         await agent.handle(event, { signal });
-      }
-    } catch (e) {
-      if (!signal.aborted) {
-        logger.warn("Agent poll loop error", { agent_id: id, error: `${e}` });
+      } catch (e) {
+        logger.warn("Agent error during event handling", {
+          agent_id: id,
+          error: `${e}`,
+        });
       }
     }
   };
@@ -111,7 +112,12 @@ export const agentSystemOf = (
       };
 
       agents.set(id, entry);
-      forkAgentPollLoop(entry);
+      forkAgentPollLoop(entry).catch((e) => {
+        logger.error("Agent poll loop crashed", {
+          agent_id: id,
+          error: `${e}`,
+        });
+      });
 
       return id;
     } catch (e) {
