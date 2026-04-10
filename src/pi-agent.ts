@@ -75,7 +75,7 @@ export const piAgentSetupOf = (config: PiAgentConfig): AgentSetup => {
         disposeController.signal,
         handleAbortSignal,
       ]);
-      const correlationId = `${event.id}`;
+      const correlationId = event.id;
 
       const proc = spawn("pi", buildCliArgs(config), {
         stdio: ["pipe", "pipe", "pipe"],

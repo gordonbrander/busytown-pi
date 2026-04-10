@@ -119,7 +119,7 @@ export const piRpcAgentSetupOf = (config: PiRpcAgentConfig): AgentSetup => {
       async handle(event, options) {
         if (disposed) throw new Error("Pi RPC agent disposed");
 
-        const correlationId = `${event.id}`;
+        const correlationId = event.id;
 
         // Acquire exclusive lock on the output stream for this agent step
         const reader = output.getReader();
