@@ -1,130 +1,79 @@
 import { spawn } from "node:child_process";
-import { type Event } from "./lib/event.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { renderTemplate } from "./lib/template.ts";
 import { stderr, stdout, lineStream } from "./lib/web-stream.ts";
-import type { Agent, AgentSetup, HandleOptions } from "./agent.ts";
+import type { AgentHandler } from "./agent-handler.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });
 
-export type ShellAgentConfig = {
-  shellScript: string;
-  env?: Record<string, string | undefined>;
-};
+export const shellAgentHandler: AgentHandler = async (client, config) => {
+  const { id, body, env = {}, listen, ignoreSelf, pollInterval, signal } = config;
 
-/** A signal that will never abort */
-const neverAbortSignal = new AbortController().signal;
+  for await (const event of client.subscribe({ listen, ignoreSelf, pollInterval, signal })) {
+    const correlationId = event.id;
 
-export const shellAgentSetupOf = (config: ShellAgentConfig): AgentSetup => {
-  return async (id, send) => {
-    const disposeController = new AbortController();
-    const { shellScript, env = {} } = config;
+    const rendered = renderTemplate(body, { event });
 
-    const handle = async (
-      event: Event,
-      { signal: handleAbortSignal = neverAbortSignal }: HandleOptions = {},
-    ): Promise<void> => {
-      if (disposeController.signal.aborted) {
-        throw new Error("Shell agent disposed");
-      }
+    const proc = spawn("/bin/sh", ["-c", rendered], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...env },
+    });
 
-      const abortSignal = AbortSignal.any([
-        disposeController.signal,
-        handleAbortSignal,
-      ]);
-      const correlationId = event.id;
+    // Pipe stderr to logger (fire-and-forget)
+    stderr(proc)
+      .pipeThrough(lineStream())
+      .pipeTo(
+        new WritableStream({
+          write(line) {
+            logger.warn("stderr", { agent: id, line });
+          },
+        }),
+      )
+      .catch(() => {});
 
-      // Render `{{placeholders}}` in shell script, making event
-      // available to the script.
-      const rendered = renderTemplate(shellScript, {
-        event,
-      });
+    const lines = stdout(proc).pipeThrough(lineStream());
+    const reader = lines.getReader();
 
-      const proc = spawn("/bin/sh", ["-c", rendered], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, ...env },
-      });
+    const exitPromise = new Promise<{
+      code: number | null;
+      signal: string | null;
+    }>((resolve) => {
+      proc.once("exit", (code, signal) => resolve({ code, signal }));
+    });
 
-      const onAbort = (): void => {
-        proc.kill("SIGTERM");
-      };
-      abortSignal.addEventListener("abort", onAbort, { once: true });
+    client.publish(`agent.${id}.start`, {
+      correlation_id: correlationId,
+      event_type: event.type,
+    });
 
-      // Pipe stderr to logger (fire-and-forget)
-      stderr(proc)
-        .pipeThrough(lineStream())
-        .pipeTo(
-          new WritableStream({
-            write(line) {
-              logger.warn("stderr", { agent: id, line });
-            },
-          }),
-        )
-        .catch(() => {});
-
-      const lines = stdout(proc).pipeThrough(lineStream());
-      const reader = lines.getReader();
-
-      const exitPromise = new Promise<{
-        code: number | null;
-        signal: string | null;
-      }>((resolve) => {
-        proc.once("exit", (code, signal) => resolve({ code, signal }));
-      });
-
-      await send(`agent.${id}.start`, {
-        correlation_id: correlationId,
-        event_type: event.type,
-      });
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            const { code, signal } = await exitPromise;
-            if (code !== 0 && code !== null) {
-              await send(`agent.${id}.error`, {
-                error: `Process exited unexpectedly (code ${code})`,
-                correlation_id: correlationId,
-                code,
-                signal,
-              });
-            } else {
-              await send(`agent.${id}.end`, { correlation_id: correlationId });
-            }
-            break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          const { code, signal } = await exitPromise;
+          if (code !== 0 && code !== null) {
+            client.publish(`agent.${id}.error`, {
+              error: `Process exited unexpectedly (code ${code})`,
+              correlation_id: correlationId,
+              code,
+              signal,
+            });
+          } else {
+            client.publish(`agent.${id}.end`, {
+              correlation_id: correlationId,
+            });
           }
-          await send(`agent.${id}.output`, { line: value });
+          break;
         }
-      } catch (e) {
-        await send(`agent.${id}.error`, {
-          error: `${e}`,
-          correlation_id: correlationId,
-        });
-      } finally {
-        abortSignal.removeEventListener("abort", onAbort);
-        reader.releaseLock();
+        client.publish(`agent.${id}.output`, { line: value });
       }
-    };
-
-    const dispose = async (): Promise<void> => {
-      disposeController.abort(new Error("Dispose shell-agent"));
-    };
-
-    return {
-      handle,
-      [Symbol.asyncDispose]: dispose,
-    };
-  };
-};
-
-export type ShellAgentFactoryConfig = ShellAgentConfig & {
-  id: string;
-  listen: string[];
-  ignoreSelf?: boolean;
-};
-
-export const shellAgentOf = (config: ShellAgentFactoryConfig): Agent => {
-  const { id, listen, ignoreSelf, ...setupConfig } = config;
-  return { id, listen, ignoreSelf, setup: shellAgentSetupOf(setupConfig) };
+    } catch (e) {
+      client.publish(`agent.${id}.error`, {
+        error: `${e}`,
+        correlation_id: correlationId,
+      });
+    } finally {
+      reader.releaseLock();
+    }
+  }
 };

@@ -1,77 +1,95 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { virtualAgentOf } from "./virtual-agent.ts";
+import { virtualAgentHandler } from "./virtual-agent.ts";
+import { clientOf } from "./sdk.ts";
 import type { Event } from "./lib/event.ts";
-import type { SendFn } from "./agent.ts";
+import type { AgentHandlerExtra } from "./agent-handler.ts";
+import type { ShellAgentDef } from "./file-agent-loader.ts";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 
-const testEvent = (overrides: Partial<Event> = {}): Event => ({
-  id: 1,
-  timestamp: Date.now(),
-  type: "test.event",
-  agent_id: "other-agent",
-  payload: { message: "hello" },
+const createTempDbPath = (): string => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "virtual-agent-test-"));
+  return path.join(dir, "events.db");
+};
+
+const baseConfig = (
+  overrides: Partial<ShellAgentDef & AgentHandlerExtra> = {},
+): ShellAgentDef & AgentHandlerExtra => ({
+  id: "test-virtual",
+  filePath: "/tmp/test.md",
+  type: "shell" as const,
+  description: "test",
+  listen: ["test.*"],
+  ignoreSelf: true,
+  emits: [],
+  body: "",
+  memoryBlocks: {},
+  pollInterval: 10,
   ...overrides,
 });
 
-const noopSend: SendFn = async () => {};
+describe("virtualAgentHandler", () => {
+  it("calls handler for each matching event", { timeout: 5000 }, async () => {
+    const dbPath = createTempDbPath();
+    const ac = new AbortController();
+    const trigger = clientOf({ id: "trigger", dbPath });
+    const agentClient = clientOf({ id: "test-virtual", dbPath });
 
-describe("virtualAgentOf", () => {
-  it("returns an AgentSetup that creates an agent", async () => {
-    const setup = virtualAgentOf(() => {});
-    const agent = await setup("my-agent", noopSend);
-
-    assert.equal(typeof agent.handle, "function");
-    assert.equal(typeof agent[Symbol.asyncDispose], "function");
-  });
-});
-
-describe("handle", () => {
-  it("calls handler with send and event", async () => {
     const received: Event[] = [];
-    const setup = virtualAgentOf((_send, event) => {
+    const handler = virtualAgentHandler((_client, event) => {
       received.push(event);
     });
 
-    const agent = await setup("handler-agent", noopSend);
-    const event = testEvent();
-    await agent.handle(event);
+    trigger.publish("test.hello", { msg: "hi" });
 
-    assert.equal(received.length, 1);
-    assert.deepEqual(received[0], event);
-  });
+    handler(agentClient, baseConfig({ signal: ac.signal }));
 
-  it("passes send function to handler", async () => {
-    const sent: Array<{ type: string; payload: unknown }> = [];
-    const fakeSend: SendFn = async (type, payload) => {
-      sent.push({ type, payload });
-    };
-
-    const setup = virtualAgentOf(async (send) => {
-      await send("test.response", { ok: true });
+    // Poll until the handler processes the event
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        if (received.length >= 1) {
+          resolve();
+        } else {
+          setTimeout(check, 10);
+        }
+      };
+      check();
     });
 
-    const agent = await setup("sender-agent", fakeSend);
-    await agent.handle(testEvent());
+    ac.abort();
 
-    assert.equal(sent.length, 1);
-    assert.equal(sent[0].type, "test.response");
+    assert.equal(received.length, 1);
+    assert.equal(received[0].type, "test.hello");
+    assert.deepEqual(received[0].payload, { msg: "hi" });
   });
 
-  it("throws after dispose", async () => {
-    const setup = virtualAgentOf(() => {});
-    const agent = await setup("disposed-agent", noopSend);
+  it("handler can publish events via client", { timeout: 5000 }, async () => {
+    const dbPath = createTempDbPath();
+    const ac = new AbortController();
+    const trigger = clientOf({ id: "trigger", dbPath });
+    const agentClient = clientOf({ id: "test-virtual", dbPath });
+    const watcher = clientOf({ id: "watcher", dbPath });
 
-    await agent[Symbol.asyncDispose]();
-    await assert.rejects(() => agent.handle(testEvent()), /disposed/i);
-  });
-});
+    const handler = virtualAgentHandler((client, event) => {
+      client.publish("test.reply", { original: event.type });
+    });
 
-describe("dispose", () => {
-  it("is idempotent", async () => {
-    const setup = virtualAgentOf(() => {});
-    const agent = await setup("dispose-agent", noopSend);
+    trigger.publish("test.ping", {});
 
-    await agent[Symbol.asyncDispose]();
-    await agent[Symbol.asyncDispose](); // Should not throw
+    handler(agentClient, baseConfig({ signal: ac.signal }));
+
+    for await (const event of watcher.subscribe({
+      listen: ["test.reply"],
+      pollInterval: 10,
+      signal: ac.signal,
+    })) {
+      assert.equal(event.type, "test.reply");
+      assert.deepEqual(event.payload, { original: "test.ping" });
+      break;
+    }
+
+    ac.abort();
   });
 });

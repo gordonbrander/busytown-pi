@@ -4,6 +4,10 @@
   "description": "Multi-agent factories over a SQLite event queue",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sdk": "./src/sdk.ts"
+  },
   "bin": {
     "busytown": "src/cli.ts"
   },

@@ -1,328 +1,66 @@
-import { Type, type Static } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value";
-import matter from "gray-matter";
-import fs from "node:fs";
+#!/usr/bin/env -S node --experimental-strip-types
+import { parseArgs } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { glob as globDir } from "node:fs/promises";
-import { pathToSlug } from "./lib/slug.ts";
-import { piAgentOf } from "./pi-agent.ts";
-import { piRpcAgentOf } from "./pi-rpc-agent.ts";
-import { shellAgentOf } from "./shell-agent.ts";
-import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import type { Agent } from "./agent.ts";
-import {
-  type MemoryBlock,
-  MemoryBlockEntrySchema,
-  parseMemoryBlockEntries,
-  hydrateMemoryBlocks,
-} from "./memory/memory.ts";
+import { clientOf } from "./sdk.ts";
+import { loadAgentDef } from "./file-agent-loader.ts";
+import { buildAgentAppendPrompt } from "./pi-agent-shared.ts";
+import { shellAgentHandler } from "./shell-agent.ts";
+import { piAgentHandler } from "./pi-agent.ts";
+import { piRpcAgentHandler } from "./pi-rpc-agent.ts";
+import type { AgentHandler } from "./agent-handler.ts";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
 
-export const HOOK_NAMES = [
-  "session_start",
-  "session_shutdown",
-  "session_before_switch",
-  "session_switch",
-  "session_before_fork",
-  "session_fork",
-  "session_before_compact",
-  "session_compact",
-  "session_before_tree",
-  "session_tree",
-  "before_agent_start",
-  "agent_start",
-  "agent_end",
-  "turn_start",
-  "turn_end",
-  "tool_call",
-  "tool_result",
-  "input",
-  "model_select",
-] as const;
+const handlers: Record<string, AgentHandler> = {
+  shell: shellAgentHandler,
+  pi: piAgentHandler,
+  "pi-rpc": piRpcAgentHandler,
+};
 
-export type HookName = (typeof HOOK_NAMES)[number];
-
-export type Hooks = Partial<Record<HookName, string>>;
-
-export const isHookName = (name: string): name is HookName =>
-  (HOOK_NAMES as readonly string[]).includes(name);
-
-export const AgentFrontmatterSchema = Type.Object(
-  {
-    name: Type.Optional(Type.String()),
-    type: Type.Union(
-      [
-        Type.Literal("pi"),
-        Type.Literal("pi-rpc"),
-        Type.Literal("shell"),
-        Type.Literal("claude"),
-      ],
-      { default: "pi" },
-    ),
-    description: Type.String({ default: "" }),
-    listen: Type.Array(Type.String(), { default: [] }),
-    ignore_self: Type.Boolean({ default: true }),
-    emits: Type.Array(Type.String(), { default: [] }),
-    tools: Type.Array(Type.String(), { default: [] }),
-    model: Type.Optional(Type.String()),
-    provider: Type.Optional(Type.String()),
-    memory_blocks: Type.Optional(
-      Type.Record(Type.String(), MemoryBlockEntrySchema),
-    ),
-    hooks: Type.Optional(Type.Record(Type.String(), Type.String())),
+const { values } = parseArgs({
+  options: {
+    agent: { type: "string" },
+    db: { type: "string", default: ".pi/busytown/events.db" },
+    poll: { type: "string", default: "1000" },
   },
-  { additionalProperties: true },
-);
+});
 
-export type AgentFrontmatter = Static<typeof AgentFrontmatterSchema>;
-
-export type MemoryBlockDef = MemoryBlock;
-
-/** Normalize a raw hooks record: strip nulls, keep only valid hook names. */
-export const parseHooks = (raw: unknown): Hooks => {
-  if (!raw || typeof raw !== "object") return {};
-  const hooks: Hooks = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === "string" && isHookName(key)) {
-      hooks[key] = value;
-    }
-  }
-  return hooks;
-};
-
-/** Apply defaults, validate, and return typed frontmatter. Throws on invalid input. */
-const parseAgentFrontmatter = (data: unknown): AgentFrontmatter => {
-  Value.Default(AgentFrontmatterSchema, data);
-  const d = data as Record<string, unknown>;
-
-  d.hooks = parseHooks(d.hooks);
-  d.memory_blocks = parseMemoryBlockEntries(d.memory_blocks);
-
-  if (!Value.Check(AgentFrontmatterSchema, data)) {
-    const errors = [...Value.Errors(AgentFrontmatterSchema, data)];
-    throw new Error(
-      `Invalid agent frontmatter: ${errors.map((e) => `${e.path}: ${e.message}`).join(", ")}`,
-    );
-  }
-  return data as AgentFrontmatter;
-};
-
-export type PiAgentDef = {
-  id: string;
-  filePath: string;
-  type: "pi";
-  description: string;
-  listen: string[];
-  ignoreSelf: boolean;
-  emits: string[];
-  tools: string[];
-  body: string;
-  model?: string;
-  provider?: string;
-  memoryBlocks: Record<string, MemoryBlockDef>;
-  hooks: Hooks;
-};
-
-export type PiRpcAgentDef = {
-  id: string;
-  filePath: string;
-  type: "pi-rpc";
-  description: string;
-  listen: string[];
-  ignoreSelf: boolean;
-  emits: string[];
-  tools: string[];
-  body: string;
-  model?: string;
-  provider?: string;
-  memoryBlocks: Record<string, MemoryBlockDef>;
-  hooks: Hooks;
-};
-
-export type ShellAgentDef = {
-  id: string;
-  filePath: string;
-  type: "shell";
-  description: string;
-  listen: string[];
-  ignoreSelf: boolean;
-  emits: string[];
-  body: string;
-  memoryBlocks: Record<string, MemoryBlockDef>;
-};
-
-export type ClaudeAgentDef = {
-  id: string;
-  filePath: string;
-  type: "claude";
-  description: string;
-  listen: string[];
-  ignoreSelf: boolean;
-  emits: string[];
-  tools: string[];
-  body: string;
-  model?: string;
-  memoryBlocks: Record<string, MemoryBlockDef>;
-};
-
-export type AgentDef =
-  | PiAgentDef
-  | PiRpcAgentDef
-  | ShellAgentDef
-  | ClaudeAgentDef;
-
-export const loadAgentDef = (filePath: string, cwd: string): AgentDef => {
-  const raw = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(raw);
-  const fm = parseAgentFrontmatter(data);
-  const id = pathToSlug(filePath);
-  if (!id) {
-    throw new Error(`Cannot derive agent ID from path: ${filePath}`);
-  }
-
-  const memoryBlocks = hydrateMemoryBlocks(
-    cwd,
-    id,
-    parseMemoryBlockEntries(fm.memory_blocks),
-  );
-
-  if (fm.type === "shell") {
-    return {
-      id,
-      filePath,
-      type: "shell",
-      description: fm.description,
-      listen: fm.listen,
-      ignoreSelf: fm.ignore_self,
-      emits: fm.emits,
-      body: content,
-      memoryBlocks,
-    };
-  }
-
-  if (fm.type === "claude") {
-    return {
-      id,
-      filePath,
-      type: "claude",
-      description: fm.description,
-      listen: fm.listen,
-      ignoreSelf: fm.ignore_self,
-      emits: fm.emits,
-      tools: fm.tools,
-      body: content.trim(),
-      model: fm.model,
-      memoryBlocks,
-    };
-  }
-
-  if (fm.type === "pi-rpc") {
-    return {
-      id,
-      filePath,
-      type: "pi-rpc",
-      description: fm.description,
-      listen: fm.listen,
-      ignoreSelf: fm.ignore_self,
-      emits: fm.emits,
-      tools: fm.tools,
-      body: content.trim(),
-      model: fm.model,
-      provider: fm.provider ?? (fm.model ? guessProvider(fm.model) : undefined),
-      memoryBlocks,
-      hooks: fm.hooks ?? {},
-    };
-  }
-
-  return {
-    id,
-    filePath,
-    type: "pi",
-    description: fm.description,
-    listen: fm.listen,
-    ignoreSelf: fm.ignore_self,
-    emits: fm.emits,
-    tools: fm.tools,
-    body: content.trim(),
-    model: fm.model,
-    provider: fm.provider ?? (fm.model ? guessProvider(fm.model) : undefined),
-    memoryBlocks,
-    hooks: fm.hooks ?? {},
-  };
-};
-
-export type AgentConfig = {
-  path: string;
-  dbPath: string;
-  cwd: string;
-};
-
-export const loadFileAgentOf = (config: AgentConfig): Agent => {
-  const agentDef = loadAgentDef(config.path, config.cwd);
-  const system = buildAgentAppendPrompt(agentDef);
-  const env = {
-    BUSYTOWN_DB_PATH: config.dbPath,
-    BUSYTOWN_AGENT_ID: agentDef.id,
-    BUSYTOWN_AGENT_FILE: config.path,
-  };
-
-  switch (agentDef.type) {
-    case "pi":
-      return piAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        model: agentDef.model,
-        provider: agentDef.provider,
-        system,
-        extensions: [AGENT_EXTENSION_PATH],
-        env,
-      });
-    case "pi-rpc":
-      return piRpcAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        model: agentDef.model,
-        provider: agentDef.provider,
-        system,
-        extensions: [AGENT_EXTENSION_PATH],
-        env,
-      });
-    case "shell":
-      return shellAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        shellScript: agentDef.body,
-        env,
-      });
-    case "claude":
-      throw new Error("Claude agent not implemented yet");
-  }
-};
-
-/**
- * Asynchronously lists all agent paths in the given directory.
- * @param agentDir The directory to search for agent files.
- * @returns An async generator that yields the full paths of agent files.
- */
-export async function* listAgentPaths(
-  agentDir: string,
-): AsyncGenerator<string> {
-  for await (const agentPath of globDir("*.md", { cwd: agentDir })) {
-    yield path.resolve(agentDir, agentPath);
-  }
+if (!values.agent) {
+  console.error("Usage: file-agent --agent <path> [--db <path>] [--poll <ms>]");
+  process.exit(1);
 }
 
-export async function* listAgentDefs(
-  agentDir: string,
-  cwd: string,
-): AsyncGenerator<AgentDef> {
-  for await (const agentPath of listAgentPaths(agentDir)) {
-    yield loadAgentDef(agentPath, cwd);
-  }
+const cwd = process.cwd();
+const agentDef = loadAgentDef(values.agent, cwd);
+const dbPath = values.db!;
+const pollInterval = Number(values.poll);
+
+const handler = handlers[agentDef.type];
+if (!handler) {
+  console.error(`Unknown agent type: ${agentDef.type}`);
+  process.exit(1);
 }
+
+const client = clientOf({
+  id: agentDef.id,
+  dbPath,
+});
+
+// Build Pi-specific config
+const system = buildAgentAppendPrompt(agentDef);
+const env: Record<string, string> = {
+  BUSYTOWN_DB_PATH: dbPath,
+  BUSYTOWN_AGENT_ID: agentDef.id,
+  BUSYTOWN_AGENT_FILE: values.agent,
+};
+
+await handler(client, {
+  ...agentDef,
+  pollInterval,
+  cwd,
+  env,
+  extensions: [AGENT_EXTENSION_PATH],
+  system,
+});

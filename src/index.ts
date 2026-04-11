@@ -26,7 +26,7 @@ import {
   registerBusytownTools,
   buildAgentAppendPrompt,
 } from "./pi-agent-shared.ts";
-import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
+import { listAgentDefs, loadAgentDef } from "./file-agent-loader.ts";
 import { collect } from "./lib/generator.ts";
 
 const resolveDbPath = (projectRoot: string): string =>

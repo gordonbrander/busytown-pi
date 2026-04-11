@@ -1,38 +1,15 @@
 import type { Event } from "./lib/event.ts";
-import type { AgentSetup, HandleOptions, SendFn } from "./agent.ts";
+import type { EventClient } from "./sdk.ts";
+import type { AgentHandler } from "./agent-handler.ts";
 
-export type AgentHandler = (
-  send: SendFn,
-  event: Event,
-  options: HandleOptions,
-) => void | Promise<void>;
-
-const neverAbortSignal = new AbortController().signal;
-
-export const virtualAgentOf =
-  (handler: AgentHandler): AgentSetup =>
-  async (_id, send) => {
-    const disposedController = new AbortController();
-
-    const handle = async (
-      event: Event,
-      { signal: abortHandleSignal = neverAbortSignal }: HandleOptions = {},
-    ): Promise<void> => {
-      if (disposedController.signal.aborted)
-        throw new Error("Agent is disposed");
-      const abortSignal = AbortSignal.any([
-        disposedController.signal,
-        abortHandleSignal,
-      ]);
-      await handler(send, event, { signal: abortSignal });
-    };
-
-    const dispose = async (): Promise<void> => {
-      disposedController.abort(new Error("Abort virtual-agent"));
-    };
-
-    return {
-      handle,
-      [Symbol.asyncDispose]: dispose,
-    };
+/** Wrap a simple event callback as a full AgentHandler with its own subscribe loop. */
+export const virtualAgentHandler =
+  (
+    handler: (client: EventClient, event: Event) => void | Promise<void>,
+  ): AgentHandler =>
+  async (client, config) => {
+    const { listen, ignoreSelf, pollInterval, signal } = config;
+    for await (const event of client.subscribe({ listen, ignoreSelf, pollInterval, signal })) {
+      await handler(client, event);
+    }
   };

@@ -23,7 +23,7 @@ import {
   type PiRpcAgentDef,
   type Hooks,
   type HookName,
-} from "./file-agent.ts";
+} from "./file-agent-loader.ts";
 import {
   applyMemoryUpdate,
   readMemoryBlockValue,

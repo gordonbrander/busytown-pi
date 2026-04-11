@@ -1,9 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
-import { eventMatches, type Event } from "./lib/event.ts";
 import { pullNextMatchingEvent, pushEvent } from "./event-queue.ts";
 import { abortableSleep, nextTick } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { type AgentProc, type SendFn, type Agent } from "./agent.ts";
+import { shouldHandleEventOf } from "./sdk.ts";
 import { parseSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "agent-system.ts" });
@@ -27,15 +27,7 @@ type SpawnedAgent = {
   abortController: AbortController;
 };
 
-/** Create a predicate function that checks if agent should handle event. */
-export const shouldHandleEventOf =
-  (id: string, ignoreSelf: boolean, listen: string[]) =>
-  (event: Event): boolean => {
-    if (ignoreSelf && event.agent_id === id) {
-      return false;
-    }
-    return eventMatches(event, listen);
-  };
+export { shouldHandleEventOf } from "./sdk.ts";
 
 export const agentSystemOf = (
   db: DatabaseSync,

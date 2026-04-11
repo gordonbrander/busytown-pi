@@ -4,7 +4,7 @@
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getOrOpenDb, pushEvent } from "./event-queue.ts";
-import { loadAgentDef } from "./file-agent.ts";
+import { loadAgentDef } from "./file-agent-loader.ts";
 import {
   buildAgentAppendPrompt,
   execHook,
