@@ -20,7 +20,7 @@ describe("SDK clientOf", () => {
     assert.equal(published.type, "test.hello");
     assert.deepEqual(published.payload, { msg: "hi" });
 
-    const events: typeof published[] = [];
+    const events: (typeof published)[] = [];
     for await (const event of consumer.subscribe({
       listen: ["test.*"],
       pollInterval: 10,

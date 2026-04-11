@@ -51,8 +51,10 @@ export const piRpcAgentHandler: AgentHandler = async (client, config) => {
     system,
   } = config;
 
-  const model = "model" in config ? (config.model as string | undefined) : undefined;
-  const provider = "provider" in config ? (config.provider as string | undefined) : undefined;
+  const model =
+    "model" in config ? (config.model as string | undefined) : undefined;
+  const provider =
+    "provider" in config ? (config.provider as string | undefined) : undefined;
 
   const cliArgs = buildCliArgs({ model, provider, extensions, system });
 
@@ -64,9 +66,7 @@ export const piRpcAgentHandler: AgentHandler = async (client, config) => {
     env: { ...process.env, ...env },
   });
 
-  const stdinStream = Writable.toWeb(
-    proc.stdin,
-  ) as WritableStream<Uint8Array>;
+  const stdinStream = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
   const stdinWriter = stdinStream.getWriter();
 
   const sendCommand = (command: PiRpcCommand): Promise<void> =>
@@ -89,9 +89,18 @@ export const piRpcAgentHandler: AgentHandler = async (client, config) => {
     )
     .catch(() => {});
 
-  const fullListen = [...listen, `agent.${id}.compact`, `agent.${id}.new_session`];
+  const fullListen = [
+    ...listen,
+    `agent.${id}.compact`,
+    `agent.${id}.new_session`,
+  ];
 
-  for await (const event of client.subscribe({ listen: fullListen, ignoreSelf, pollInterval, signal })) {
+  for await (const event of client.subscribe({
+    listen: fullListen,
+    ignoreSelf,
+    pollInterval,
+    signal,
+  })) {
     const correlationId = event.id;
     const reader = output.getReader();
 

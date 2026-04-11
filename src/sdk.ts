@@ -84,4 +84,3 @@ export const clientOf = ({ id, dbPath }: ClientConfig): EventClient => {
     subscribe,
   };
 };
-

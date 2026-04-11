@@ -49,12 +49,19 @@ export const piAgentHandler: AgentHandler = async (client, config) => {
     system,
   } = config;
 
-  const model = "model" in config ? (config.model as string | undefined) : undefined;
-  const provider = "provider" in config ? (config.provider as string | undefined) : undefined;
+  const model =
+    "model" in config ? (config.model as string | undefined) : undefined;
+  const provider =
+    "provider" in config ? (config.provider as string | undefined) : undefined;
 
   const cliArgs = buildCliArgs({ model, provider, extensions, system });
 
-  for await (const event of client.subscribe({ listen, ignoreSelf, pollInterval, signal })) {
+  for await (const event of client.subscribe({
+    listen,
+    ignoreSelf,
+    pollInterval,
+    signal,
+  })) {
     const correlationId = event.id;
 
     const proc = spawn("pi", cliArgs, {

@@ -7,9 +7,22 @@ import type { AgentHandler } from "./agent-handler.ts";
 const logger = loggerOf({ source: "shell-agent.ts" });
 
 export const shellAgentHandler: AgentHandler = async (client, config) => {
-  const { id, body, env = {}, listen, ignoreSelf, pollInterval, signal } = config;
+  const {
+    id,
+    body,
+    env = {},
+    listen,
+    ignoreSelf,
+    pollInterval,
+    signal,
+  } = config;
 
-  for await (const event of client.subscribe({ listen, ignoreSelf, pollInterval, signal })) {
+  for await (const event of client.subscribe({
+    listen,
+    ignoreSelf,
+    pollInterval,
+    signal,
+  })) {
     const correlationId = event.id;
 
     const rendered = renderTemplate(body, { event });

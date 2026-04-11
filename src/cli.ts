@@ -67,12 +67,13 @@ const resolveDb = (dir?: string, db?: string) =>
   getOrOpenDb(resolveDbPath(dir, db));
 
 /** Create a ProcessFactory that spawns a file-agent for the given agent def. */
-const fileAgentFactory = (
-  agentDefPath: string,
-  dbPath: string,
-  cwd: string,
-  pollInterval = 1000,
-): ProcessFactory =>
+const fileAgentFactory =
+  (
+    agentDefPath: string,
+    dbPath: string,
+    cwd: string,
+    pollInterval = 1000,
+  ): ProcessFactory =>
   () =>
     spawn(
       "node",

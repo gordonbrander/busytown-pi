@@ -9,7 +9,12 @@ export const virtualAgentHandler =
   ): AgentHandler =>
   async (client, config) => {
     const { listen, ignoreSelf, pollInterval, signal } = config;
-    for await (const event of client.subscribe({ listen, ignoreSelf, pollInterval, signal })) {
+    for await (const event of client.subscribe({
+      listen,
+      ignoreSelf,
+      pollInterval,
+      signal,
+    })) {
       await handler(client, event);
     }
   };
