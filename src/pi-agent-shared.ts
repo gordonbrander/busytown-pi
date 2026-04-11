@@ -20,6 +20,7 @@ import {
   loadAgentDef,
   type AgentDef,
   type PiAgentDef,
+  type PiRpcAgentDef,
   type Hooks,
   type HookName,
 } from "./file-agent.ts";
@@ -66,15 +67,7 @@ export const execHook = async (
   return pi.exec("sh", ["-c", rendered], { timeout: HOOK_TIMEOUT });
 };
 
-/** Build the agent-augmented system prompt. */
-export const buildAgentSystemPrompt = (
-  basePrompt: string,
-  agent: AgentDef,
-): string => {
-  return [basePrompt, "", buildAgentAppendPrompt(agent)].join("\n");
-};
-
-/** Build the agent-specific system prompt (without base prompt). */
+/** Build the agent-specific append prompt. */
 export const buildAgentAppendPrompt = (agent: AgentDef): string => {
   return [
     `You are the "${agent.id}" agent. ${agent.description}`,
@@ -280,10 +273,10 @@ export const registerAgentMemoryTool = (
   });
 };
 
-/** Register lifecycle hooks from a pi agent definition. */
+/** Register lifecycle hooks from a pi or pi-rpc agent definition. */
 export const registerAgentHooks = (
   pi: ExtensionAPI,
-  agent: PiAgentDef,
+  agent: PiAgentDef | PiRpcAgentDef,
 ): void => {
   const { hooks } = agent;
 
