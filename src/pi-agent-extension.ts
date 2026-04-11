@@ -6,6 +6,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getOrOpenDb, pushEvent } from "./event-queue.ts";
 import { loadAgentDef } from "./file-agent.ts";
 import {
+  buildAgentAppendPrompt,
   execHook,
   registerAgentMemoryTool,
   registerAgentHooks,
@@ -30,9 +31,28 @@ export default (pi: ExtensionAPI) => {
   const cwd = process.cwd();
   const agent = loadAgentDef(agentFile, cwd);
 
-  // Execute before_agent_start hook if defined
-  if (agent.type === "pi" && agent.hooks.before_agent_start) {
-    pi.on("before_agent_start", async (event, ctx) => {
+  // Inject busytown context and agent prompt into system prompt
+  pi.on("before_agent_start", async (event, ctx) => {
+    const busytownContext = [
+      "# Busytown",
+      "",
+      "You are running as a Busytown agent subprocess.",
+      "Busytown coordinates multiple AI agents via a shared SQLite event queue.",
+      "Agents communicate by pushing and claiming events.",
+      `Agent definitions are markdown files located in the \`.pi/agents/\` directory relative to the project root.`,
+      `Your agent definition file is: ${agentFile}`,
+      "",
+      buildAgentAppendPrompt(agent),
+    ].join("\n");
+
+    // Run before_agent_start hook if defined
+    let hookMessage:
+      | { customType: string; content: string; display: boolean }
+      | undefined;
+    if (
+      (agent.type === "pi" || agent.type === "pi-rpc") &&
+      agent.hooks.before_agent_start
+    ) {
       const hookResult = await execHook(
         pi,
         agent.hooks,
@@ -41,18 +61,21 @@ export default (pi: ExtensionAPI) => {
         { prompt: event.prompt },
       );
       if (hookResult && hookResult.code === 0 && hookResult.stdout.trim()) {
-        return {
-          message: {
-            customType: "busytown-hook",
-            content: hookResult.stdout,
-            display: true,
-          },
+        hookMessage = {
+          customType: "busytown-hook",
+          content: hookResult.stdout,
+          display: true,
         };
       }
-    });
-  }
+    }
 
-  if (agent.type === "pi") {
+    return {
+      systemPrompt: [event.systemPrompt, "", busytownContext].join("\n"),
+      ...(hookMessage ? { message: hookMessage } : {}),
+    };
+  });
+
+  if (agent.type === "pi" || agent.type === "pi-rpc") {
     registerAgentHooks(pi, agent);
   }
 

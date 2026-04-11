@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildAgentSystemPrompt, guessProvider } from "./pi-agent-shared.ts";
+import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
 import type { AgentDef } from "./file-agent.ts";
 
-describe("buildAgentSystemPrompt", () => {
+describe("buildAgentAppendPrompt", () => {
   const makeAgent = (overrides: Partial<AgentDef> = {}): AgentDef => ({
     id: "test-agent",
     filePath: "/tmp/test-agent.md",
@@ -19,7 +19,7 @@ describe("buildAgentSystemPrompt", () => {
     ...overrides,
   });
 
-  it("combines base prompt, agent identity, body, and memory", () => {
+  it("includes agent identity, body, and memory", () => {
     const agent = makeAgent({
       memoryBlocks: {
         notes: {
@@ -29,8 +29,7 @@ describe("buildAgentSystemPrompt", () => {
         },
       },
     });
-    const result = buildAgentSystemPrompt("Base system prompt.", agent);
-    assert.ok(result.includes("Base system prompt."));
+    const result = buildAgentAppendPrompt(agent);
     assert.ok(result.includes('You are the "test-agent" agent.'));
     assert.ok(result.includes("A test agent"));
     assert.ok(result.includes("You do test things."));
@@ -40,8 +39,7 @@ describe("buildAgentSystemPrompt", () => {
 
   it("omits memory section when no memory blocks", () => {
     const agent = makeAgent();
-    const result = buildAgentSystemPrompt("Base.", agent);
-    assert.ok(result.includes("Base."));
+    const result = buildAgentAppendPrompt(agent);
     assert.ok(result.includes("You do test things."));
     assert.ok(!result.includes("<memory_blocks>"));
   });
