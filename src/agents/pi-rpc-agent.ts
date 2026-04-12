@@ -6,14 +6,14 @@ import {
   stderr,
   stdout,
   writeJsonLine,
-} from "./lib/web-stream.ts";
-import { fromPiAgentSessionEvent } from "./lib/agent-session-event.ts";
-import { loggerOf } from "./lib/json-logger.ts";
+} from "../lib/web-stream.ts";
+import { fromPiAgentSessionEvent } from "../lib/agent-session-event.ts";
+import { loggerOf } from "../lib/json-logger.ts";
 import {
   isPiRpcResponse,
   type PiRpcCommand,
   type PiRpcStdoutLine,
-} from "./lib/pi-rpc-commands.ts";
+} from "../lib/pi-rpc-commands.ts";
 import type { AgentHandler } from "./agent-handler.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });

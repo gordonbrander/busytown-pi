@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { loadAgentDef, isHookName, parseHooks } from "./file-agent-loader.ts";
-import { writeMemoryBlockValue } from "./memory/memory.ts";
+import { writeMemoryBlockValue } from "../memory/memory.ts";
 
 let tmpDir: string;
 

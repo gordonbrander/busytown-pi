@@ -6,12 +6,12 @@ import {
   stdin,
   stdout,
   writeJsonLine,
-} from "./lib/web-stream.ts";
+} from "../lib/web-stream.ts";
 import {
   fromPiAgentSessionEvent,
   type PiAgentSessionEvent,
-} from "./lib/agent-session-event.ts";
-import { loggerOf } from "./lib/json-logger.ts";
+} from "../lib/agent-session-event.ts";
+import { loggerOf } from "../lib/json-logger.ts";
 import type { AgentHandler } from "./agent-handler.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });

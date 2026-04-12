@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { loggerOf } from "./lib/json-logger.ts";
-import { renderTemplate } from "./lib/template.ts";
-import { stderr, stdout, lineStream } from "./lib/web-stream.ts";
+import { loggerOf } from "../lib/json-logger.ts";
+import { renderTemplate } from "../lib/template.ts";
+import { stderr, stdout, lineStream } from "../lib/web-stream.ts";
 import type { AgentHandler } from "./agent-handler.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });

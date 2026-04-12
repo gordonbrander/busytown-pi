@@ -1,5 +1,5 @@
-import type { Event } from "./lib/event.ts";
-import type { EventClient } from "./sdk.ts";
+import type { Event } from "../lib/event.ts";
+import type { EventClient } from "../sdk.ts";
 import type { AgentHandler } from "./agent-handler.ts";
 
 /** Wrap a simple event callback as a full AgentHandler with its own subscribe loop. */

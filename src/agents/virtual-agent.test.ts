@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { virtualAgentHandler } from "./virtual-agent.ts";
-import { clientOf } from "./sdk.ts";
-import type { Event } from "./lib/event.ts";
+import { clientOf } from "../sdk.ts";
+import type { Event } from "../lib/event.ts";
 import type { AgentHandlerExtra } from "./agent-handler.ts";
 import type { ShellAgentDef } from "./file-agent-loader.ts";
 import fs from "node:fs";

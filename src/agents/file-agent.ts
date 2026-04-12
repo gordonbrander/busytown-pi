@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { clientOf } from "./sdk.ts";
+import { clientOf } from "../sdk.ts";
 import { loadAgentDef } from "./file-agent-loader.ts";
 import { buildAgentAppendPrompt } from "./pi-agent-shared.ts";
 import { shellAgentHandler } from "./shell-agent.ts";

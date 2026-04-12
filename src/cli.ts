@@ -12,7 +12,7 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { listAgentPaths } from "./file-agent-loader.ts";
+import { listAgentPaths } from "./agents/file-agent-loader.ts";
 import { processSystemOf, type ProcessFactory } from "./process-system.ts";
 import { clientOf } from "./sdk.ts";
 import { watchFiles } from "./file-watcher.ts";

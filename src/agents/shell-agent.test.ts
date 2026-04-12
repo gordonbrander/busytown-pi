@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { shellAgentHandler } from "./shell-agent.ts";
-import { clientOf } from "./sdk.ts";
+import { clientOf } from "../sdk.ts";
 import type { ShellAgentDef } from "./file-agent-loader.ts";
 import type { AgentHandlerExtra } from "./agent-handler.ts";
 import fs from "node:fs";

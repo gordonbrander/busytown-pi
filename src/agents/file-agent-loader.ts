@@ -4,14 +4,14 @@ import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
 import { glob as globDir } from "node:fs/promises";
-import { pathToSlug } from "./lib/slug.ts";
+import { pathToSlug } from "../lib/slug.ts";
 import { guessProvider } from "./pi-agent-shared.ts";
 import {
   type MemoryBlock,
   MemoryBlockEntrySchema,
   parseMemoryBlockEntries,
   hydrateMemoryBlocks,
-} from "./memory/memory.ts";
+} from "../memory/memory.ts";
 
 export const HOOK_NAMES = [
   "session_start",

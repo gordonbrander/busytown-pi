@@ -1,4 +1,4 @@
-import type { EventClient } from "./sdk.ts";
+import type { EventClient } from "../sdk.ts";
 import type { AgentDef } from "./file-agent-loader.ts";
 
 export type AgentHandlerExtra = {
