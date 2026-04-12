@@ -153,7 +153,7 @@ const startCommand = defineCommand({
     let system = processSystemOf();
 
     cleanupEverything.add(async () => {
-      await system[Symbol.asyncDispose]();
+      await system.dispose();
     });
 
     const spawnAgents = async (): Promise<void> => {
@@ -174,7 +174,7 @@ const startCommand = defineCommand({
 
     const reloadSystem = async (): Promise<void> => {
       logger.info("Agent system reloading...", { stats: system.stats() });
-      await system[Symbol.asyncDispose]();
+      await system.dispose();
 
       system = processSystemOf();
       await spawnAgents();

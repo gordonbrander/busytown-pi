@@ -32,6 +32,7 @@ export type ProcessSystem = {
   kill: (id: string) => void;
   /** Get stats for all managed processes. */
   stats: () => ProcessSystemStats;
+  dispose: () => Promise<void>;
   /** Kill all managed processes. */
   [Symbol.asyncDispose]: () => Promise<void>;
 };
@@ -155,6 +156,7 @@ export const processSystemOf = (): ProcessSystem => {
     spawn,
     kill,
     stats,
+    dispose,
     [Symbol.asyncDispose]: dispose,
   };
 };
