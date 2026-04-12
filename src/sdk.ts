@@ -8,6 +8,7 @@ import {
 } from "./event-queue.ts";
 import { eventMatches } from "./lib/event.ts";
 import { abortableSleep } from "./lib/promise.ts";
+export { loggerOf } from "./lib/json-logger.ts";
 
 /** Create a predicate function that checks if agent should handle event. */
 export const shouldHandleEventOf =
