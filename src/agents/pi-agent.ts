@@ -91,7 +91,9 @@ export const piAgentHandler = async (
     const stdinWriter = stdin(proc).getWriter();
     writeJsonLine(stdinWriter, event)
       .then(() => stdinWriter.close())
-      .catch(() => {});
+      .catch((e) => {
+        logger.error("error writing to stdin", { agent: id, error: `${e}` });
+      });
 
     // Pipe stderr to logger (fire-and-forget)
     stderr(proc)
