@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { clientOf } from "./sdk.ts";
+import { clientOf, throwIfOrphaned } from "./sdk.ts";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -111,6 +111,72 @@ describe("SDK clientOf", () => {
 
     assert.equal(claimedA, true);
     assert.equal(claimedB, false);
+  });
+
+  it("subscribe throws when parentPid no longer matches process.ppid", async () => {
+    const dbPath = createTempDbPath();
+    const producer = clientOf({ id: "producer", dbPath });
+    // Deliberately pick a parentPid that can't match process.ppid.
+    const orphanedParentPid = process.ppid === 1 ? 2 : 1;
+    const consumer = clientOf({
+      id: "orphan-consumer",
+      dbPath,
+      parentPid: orphanedParentPid,
+    });
+
+    producer.publish("orphan.test", {});
+
+    await assert.rejects(
+      (async () => {
+        for await (const _event of consumer.subscribe({
+          listen: ["orphan.*"],
+          pollInterval: 10,
+        })) {
+          // unreachable: check runs at top of loop, before pulling events
+        }
+      })(),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(
+          err.message,
+          new RegExp(
+            `expected parent pid ${orphanedParentPid}, got ${process.ppid}`,
+          ),
+        );
+        return true;
+      },
+    );
+  });
+
+  it("subscribe never throws when parentPid is unset", async () => {
+    const dbPath = createTempDbPath();
+    const producer = clientOf({ id: "producer", dbPath });
+    const consumer = clientOf({ id: "standalone", dbPath });
+
+    producer.publish("standalone.test", {});
+
+    for await (const event of consumer.subscribe({
+      listen: ["standalone.*"],
+      pollInterval: 10,
+    })) {
+      assert.equal(event.type, "standalone.test");
+      break;
+    }
+  });
+
+  it("throwIfOrphaned throws when injected getPpid differs", () => {
+    assert.throws(
+      () => throwIfOrphaned(100, () => 1),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /expected parent pid 100, got 1/);
+        return true;
+      },
+    );
+  });
+
+  it("throwIfOrphaned returns when injected getPpid matches", () => {
+    assert.doesNotThrow(() => throwIfOrphaned(100, () => 100));
   });
 
   it("cursor advances across subscribe iterables", async () => {

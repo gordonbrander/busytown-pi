@@ -27,6 +27,28 @@ export type ClientConfig = {
   id: string;
   /** Path to the SQLite database file. */
   dbPath: string;
+  /**
+   * If set, `subscribe()` throws `OrphanedError` when `process.ppid` no longer
+   * matches this value — i.e. the parent process died and this subprocess was
+   * reparented. Leave unset for standalone agents.
+   */
+  parentPid?: number;
+};
+
+/**
+ * Throws if `getPpid()` no longer matches `parentPid` — i.e. the subprocess
+ * was reparented because its parent died. `getPpid` is injectable for tests.
+ */
+export const throwIfOrphaned = (
+  parentPid: number,
+  getPpid: () => number = () => process.ppid,
+): void => {
+  const current = getPpid();
+  if (current !== parentPid) {
+    throw new Error(
+      `Process was orphaned: expected parent pid ${parentPid}, got ${current}`,
+    );
+  }
 };
 
 /** A signal that will never abort. */
@@ -56,10 +78,15 @@ export type EventClient = {
 const clientLogger = loggerOf({ source: "sdk.ts", feature: "client" });
 
 /** Factory that creates an event client with bound publish/claim/subscribe. */
-export const clientOf = ({ id, dbPath }: ClientConfig): EventClient => {
+export const clientOf = ({
+  id,
+  dbPath,
+  parentPid,
+}: ClientConfig): EventClient => {
   clientLogger.debug(`Client initialized`, {
     id,
     dbPath,
+    parentPid,
   });
   const db = getOrOpenDb(dbPath);
   getOrCreateCursor(db, id);
@@ -79,6 +106,7 @@ export const clientOf = ({ id, dbPath }: ClientConfig): EventClient => {
     });
     const shouldHandle = shouldHandleEventOf(id, ignoreSelf, listen);
     while (!signal.aborted) {
+      if (parentPid !== undefined) throwIfOrphaned(parentPid);
       const event = pullNextMatchingEvent(db, id, shouldHandle);
       if (event) {
         yield event;

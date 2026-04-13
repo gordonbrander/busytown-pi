@@ -41,7 +41,7 @@
   },
   "scripts": {
     "coverage": "node --experimental-test-coverage --test",
-    "dead": "npx knip --max-show-issues 5",
+    "dead": "npx knip",
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "eslint 'src/**/*.ts'",

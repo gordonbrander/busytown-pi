@@ -30,7 +30,7 @@ import { unwrap, toOption } from "./lib/option.ts";
 const logger = loggerOf({ source: "cli.ts" });
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FILE_AGENT_SCRIPT = path.join(MODULE_DIR, "file-agent.ts");
+const FILE_AGENT_SCRIPT = path.join(MODULE_DIR, "agents", "file-agent.ts");
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -86,6 +86,8 @@ const fileAgentFactory =
         dbPath,
         "--poll",
         String(pollInterval),
+        "--parent-pid",
+        String(process.pid),
       ],
       {
         cwd,
