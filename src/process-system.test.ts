@@ -6,6 +6,7 @@ import {
   processSystemOf,
   type ProcessFactory,
   type ProcessSystem,
+  type ProcessSystemOptions,
 } from "./process-system.ts";
 
 const sleep = (ms: number): Promise<void> =>
@@ -26,8 +27,9 @@ const waitFor = async (
 /** Run body with a fresh system, guaranteeing dispose even on failure. */
 const withSystem = async (
   body: (system: ProcessSystem) => Promise<void>,
+  options: ProcessSystemOptions = { restartBaseDelayMs: 50 },
 ): Promise<void> => {
-  const system = processSystemOf();
+  const system = processSystemOf(options);
   try {
     await body(system);
   } finally {
@@ -85,8 +87,9 @@ describe("processSystemOf", () => {
       };
       system.spawn("once", factory);
       await system.kill("once");
-      // First restart backoff is 1s — wait past it and confirm no respawn.
-      await sleep(1500);
+      // Test override sets the first restart backoff to 50ms — wait
+      // well past it and confirm no respawn.
+      await sleep(200);
       assert.equal(spawnCount, 1);
     }));
 
@@ -107,7 +110,6 @@ describe("processSystemOf", () => {
         return spawn("sleep", ["30"], { stdio: "ignore" });
       };
       system.spawn("restart", factory);
-      // First restart backoff is 1s.
       await waitFor(() => spawnCount === 2);
       const entry = system.stats().processes[0];
       assert.equal(entry?.restartCount, 1);
@@ -115,7 +117,7 @@ describe("processSystemOf", () => {
     }));
 
   it("dispose terminates all running processes", async () => {
-    const system = processSystemOf();
+    const system = processSystemOf({ restartBaseDelayMs: 50 });
     system.spawn("a", sleepFactory);
     system.spawn("b", sleepFactory);
     await system.dispose();
@@ -126,7 +128,7 @@ describe("processSystemOf", () => {
     // Regression: dispose used to call killWithTimeout on every managed
     // process without filtering out already-exited ones, and the timeout
     // branch of killWithTimeout could resolve never.
-    const system = processSystemOf();
+    const system = processSystemOf({ restartBaseDelayMs: 50 });
     system.spawn("gone", exitFactory(0));
     await waitFor(() => system.stats().processes[0]?.state === "stopped");
     await system.dispose();

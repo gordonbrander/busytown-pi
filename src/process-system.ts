@@ -74,10 +74,22 @@ export type ProcessSystem = {
   [Symbol.asyncDispose]: () => Promise<void>;
 };
 
-const MAX_RESTARTS = 3;
-const STABILITY_WINDOW_MS = 30_000;
+export type ProcessSystemOptions = {
+  /** Base delay for exponential restart backoff, in ms. Default: 10_000. */
+  restartBaseDelayMs?: number;
+  /** Max restart attempts before marking a process crashed. Default: 3. */
+  maxRestarts?: number;
+  /** Uptime required to reset the restart counter, in ms. Default: 30_000. */
+  stabilityWindowMs?: number;
+};
 
-export const processSystemOf = (): ProcessSystem => {
+export const processSystemOf = (
+  options: ProcessSystemOptions = {},
+): ProcessSystem => {
+  const restartBaseDelayMs = options.restartBaseDelayMs ?? 10_000;
+  const maxRestarts = options.maxRestarts ?? 3;
+  const stabilityWindowMs = options.stabilityWindowMs ?? 30_000;
+
   const processes = new Map<string, ManagedProcess>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -87,12 +99,12 @@ export const processSystemOf = (): ProcessSystem => {
 
       // Reset restart count if the process was stable
       const uptime = Date.now() - managed.lastSpawnTime;
-      if (uptime >= STABILITY_WINDOW_MS) {
+      if (uptime >= stabilityWindowMs) {
         managed.restartCount = 0;
       }
 
-      if (code !== 0 && managed.restartCount < MAX_RESTARTS) {
-        const delay = Math.pow(2, managed.restartCount) * 1000;
+      if (code !== 0 && managed.restartCount < maxRestarts) {
+        const delay = Math.pow(2, managed.restartCount) * restartBaseDelayMs;
         logger.info("Restarting process", {
           id: managed.id,
           restartCount: managed.restartCount + 1,
