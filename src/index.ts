@@ -250,7 +250,7 @@ export default (pi: ExtensionAPI) => {
     if (agentName) {
       const agentsDir = path.join(projectRoot, ".pi", "agents");
       const agentFile = path.join(agentsDir, `${agentName}.md`);
-      const agent = loadAgentDef(agentFile, projectRoot);
+      const agent = loadAgentDef(agentFile, { cwd: projectRoot });
 
       // Inject agent system prompt on every turn
       pi.on("before_agent_start", async (event) => {

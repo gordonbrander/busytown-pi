@@ -44,7 +44,7 @@ You are a planner agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.id, "planner");
     assert.equal(agent.type, "pi");
     assert.equal(agent.description, "Plans tasks");
@@ -70,7 +70,7 @@ echo "Task done: {{event.type}}"
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "shell");
     assert.deepEqual(agent.listen, ["task.complete"]);
   });
@@ -86,7 +86,7 @@ Do stuff.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.id, "my-cool-agent");
   });
 
@@ -100,7 +100,7 @@ Default agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "pi");
   });
 
@@ -113,7 +113,7 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.ignoreSelf, true);
   });
 
@@ -130,7 +130,7 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     if (agent.type === "pi") {
       assert.deepEqual(agent.tools, ["read", "bash", "edit"]);
     }
@@ -153,7 +153,7 @@ Hello
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.deepEqual(agent.memoryBlocks, {
       agent: { description: "Agent notes", charLimit: 1000, value: "" },
     });
@@ -178,7 +178,7 @@ Hello
 
     writeMemoryBlockValue(tmpDir, "with-memory", "agent", "some data");
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.deepEqual(agent.memoryBlocks, {
       agent: {
         description: "Agent notes",
@@ -202,7 +202,7 @@ listen: []
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.deepEqual(agent.memoryBlocks, {});
   });
 });
@@ -223,7 +223,7 @@ Agent with hooks.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "pi");
     if (agent.type === "pi") {
       assert.equal(agent.hooks.session_start, "echo session started");
@@ -247,7 +247,7 @@ Multi-line hooks.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     if (agent.type === "pi") {
       assert.ok(agent.hooks.before_agent_start?.includes("step 1"));
       assert.ok(agent.hooks.before_agent_start?.includes("step 2"));
@@ -264,7 +264,7 @@ No hooks here.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     if (agent.type === "pi") {
       assert.deepEqual(agent.hooks, {});
     }
@@ -282,7 +282,7 @@ hooks:
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     if (agent.type === "pi") {
       assert.equal(agent.hooks.session_start, "echo hello");
       // agent_end with no value is parsed as null by yaml, should be skipped
@@ -303,7 +303,7 @@ echo hi
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "shell");
     assert.equal("hooks" in agent, false);
   });
@@ -389,7 +389,7 @@ You are a coding agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "claude");
     assert.equal(agent.id, "coder");
     assert.equal(agent.description, "Writes code");
@@ -414,7 +414,7 @@ No tools agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "claude");
     if (agent.type === "claude") {
       assert.deepEqual(agent.tools, []);
@@ -434,7 +434,7 @@ Claude agent.
 `,
     );
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "claude");
     assert.equal("hooks" in agent, false);
   });
@@ -457,7 +457,7 @@ Agent with memory.
 
     writeMemoryBlockValue(tmpDir, "claude-memory", "context", "some context");
 
-    const agent = loadAgentDef(filePath, tmpDir);
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
     assert.equal(agent.type, "claude");
     assert.deepEqual(agent.memoryBlocks, {
       context: {
