@@ -6,20 +6,10 @@ import {
   pushEvent,
   claimEvent,
 } from "./event-queue.ts";
-import { eventMatches } from "./lib/event.ts";
+import { shouldHandleEventOf } from "./lib/event.ts";
 import { abortableSleep } from "./lib/promise.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 export { loggerOf };
-
-/** Create a predicate function that checks if agent should handle event. */
-export const shouldHandleEventOf =
-  (id: string, ignoreSelf: boolean, listen: string[]) =>
-  (event: Event): boolean => {
-    if (ignoreSelf && event.agent_id === id) {
-      return false;
-    }
-    return eventMatches(event, listen);
-  };
 
 /** Configuration for creating an event client. */
 export type ClientConfig = {
