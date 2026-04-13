@@ -16,6 +16,7 @@ import {
 } from "../lib/pi-rpc-commands.ts";
 import type { EventClient } from "../sdk.ts";
 import type { PiRpcAgentDef } from "./file-agent-loader.ts";
+import { neverAbortSignal } from "../lib/abort-controller.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -50,22 +51,20 @@ export type PiRpcAgentHandlerConfig = PiRpcAgentDef & {
 
 export const piRpcAgentHandler = async (
   client: EventClient,
-  config: PiRpcAgentHandlerConfig,
-): Promise<void> => {
-  const {
+  {
     id,
     listen,
     ignoreSelf,
     pollInterval,
-    signal,
+    signal = neverAbortSignal,
     cwd = process.cwd(),
     env = {},
     extensions,
     system,
     model,
     provider,
-  } = config;
-
+  }: PiRpcAgentHandlerConfig,
+): Promise<void> => {
   const cliArgs = buildCliArgs({ model, provider, extensions, system });
 
   logger.debug("Creating RPC agent handler", { id });
@@ -74,6 +73,13 @@ export const piRpcAgentHandler = async (
     stdio: ["pipe", "pipe", "pipe"],
     cwd,
     env: { ...process.env, ...env },
+  });
+
+  const procAbortController = new AbortController();
+  const loopAbortSignal = AbortSignal.any([signal, procAbortController.signal]);
+
+  proc.once("exit", () => {
+    procAbortController.abort();
   });
 
   const stdinStream = stdin(proc);
@@ -109,7 +115,7 @@ export const piRpcAgentHandler = async (
     listen: fullListen,
     ignoreSelf,
     pollInterval,
-    signal,
+    signal: loopAbortSignal,
   })) {
     const correlationId = event.id;
     const reader = output.getReader();

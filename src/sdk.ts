@@ -8,6 +8,7 @@ import {
 } from "./event-queue.ts";
 import { shouldHandleEventOf } from "./lib/event.ts";
 import { abortableSleep } from "./lib/promise.ts";
+import { neverAbortSignal } from "./lib/abort-controller.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 export { loggerOf };
 
@@ -40,9 +41,6 @@ export const throwIfOrphaned = (
     );
   }
 };
-
-/** A signal that will never abort. */
-const neverAbortSignal = new AbortController().signal;
 
 export type ListenConfig = {
   /** Event type patterns to subscribe to. Supports exact match, glob ("prefix.*"), and wildcard ("*"). */
