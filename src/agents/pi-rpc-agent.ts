@@ -79,7 +79,9 @@ export const piRpcAgentHandler = async (
   const loopAbortSignal = AbortSignal.any([signal, procAbortController.signal]);
 
   proc.once("exit", () => {
-    procAbortController.abort();
+    procAbortController.abort(
+      new Error(`pi subprocess exited for agent ${id}`),
+    );
   });
 
   const stdinStream = stdin(proc);
@@ -196,4 +198,8 @@ export const piRpcAgentHandler = async (
     // Best effort
   }
   proc.kill("SIGTERM");
+
+  // If the loop exited because the pi subprocess died (not because the
+  // caller's signal aborted), propagate so the supervisor restarts us.
+  procAbortController.signal.throwIfAborted();
 };
