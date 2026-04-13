@@ -3,6 +3,30 @@ import { loggerOf } from "./lib/json-logger.ts";
 
 const logger = loggerOf({ source: "process-system.ts" });
 
+/**
+ * Kills a process with a timeout. First sends SIGTERM, then SIGKILL if it doesn't exit.
+ * @param process The process to kill
+ * @param timeout The timeout in milliseconds (default: 5000)
+ * @returns A promise that resolves with the process exit code
+ */
+const killWithTimeout = (
+  process: ChildProcess,
+  timeout: number = 5000,
+): Promise<number | null> => {
+  if (process.exitCode !== null) return Promise.resolve(process.exitCode);
+  return new Promise<number | null>((resolve) => {
+    const timer = setTimeout(() => {
+      process.kill("SIGKILL");
+    }, timeout);
+    timer.unref();
+    process.once("exit", () => {
+      clearTimeout(timer);
+      resolve(process.exitCode);
+    });
+    process.kill("SIGTERM");
+  });
+};
+
 /** Factory that creates a child process. Called on initial spawn and on restart. */
 export type ProcessFactory = (id: string) => ChildProcess;
 
@@ -29,11 +53,12 @@ export type ProcessSystem = {
   /** Spawn a managed process. The factory is stored for restarts. */
   spawn: (id: string, factory: ProcessFactory) => void;
   /** Kill a managed process by id (SIGTERM). */
-  kill: (id: string) => void;
+  kill: (id: string) => Promise<void>;
   /** Get stats for all managed processes. */
   stats: () => ProcessSystemStats;
+  /** Dispose of the process system, killing all managed processes. */
   dispose: () => Promise<void>;
-  /** Kill all managed processes. */
+  /** Dispose of the process system, killing all managed processes. */
   [Symbol.asyncDispose]: () => Promise<void>;
 };
 
@@ -99,12 +124,13 @@ export const processSystemOf = (): ProcessSystem => {
     processes.set(id, managed);
   };
 
-  const kill = (id: string): void => {
+  const kill = async (id: string): Promise<void> => {
     const managed = processes.get(id);
     if (!managed) return;
     managed.state = "stopped";
-    managed.process.kill("SIGTERM");
-    logger.debug("Killed process", { id });
+    const exitCode = await killWithTimeout(managed.process);
+    processes.delete(id);
+    logger.debug("Killed process", { id, exitCode });
   };
 
   const stats = (): ProcessSystemStats => ({
@@ -124,30 +150,14 @@ export const processSystemOf = (): ProcessSystem => {
     }
     timers.clear();
 
-    // Kill all running processes
-    for (const managed of processes.values()) {
-      if (managed.state === "running") {
-        kill(managed.id);
-      }
-    }
-
-    // Wait for all to exit (with timeout)
-    const exitPromises = Array.from(processes.values())
-      .filter((m) => m.process.exitCode === null)
-      .map(
-        (m) =>
-          new Promise<void>((resolve) => {
-            m.process.once("exit", () => resolve());
-            // Force kill after 5s
-            const timer = setTimeout(() => {
-              m.process.kill("SIGKILL");
-              resolve();
-            }, 5000);
-            timer.unref();
-          }),
-      );
+    /** Kill processes in parallel */
+    const exitPromises = Array.from(processes.values()).map(async (m) => {
+      m.state = "stopped";
+      await killWithTimeout(m.process);
+    });
 
     await Promise.allSettled(exitPromises);
+
     processes.clear();
     logger.debug("Disposed process system");
   };
