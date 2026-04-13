@@ -5,6 +5,7 @@ import {
   mapStream,
   stderr,
   stdout,
+  stdin,
   writeJsonLine,
 } from "../lib/web-stream.ts";
 import { fromPiAgentSessionEvent } from "../lib/agent-session-event.ts";
@@ -76,7 +77,7 @@ export const piRpcAgentHandler = async (
     env: { ...process.env, ...env },
   });
 
-  const stdinStream = Writable.toWeb(proc.stdin) as WritableStream<Uint8Array>;
+  const stdinStream = stdin(proc);
   const stdinWriter = stdinStream.getWriter();
 
   const sendCommand = (command: PiRpcCommand): Promise<void> =>
