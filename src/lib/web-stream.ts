@@ -1,19 +1,20 @@
 import type { ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
+import { unwrap, toOption } from "./option.ts";
 
 /**
  * Create a `ReadableStream<Uint8Array>` from a child process's stdout.
  * The stream closes automatically when the process exits.
  */
 export const stdout = (proc: ChildProcess): ReadableStream<Uint8Array> =>
-  processStream(proc, proc.stdout!);
+  processStream(proc, unwrap(toOption(proc.stdout), "stdout is null"));
 
 /**
  * Create a `ReadableStream<Uint8Array>` from a child process's stderr.
  * The stream closes automatically when the process exits.
  */
 export const stderr = (proc: ChildProcess): ReadableStream<Uint8Array> =>
-  processStream(proc, proc.stderr!);
+  processStream(proc, unwrap(toOption(proc.stderr), "stderr is null"));
 
 /**
  * Create a `WritableStream<Uint8Array>` from a child process's stdin.
@@ -21,7 +22,7 @@ export const stderr = (proc: ChildProcess): ReadableStream<Uint8Array> =>
  */
 export const stdin = (proc: ChildProcess): WritableStream<Uint8Array> => {
   const webStream = Writable.toWeb(
-    proc.stdin! as Writable,
+    unwrap(toOption(proc.stdin), "stdin is null") as Writable,
   ) as WritableStream<Uint8Array>;
 
   proc.once("exit", () => {
