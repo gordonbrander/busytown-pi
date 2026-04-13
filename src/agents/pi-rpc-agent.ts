@@ -136,7 +136,9 @@ export const piRpcAgentHandler = async (
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         if (!isPiRpcResponse(value)) {
           const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
@@ -145,8 +147,21 @@ export const piRpcAgentHandler = async (
           }
         }
 
+        // Per-command stream boundary:
+        //   - prompt:      response line comes first (filtered), then
+        //                  events; final event is agent_end.
+        //   - compact:     events first (compaction_start … compaction_end),
+        //                  then the RPC response. Break on the response so
+        //                  the stream is fully drained before the next
+        //                  iteration.
+        //   - new_session: events (if any) then the RPC response. Break on
+        //                  response.
+        // Matches pi's rpc-mode.js: session.prompt is fire-and-forget so its
+        // response is emitted synchronously before events stream;
+        // session.compact and session.newSession are awaited so their
+        // responses come after events.
         const isDone = isCompact
-          ? value.type === "compaction_end"
+          ? isPiRpcResponse(value) && value.command === "compact"
           : isNewSession
             ? isPiRpcResponse(value) && value.command === "new_session"
             : value.type === "agent_end";
