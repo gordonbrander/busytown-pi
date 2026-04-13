@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { cleanupGroupAsync, type CleanupGroupAsync } from "./lib/cleanup.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 
 const logger = loggerOf({ source: "process-system.ts" });
@@ -50,6 +51,8 @@ export type ManagedProcess = {
   state: "running" | "stopped" | "crashed";
   /** Timestamp of last spawn, used for stability window. */
   lastSpawnTime: number;
+  /** Teardown for the current process instance (e.g. exit listener). */
+  cleanup: CleanupGroupAsync;
 };
 
 export type ProcessSystemStats = {
@@ -92,9 +95,8 @@ export const processSystemOf = (
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
   const attach = (managed: ManagedProcess): void => {
-    managed.process.on("exit", (code) => {
-      if (managed.state === "stopped") return;
-
+    const proc = managed.process;
+    const onExit = (code: number | null) => {
       // Reset restart count if the process was stable
       const uptime = Date.now() - managed.lastSpawnTime;
       if (uptime >= stabilityWindowMs) {
@@ -108,8 +110,11 @@ export const processSystemOf = (
           restartCount: managed.restartCount + 1,
           delayMs: delay,
         });
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
           timers.delete(timer);
+          // Drain the stale detach entry from the previous process instance
+          // before binding a fresh listener for the new one.
+          await managed.cleanup();
           managed.restartCount++;
           managed.lastSpawnTime = Date.now();
           managed.process = managed.factory(managed.id);
@@ -126,6 +131,10 @@ export const processSystemOf = (
         managed.state = "stopped";
         logger.debug("Process exited cleanly", { id: managed.id });
       }
+    };
+    proc.once("exit", onExit);
+    managed.cleanup.add(() => {
+      proc.off("exit", onExit);
     });
   };
 
@@ -141,6 +150,7 @@ export const processSystemOf = (
       restartCount: 0,
       state: "running",
       lastSpawnTime: Date.now(),
+      cleanup: cleanupGroupAsync(),
     };
     attach(managed);
     processes.set(id, managed);
@@ -150,6 +160,9 @@ export const processSystemOf = (
     const managed = processes.get(id);
     if (!managed) return;
     managed.state = "stopped";
+    // Detach the restart listener before killing so an escalated SIGKILL
+    // (code === null) can't be misread as a crash and respawned.
+    await managed.cleanup();
     const exitCode = await killWithTimeout(managed.process);
     processes.delete(id);
     logger.debug("Killed process", { id, exitCode });
@@ -178,6 +191,7 @@ export const processSystemOf = (
     /** Kill processes in parallel */
     const exitPromises = Array.from(processes.values()).map(async (m) => {
       m.state = "stopped";
+      await m.cleanup();
       await killWithTimeout(m.process);
     });
 
