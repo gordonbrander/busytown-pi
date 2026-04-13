@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { getDaemonStatus, type DaemonStatus } from "./pidfile.ts";
+import { getDaemonStatus, type DaemonStatus } from "./daemon-state.ts";
 import { sleep } from "./lib/promise.ts";
 
 const resolveCliBin = (): string =>
@@ -41,7 +41,7 @@ export const spawnDaemon = async (
 
   child.unref();
 
-  // Poll pidfile for up to ~2s to confirm it started
+  // Poll state file for up to ~2s to confirm it started
   for (let i = 0; i < 10; i++) {
     await sleep(200);
     const check = getDaemonStatus(projectRoot);

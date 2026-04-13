@@ -82,6 +82,8 @@ export type ProcessSystemOptions = {
   maxRestarts?: number;
   /** Uptime required to reset the restart counter, in ms. Default: 30_000. */
   stabilityWindowMs?: number;
+  /** Called whenever the process table changes (spawn, kill, restart, crash). */
+  onStatsChange?: (stats: ProcessSystemStats) => void;
 };
 
 export const processSystemOf = (
@@ -93,6 +95,19 @@ export const processSystemOf = (
 
   const processes = new Map<string, ManagedProcess>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
+
+  const stats = (): ProcessSystemStats => ({
+    processes: Array.from(processes.values()).map((m) => ({
+      id: m.id,
+      state: m.state,
+      restartCount: m.restartCount,
+      pid: m.process.pid,
+    })),
+  });
+
+  const notifyStatsChange = (): void => {
+    options.onStatsChange?.(stats());
+  };
 
   const attach = (managed: ManagedProcess): void => {
     const proc = managed.process;
@@ -123,6 +138,7 @@ export const processSystemOf = (
           managed.lastSpawnTime = Date.now();
           managed.process = managed.factory(managed.id);
           attach(managed);
+          notifyStatsChange();
         }, delay);
         timers.add(timer);
       } else if (code !== 0) {
@@ -131,9 +147,11 @@ export const processSystemOf = (
           id: managed.id,
           restartCount: managed.restartCount,
         });
+        notifyStatsChange();
       } else {
         managed.state = "stopped";
         logger.debug("Process exited cleanly", { id: managed.id });
+        notifyStatsChange();
       }
     };
     proc.once("exit", onExit);
@@ -158,6 +176,7 @@ export const processSystemOf = (
     };
     attach(managed);
     processes.set(id, managed);
+    notifyStatsChange();
   };
 
   const kill = async (id: string): Promise<void> => {
@@ -170,16 +189,8 @@ export const processSystemOf = (
     const exitCode = await killWithTimeout(managed.process);
     processes.delete(id);
     logger.debug("Killed process", { id, exitCode });
+    notifyStatsChange();
   };
-
-  const stats = (): ProcessSystemStats => ({
-    processes: Array.from(processes.values()).map((m) => ({
-      id: m.id,
-      state: m.state,
-      restartCount: m.restartCount,
-      pid: m.process.pid,
-    })),
-  });
 
   const killAll = async (): Promise<void> => {
     const processIds = Array.from(processes.keys());
@@ -205,6 +216,7 @@ export const processSystemOf = (
     logger.debug("Killed all processes", {
       processIds,
     });
+    notifyStatsChange();
   };
 
   return {

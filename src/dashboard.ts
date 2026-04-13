@@ -8,7 +8,7 @@ import type {
 import type { AgentDef } from "./agents/file-agent-loader.ts";
 import type { Event } from "./lib/event.ts";
 import { getEventsSince } from "./event-queue.ts";
-import { getDaemonStatus } from "./pidfile.ts";
+import { getDaemonStatus } from "./daemon-state.ts";
 import { pushBuffer } from "./lib/buffer.ts";
 import { storeOf } from "./lib/store.ts";
 import {

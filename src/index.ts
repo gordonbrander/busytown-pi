@@ -20,6 +20,7 @@ import {
   registerEventLogCommand,
 } from "./dashboard.ts";
 import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
+import { readDaemonState } from "./daemon-state.ts";
 import {
   registerAgentMemoryTool,
   registerAgentHooks,
@@ -232,6 +233,35 @@ export default (pi: ExtensionAPI) => {
         } else {
           ctx.ui.notify("Busytown daemon did not stop within 5s", "error");
         }
+      },
+    });
+
+    // /busytown-stats — show daemon + agent process stats
+    pi.registerCommand("busytown-stats", {
+      description: "Show Busytown daemon and agent process stats",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const status = getDaemonStatus(projectRoot);
+        if (!status.running) {
+          ctx.ui.notify("Busytown daemon is not running", "info");
+          return;
+        }
+        const state = readDaemonState(projectRoot);
+        if (!state || state.processes.length === 0) {
+          ctx.ui.notify(
+            `Busytown daemon running (pid ${status.pid}); no agents`,
+            "info",
+          );
+          return;
+        }
+        const lines = [
+          `Busytown daemon pid ${status.pid}`,
+          ...state.processes.map(
+            (p) =>
+              `  ${p.id}  pid=${p.pid ?? "-"}  state=${p.state}  restarts=${p.restartCount}`,
+          ),
+        ];
+        ctx.ui.notify(lines.join("\n"), "info");
       },
     });
 

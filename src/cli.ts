@@ -13,16 +13,21 @@ import {
   pushEvent,
 } from "./event-queue.ts";
 import { listAgentPaths } from "./agents/file-agent-loader.ts";
-import { processSystemOf, type ProcessFactory } from "./process-system.ts";
+import {
+  processSystemOf,
+  type ProcessFactory,
+  type ProcessSystemStats,
+} from "./process-system.ts";
 import { clientOf } from "./sdk.ts";
 import { watchFiles } from "./file-watcher.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
-  writePidfile,
-  removePidfile,
+  writeDaemonState,
+  removeDaemonState,
+  readDaemonState,
   isProcessAlive,
-} from "./pidfile.ts";
+} from "./daemon-state.ts";
 import { loggerOf } from "./lib/json-logger.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { unwrap, toOption } from "./lib/option.ts";
@@ -144,16 +149,28 @@ const startCommand = defineCommand({
       ) as typeof process.stderr.write;
     }
 
-    // Write pidfile
-    writePidfile(projectRoot);
-    cleanupEverything.add(() => removePidfile(projectRoot));
+    const writeState = (
+      processes: ProcessSystemStats["processes"] = [],
+    ): void =>
+      writeDaemonState(projectRoot, {
+        daemon: process.pid,
+        processes,
+        updatedAt: new Date().toISOString(),
+      });
+
+    // Write initial state file — this also serves as the daemon's liveness
+    // marker, so write it before spawning any agents.
+    writeState();
+    cleanupEverything.add(() => removeDaemonState(projectRoot));
 
     const db = resolveDb(args.dir, args.db);
     cleanupEverything.add(() => db.close());
 
     const dbPath = unwrap(toOption(db.location()), "No database location");
 
-    const system = processSystemOf();
+    const system = processSystemOf({
+      onStatsChange: (s) => writeState(s.processes),
+    });
 
     cleanupEverything.add(async () => {
       await system.killAll();
@@ -257,7 +274,7 @@ const stopCommand = defineCommand({
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 200));
       if (!isProcessAlive(status.pid!)) {
-        removePidfile(projectRoot);
+        removeDaemonState(projectRoot);
         console.log("Busytown daemon stopped.");
         return;
       }
@@ -422,6 +439,26 @@ const checkClaimCommand = defineCommand({
   },
 });
 
+const statsCommand = defineCommand({
+  meta: {
+    name: "stats",
+    description: "Show daemon and agent process stats",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: ({ args }) => {
+    const projectRoot = resolveProjectRoot(args.dir);
+    const status = getDaemonStatus(projectRoot);
+    if (!status.running) {
+      console.log(JSON.stringify({ running: false }));
+      return;
+    }
+    const state = readDaemonState(projectRoot);
+    console.log(JSON.stringify({ running: true, ...state }));
+  },
+});
+
 const reloadCommand = defineCommand({
   meta: {
     name: "reload",
@@ -453,6 +490,7 @@ const main = defineCommand({
     start: startCommand,
     stop: stopCommand,
     status: statusCommand,
+    stats: statsCommand,
     push: pushCommand,
     events: eventsCommand,
     claim: claimCommand,
