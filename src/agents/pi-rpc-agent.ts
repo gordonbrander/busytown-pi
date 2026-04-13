@@ -14,7 +14,8 @@ import {
   type PiRpcCommand,
   type PiRpcStdoutLine,
 } from "../lib/pi-rpc-commands.ts";
-import type { AgentHandler } from "./agent-handler.ts";
+import type { EventClient } from "../sdk.ts";
+import type { PiRpcAgentDef } from "./file-agent-loader.ts";
 
 const logger = loggerOf({ source: "pi-rpc-agent.ts" });
 
@@ -38,7 +39,19 @@ const buildCliArgs = (config: PiRpcCliFlagConfig): string[] => {
   return args;
 };
 
-export const piRpcAgentHandler: AgentHandler = async (client, config) => {
+export type PiRpcAgentHandlerConfig = PiRpcAgentDef & {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  pollInterval?: number;
+  signal?: AbortSignal;
+  extensions?: string[];
+  system?: string;
+};
+
+export const piRpcAgentHandler = async (
+  client: EventClient,
+  config: PiRpcAgentHandlerConfig,
+): Promise<void> => {
   const {
     id,
     listen,
@@ -49,12 +62,9 @@ export const piRpcAgentHandler: AgentHandler = async (client, config) => {
     env = {},
     extensions,
     system,
+    model,
+    provider,
   } = config;
-
-  const model =
-    "model" in config ? (config.model as string | undefined) : undefined;
-  const provider =
-    "provider" in config ? (config.provider as string | undefined) : undefined;
 
   const cliArgs = buildCliArgs({ model, provider, extensions, system });
 

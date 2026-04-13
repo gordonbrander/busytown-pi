@@ -2,11 +2,21 @@ import { spawn } from "node:child_process";
 import { loggerOf } from "../lib/json-logger.ts";
 import { renderTemplate } from "../lib/template.ts";
 import { stderr, stdout, lineStream } from "../lib/web-stream.ts";
-import type { AgentHandler } from "./agent-handler.ts";
+import type { EventClient } from "../sdk.ts";
+import type { ShellAgentDef } from "./file-agent-loader.ts";
 
 const logger = loggerOf({ source: "shell-agent.ts" });
 
-export const shellAgentHandler: AgentHandler = async (client, config) => {
+export type ShellAgentHandlerConfig = ShellAgentDef & {
+  env?: Record<string, string | undefined>;
+  pollInterval?: number;
+  signal?: AbortSignal;
+};
+
+export const shellAgentHandler = async (
+  client: EventClient,
+  config: ShellAgentHandlerConfig,
+): Promise<void> => {
   const {
     id,
     body,

@@ -1,9 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { shellAgentHandler } from "./shell-agent.ts";
+import {
+  shellAgentHandler,
+  type ShellAgentHandlerConfig,
+} from "./shell-agent.ts";
 import { clientOf } from "../sdk.ts";
-import type { ShellAgentDef } from "./file-agent-loader.ts";
-import type { AgentHandlerExtra } from "./agent-handler.ts";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -15,8 +16,8 @@ const createTempDbPath = (): string => {
 
 const handlerConfig = (
   body: string,
-  overrides: Partial<ShellAgentDef & AgentHandlerExtra> = {},
-): ShellAgentDef & AgentHandlerExtra => ({
+  overrides: Partial<ShellAgentHandlerConfig> = {},
+): ShellAgentHandlerConfig => ({
   id: "test-shell",
   filePath: "/tmp/test.md",
   type: "shell",

@@ -8,16 +8,9 @@ import { buildAgentAppendPrompt } from "./pi-agent-shared.ts";
 import { shellAgentHandler } from "./shell-agent.ts";
 import { piAgentHandler } from "./pi-agent.ts";
 import { piRpcAgentHandler } from "./pi-rpc-agent.ts";
-import type { AgentHandler } from "./agent-handler.ts";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
-
-const handlers: Record<string, AgentHandler> = {
-  shell: shellAgentHandler,
-  pi: piAgentHandler,
-  "pi-rpc": piRpcAgentHandler,
-};
 
 const { values } = parseArgs({
   options: {
@@ -37,12 +30,6 @@ const agentDef = loadAgentDef(values.agent, cwd);
 const dbPath = values.db!;
 const pollInterval = Number(values.poll);
 
-const handler = handlers[agentDef.type];
-if (!handler) {
-  console.error(`Unknown agent type: ${agentDef.type}`);
-  process.exit(1);
-}
-
 const client = clientOf({
   id: agentDef.id,
   dbPath,
@@ -56,11 +43,35 @@ const env: Record<string, string> = {
   BUSYTOWN_AGENT_FILE: values.agent,
 };
 
-await handler(client, {
-  ...agentDef,
-  pollInterval,
-  cwd,
-  env,
-  extensions: [AGENT_EXTENSION_PATH],
-  system,
-});
+switch (agentDef.type) {
+  case "shell":
+    await shellAgentHandler(client, {
+      ...agentDef,
+      env,
+      pollInterval,
+    });
+    break;
+  case "pi":
+    await piAgentHandler(client, {
+      ...agentDef,
+      cwd,
+      env,
+      pollInterval,
+      extensions: [AGENT_EXTENSION_PATH],
+      system,
+    });
+    break;
+  case "pi-rpc":
+    await piRpcAgentHandler(client, {
+      ...agentDef,
+      cwd,
+      env,
+      pollInterval,
+      extensions: [AGENT_EXTENSION_PATH],
+      system,
+    });
+    break;
+  case "claude":
+    console.error(`Unsupported agent type: ${agentDef.type}`);
+    process.exit(1);
+}

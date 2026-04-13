@@ -12,7 +12,8 @@ import {
   type PiAgentSessionEvent,
 } from "../lib/agent-session-event.ts";
 import { loggerOf } from "../lib/json-logger.ts";
-import type { AgentHandler } from "./agent-handler.ts";
+import type { EventClient } from "../sdk.ts";
+import type { PiAgentDef } from "./file-agent-loader.ts";
 
 const logger = loggerOf({ source: "pi-agent.ts" });
 
@@ -36,7 +37,19 @@ const buildCliArgs = (config: PiCliFlagConfig): string[] => {
   return args;
 };
 
-export const piAgentHandler: AgentHandler = async (client, config) => {
+export type PiAgentHandlerConfig = PiAgentDef & {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  pollInterval?: number;
+  signal?: AbortSignal;
+  extensions?: string[];
+  system?: string;
+};
+
+export const piAgentHandler = async (
+  client: EventClient,
+  config: PiAgentHandlerConfig,
+): Promise<void> => {
   const {
     id,
     listen,
@@ -47,12 +60,9 @@ export const piAgentHandler: AgentHandler = async (client, config) => {
     env = {},
     extensions,
     system,
+    model,
+    provider,
   } = config;
-
-  const model =
-    "model" in config ? (config.model as string | undefined) : undefined;
-  const provider =
-    "provider" in config ? (config.provider as string | undefined) : undefined;
 
   const cliArgs = buildCliArgs({ model, provider, extensions, system });
 
