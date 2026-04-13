@@ -153,13 +153,15 @@ const startCommand = defineCommand({
 
     const dbPath = unwrap(toOption(db.location()), "No database location");
 
-    let system = processSystemOf();
+    const system = processSystemOf();
 
     cleanupEverything.add(async () => {
-      await system.dispose();
+      await system.killAll();
     });
 
-    const spawnAgents = async (): Promise<void> => {
+    const reloadSystem = async (): Promise<void> => {
+      logger.info("Agent system reloading...", { stats: system.stats() });
+      await system.killAll();
       for await (const agentPath of listAgentPaths(agentsDir)) {
         try {
           const factory = fileAgentFactory(agentPath, dbPath, projectRoot);
@@ -176,14 +178,6 @@ const startCommand = defineCommand({
           });
         }
       }
-    };
-
-    const reloadSystem = async (): Promise<void> => {
-      logger.info("Agent system reloading...", { stats: system.stats() });
-      await system.dispose();
-
-      system = processSystemOf();
-      await spawnAgents();
       logger.info("Agent system reloaded", { stats: system.stats() });
     };
 
@@ -211,8 +205,7 @@ const startCommand = defineCommand({
       agents_dir: agentsDir,
     });
 
-    await spawnAgents();
-    logger.info("Agent system started", { stats: system.stats() });
+    await reloadSystem();
 
     const shutdown = async () => {
       logger.info("Shutting down daemon", { pid: process.pid });

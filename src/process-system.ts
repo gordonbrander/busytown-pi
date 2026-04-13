@@ -66,12 +66,10 @@ export type ProcessSystem = {
   spawn: (id: string, factory: ProcessFactory) => void;
   /** Kill a managed process by id (SIGTERM). */
   kill: (id: string) => Promise<void>;
+  /** Kill all managed processes. */
+  killAll: () => Promise<void>;
   /** Get stats for all managed processes. */
   stats: () => ProcessSystemStats;
-  /** Dispose of the process system, killing all managed processes. */
-  dispose: () => Promise<void>;
-  /** Dispose of the process system, killing all managed processes. */
-  [Symbol.asyncDispose]: () => Promise<void>;
 };
 
 export type ProcessSystemOptions = {
@@ -166,8 +164,11 @@ export const processSystemOf = (
     })),
   });
 
-  const dispose = async (): Promise<void> => {
-    logger.debug("Disposing process system");
+  const killAll = async (): Promise<void> => {
+    const processIds = Array.from(processes.keys());
+    logger.debug("Killing all processes", {
+      processIds,
+    });
     // Clear pending restart timers
     for (const timer of timers) {
       clearTimeout(timer);
@@ -183,14 +184,15 @@ export const processSystemOf = (
     await Promise.allSettled(exitPromises);
 
     processes.clear();
-    logger.debug("Disposed process system");
+    logger.debug("Killed all processes", {
+      processIds,
+    });
   };
 
   return {
     spawn,
     kill,
+    killAll,
     stats,
-    dispose,
-    [Symbol.asyncDispose]: dispose,
   };
 };
