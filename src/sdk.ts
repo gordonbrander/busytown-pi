@@ -8,7 +8,8 @@ import {
 } from "./event-queue.ts";
 import { eventMatches } from "./lib/event.ts";
 import { abortableSleep } from "./lib/promise.ts";
-export { loggerOf } from "./lib/json-logger.ts";
+import { loggerOf } from "./lib/json-logger.ts";
+export { loggerOf };
 
 /** Create a predicate function that checks if agent should handle event. */
 export const shouldHandleEventOf =
@@ -52,8 +53,14 @@ export type EventClient = {
   subscribe: (config: ListenConfig) => AsyncIterable<Event>;
 };
 
+const clientLogger = loggerOf({ source: "sdk.ts", feature: "client" });
+
 /** Factory that creates an event client with bound publish/claim/subscribe. */
 export const clientOf = ({ id, dbPath }: ClientConfig): EventClient => {
+  clientLogger.debug(`Client initialized`, {
+    id,
+    dbPath,
+  });
   const db = getOrOpenDb(dbPath);
   getOrCreateCursor(db, id);
 
@@ -63,6 +70,13 @@ export const clientOf = ({ id, dbPath }: ClientConfig): EventClient => {
     pollInterval = 1000,
     signal = neverAbortSignal,
   }: ListenConfig): AsyncGenerator<Event> {
+    clientLogger.debug(`subscribe`, {
+      id,
+      dbPath,
+      listen,
+      ignoreSelf,
+      pollInterval,
+    });
     const shouldHandle = shouldHandleEventOf(id, ignoreSelf, listen);
     while (!signal.aborted) {
       const event = pullNextMatchingEvent(db, id, shouldHandle);
