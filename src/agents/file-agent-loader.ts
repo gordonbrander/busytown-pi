@@ -4,7 +4,7 @@ import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
 import { glob as globDir } from "node:fs/promises";
-import { pathToSlug } from "../lib/slug.ts";
+import { parseSlug, pathToSlug } from "../lib/slug.ts";
 import { guessProvider } from "./pi-agent-shared.ts";
 import {
   type MemoryBlock,
@@ -166,17 +166,21 @@ export type AgentDef =
   | ShellAgentDef
   | ClaudeAgentDef;
 
-export const loadAgentDef = (filePath: string, cwd: string): AgentDef => {
+export const loadAgentDef = (
+  filePath: string,
+  options: { cwd: string; id?: string },
+): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
   const fm = parseAgentFrontmatter(data);
-  const id = pathToSlug(filePath);
+  // Derive ID from options or file path
+  const id = options.id ? parseSlug(options.id) : pathToSlug(filePath);
   if (!id) {
     throw new Error(`Cannot derive agent ID from path: ${filePath}`);
   }
 
   const memoryBlocks = hydrateMemoryBlocks(
-    cwd,
+    options.cwd,
     id,
     parseMemoryBlockEntries(fm.memory_blocks),
   );
@@ -264,6 +268,6 @@ export async function* listAgentDefs(
   cwd: string,
 ): AsyncGenerator<AgentDef> {
   for await (const agentPath of listAgentPaths(agentDir)) {
-    yield loadAgentDef(agentPath, cwd);
+    yield loadAgentDef(agentPath, { cwd });
   }
 }

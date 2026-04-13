@@ -75,7 +75,7 @@ const fileAgentFactory =
     cwd: string,
     pollInterval = 1000,
   ): ProcessFactory =>
-  (id: string) =>
+  (_id: string) =>
     spawn(
       "node",
       [
@@ -83,8 +83,6 @@ const fileAgentFactory =
         FILE_AGENT_SCRIPT,
         "--agent",
         agentDefPath,
-        "--id",
-        id,
         "--db",
         dbPath,
         "--poll",

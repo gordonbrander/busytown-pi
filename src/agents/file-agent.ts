@@ -9,8 +9,6 @@ import { shellAgentHandler } from "./shell-agent.ts";
 import { piAgentHandler } from "./pi-agent.ts";
 import { piRpcAgentHandler } from "./pi-rpc-agent.ts";
 import { loggerOf } from "../lib/json-logger.ts";
-import { pathToSlug } from "../lib/slug.ts";
-import { unwrap } from "../lib/option.ts";
 
 const logger = loggerOf({ source: "file-agent.ts" });
 
@@ -35,12 +33,8 @@ if (!values.agent) {
 }
 
 const cwd = process.cwd();
-const agentDef = loadAgentDef(values.agent, cwd);
-// Override derived ID if explicit ID provided
-if (values.id) {
-  agentDef.id = values.id;
-}
-const dbPath = values.db!;
+const agentDef = loadAgentDef(values.agent, { cwd, id: values.id });
+const dbPath = values.db;
 const pollInterval = Number(values.poll);
 const parentPid = values["parent-pid"]
   ? Number(values["parent-pid"])
