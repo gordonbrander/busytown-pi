@@ -95,6 +95,18 @@ export const piRpcAgentHandler = async (
     .pipeThrough(lineStream())
     .pipeThrough(mapStream(JSON.parse));
 
+  // One reader for the lifetime of the handler. Cancel on abort so any
+  // pending read resolves with `{done: true}` — mirrors the exit-cancel
+  // path in `processStream`, so both teardown branches look the same.
+  const reader = output.getReader();
+  loopAbortSignal.addEventListener(
+    "abort",
+    () => {
+      reader.cancel().catch(() => {});
+    },
+    { once: true },
+  );
+
   // Pipe stderr to logger
   stderr(proc)
     .pipeThrough(lineStream())
@@ -120,7 +132,6 @@ export const piRpcAgentHandler = async (
     signal: loopAbortSignal,
   })) {
     const correlationId = event.id;
-    const reader = output.getReader();
 
     client.publish(`agent.${id}.start`, {
       correlation_id: correlationId,
@@ -186,8 +197,6 @@ export const piRpcAgentHandler = async (
         error: String(e),
         correlation_id: correlationId,
       });
-    } finally {
-      reader.releaseLock();
     }
   }
 
