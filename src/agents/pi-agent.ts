@@ -12,6 +12,7 @@ import {
   type PiAgentSessionEvent,
 } from "../lib/agent-session-event.ts";
 import { loggerOf } from "../lib/json-logger.ts";
+import { neverAbortSignal } from "../lib/abort-controller.ts";
 import type { EventClient } from "../sdk.ts";
 import type { PiAgentDef } from "./file-agent-loader.ts";
 
@@ -55,7 +56,7 @@ export const piAgentHandler = async (
     listen,
     ignoreSelf,
     pollInterval,
-    signal,
+    signal = neverAbortSignal,
     cwd = process.cwd(),
     env = {},
     extensions,
@@ -79,6 +80,12 @@ export const piAgentHandler = async (
       cwd,
       env: { ...process.env, ...env },
     });
+
+    const onAbort = (): void => {
+      proc.kill("SIGTERM");
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) proc.kill("SIGTERM");
 
     // Write the event as the prompt to stdin, then close stdin
     const stdinWriter = stdin(proc).getWriter();
@@ -153,6 +160,7 @@ export const piAgentHandler = async (
         correlation_id: correlationId,
       });
     } finally {
+      signal.removeEventListener("abort", onAbort);
       reader.releaseLock();
     }
   }
