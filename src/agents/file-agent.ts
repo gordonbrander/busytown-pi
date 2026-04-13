@@ -9,6 +9,8 @@ import { shellAgentHandler } from "./shell-agent.ts";
 import { piAgentHandler } from "./pi-agent.ts";
 import { piRpcAgentHandler } from "./pi-rpc-agent.ts";
 import { loggerOf } from "../lib/json-logger.ts";
+import { pathToSlug } from "../lib/slug.ts";
+import { unwrap } from "../lib/option.ts";
 
 const logger = loggerOf({ source: "file-agent.ts" });
 
@@ -17,6 +19,7 @@ const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
 
 const { values } = parseArgs({
   options: {
+    id: { type: "string" },
     agent: { type: "string" },
     db: { type: "string", default: ".pi/busytown/events.db" },
     poll: { type: "string", default: "1000" },
@@ -26,13 +29,17 @@ const { values } = parseArgs({
 
 if (!values.agent) {
   console.error(
-    "Usage: file-agent --agent <path> [--db <path>] [--poll <ms>] [--parent-pid <pid>]",
+    "Usage: file-agent --agent <path> [--id <id>] [--db <path>] [--poll <ms>] [--parent-pid <pid>]",
   );
   process.exit(1);
 }
 
 const cwd = process.cwd();
 const agentDef = loadAgentDef(values.agent, cwd);
+// Override derived ID if explicit ID provided
+if (values.id) {
+  agentDef.id = values.id;
+}
 const dbPath = values.db!;
 const pollInterval = Number(values.poll);
 const parentPid = values["parent-pid"]

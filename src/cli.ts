@@ -26,6 +26,7 @@ import {
 import { loggerOf } from "./lib/json-logger.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { unwrap, toOption } from "./lib/option.ts";
+import { pathToSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "cli.ts" });
 
@@ -74,7 +75,7 @@ const fileAgentFactory =
     cwd: string,
     pollInterval = 1000,
   ): ProcessFactory =>
-  () =>
+  (id: string) =>
     spawn(
       "node",
       [
@@ -82,6 +83,8 @@ const fileAgentFactory =
         FILE_AGENT_SCRIPT,
         "--agent",
         agentDefPath,
+        "--id",
+        id,
         "--db",
         dbPath,
         "--poll",
@@ -163,7 +166,10 @@ const startCommand = defineCommand({
         try {
           const factory = fileAgentFactory(agentPath, dbPath, projectRoot);
           // Use filename (without extension) as process id
-          const id = path.basename(agentPath, ".md");
+          const id = unwrap(
+            pathToSlug(agentPath),
+            `Unable to generate slug from agent path: ${agentPath}`,
+          );
           system.spawn(id, factory);
         } catch (e) {
           logger.error("Failed to spawn agent", {
