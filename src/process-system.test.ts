@@ -24,7 +24,7 @@ const waitFor = async (
   throw new Error(`waitFor timed out after ${timeoutMs}ms`);
 };
 
-/** Run body with a fresh system, guaranteeing dispose even on failure. */
+/** Run body with a fresh system, guaranteeing cleanup even on failure. */
 const withSystem = async (
   body: (system: ProcessSystem) => Promise<void>,
   options: ProcessSystemOptions = { restartBaseDelayMs: 50 },
@@ -33,7 +33,7 @@ const withSystem = async (
   try {
     await body(system);
   } finally {
-    await system.dispose();
+    await system.killAll();
   }
 };
 
@@ -116,24 +116,38 @@ describe("processSystemOf", () => {
       assert.equal(entry?.state, "running");
     }));
 
-  it("dispose terminates all running processes", async () => {
+  it("killAll terminates all running processes", async () => {
     const system = processSystemOf({ restartBaseDelayMs: 50 });
     system.spawn("a", sleepFactory);
     system.spawn("b", sleepFactory);
-    await system.dispose();
+    await system.killAll();
     assert.equal(system.stats().processes.length, 0);
   });
 
-  it("dispose does not hang on already-exited processes", async () => {
-    // Regression: dispose used to call killWithTimeout on every managed
+  it("killAll does not hang on already-exited processes", async () => {
+    // Regression: killAll used to call killWithTimeout on every managed
     // process without filtering out already-exited ones, and the timeout
     // branch of killWithTimeout could resolve never.
     const system = processSystemOf({ restartBaseDelayMs: 50 });
     system.spawn("gone", exitFactory(0));
     await waitFor(() => system.stats().processes[0]?.state === "stopped");
-    await system.dispose();
+    await system.killAll();
     assert.equal(system.stats().processes.length, 0);
   });
+
+  it("killAll leaves the system reusable for subsequent spawn", () =>
+    withSystem(async (system) => {
+      system.spawn("a", sleepFactory);
+      await system.killAll();
+      assert.equal(system.stats().processes.length, 0);
+      // Same id must be reusable after killAll (no "already exists" throw).
+      // This is the contract cli.ts reload depends on.
+      system.spawn("a", sleepFactory);
+      const stats = system.stats();
+      assert.equal(stats.processes.length, 1);
+      assert.equal(stats.processes[0]?.id, "a");
+      assert.equal(stats.processes[0]?.state, "running");
+    }));
 });
 
 describe("killWithTimeout", () => {

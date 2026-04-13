@@ -160,39 +160,50 @@ const startCommand = defineCommand({
     });
 
     const reloadSystem = async (): Promise<void> => {
-      logger.info("Agent system reloading...", { stats: system.stats() });
-      await system.killAll();
-      for await (const agentPath of listAgentPaths(agentsDir)) {
-        try {
-          const factory = fileAgentFactory(agentPath, dbPath, projectRoot);
-          // Use filename (without extension) as process id
-          const id = unwrap(
-            pathToSlug(agentPath),
-            `Unable to generate slug from agent path: ${agentPath}`,
-          );
-          system.spawn(id, factory);
-        } catch (e) {
-          logger.error("Failed to spawn agent", {
-            path: agentPath,
-            error: `${e}`,
-          });
+      try {
+        logger.info("Agent system reloading...", { stats: system.stats() });
+        await system.killAll();
+        for await (const agentPath of listAgentPaths(agentsDir)) {
+          try {
+            const factory = fileAgentFactory(agentPath, dbPath, projectRoot);
+            // Use filename (without extension) as process id
+            const id = unwrap(
+              pathToSlug(agentPath),
+              `Unable to generate slug from agent path: ${agentPath}`,
+            );
+            system.spawn(id, factory);
+          } catch (e) {
+            logger.error("Failed to spawn agent", {
+              path: agentPath,
+              error: `${e}`,
+            });
+          }
         }
+        logger.info("Agent system reloaded", { stats: system.stats() });
+      } catch (e) {
+        logger.error("Agent system reload failed", { error: `${e}` });
       }
-      logger.info("Agent system reloaded", { stats: system.stats() });
     };
 
     // Reload handler: uses SDK directly to listen for sys.reload events
     const reloadClient = clientOf({ id: "_sys-reload", dbPath });
+    const reloadAbort = new AbortController();
+    cleanupEverything.add(() => reloadAbort.abort());
+
     const runReloadLoop = async (): Promise<void> => {
       for await (const _event of reloadClient.subscribe({
         listen: ["sys.reload"],
         pollInterval: 1000,
+        signal: reloadAbort.signal,
       })) {
         await reloadSystem();
       }
     };
     runReloadLoop().catch((e) => {
-      logger.error("Reload loop crashed", { error: `${e}` });
+      logger.error("Reload loop crashed; shutting down daemon", {
+        error: `${e}`,
+      });
+      process.exit(1);
     });
 
     const stopFileWatcher = watchFiles(db, projectRoot);
