@@ -200,13 +200,17 @@ export const piRpcAgentHandler = async (
     }
   }
 
-  // Cleanup
-  try {
-    await sendCommand({ type: "abort" });
-  } catch {
-    // Best effort
+  // Cleanup. Only send abort if pi is still running — if the loop exited
+  // because the subprocess died, stdin is unusable and the command is dead
+  // code. The meaningful case is the caller's signal firing while pi lives.
+  if (proc.exitCode === null) {
+    try {
+      await sendCommand({ type: "abort" });
+    } catch {
+      // Best effort
+    }
+    proc.kill("SIGTERM");
   }
-  proc.kill("SIGTERM");
 
   // If the loop exited because the pi subprocess died (not because the
   // caller's signal aborted), propagate so the supervisor restarts us.

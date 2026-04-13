@@ -103,6 +103,10 @@ export const processSystemOf = (
         managed.restartCount = 0;
       }
 
+      // `code === null` means killed by signal (OOM, SIGSEGV, external
+      // SIGKILL) and `null !== 0` is true, so signal deaths take the restart
+      // path. Intentional kills don't reach here — `kill()` detaches this
+      // listener before signalling the process.
       if (code !== 0 && managed.restartCount < maxRestarts) {
         const delay = Math.pow(2, managed.restartCount) * restartBaseDelayMs;
         logger.info("Restarting process", {
