@@ -3,25 +3,37 @@ import { loggerOf } from "./lib/json-logger.ts";
 
 const logger = loggerOf({ source: "process-system.ts" });
 
+export type KillReceipt = {
+  signal: string | undefined;
+  exitCode: number | undefined;
+};
+
 /**
  * Kills a process with a timeout. First sends SIGTERM, then SIGKILL if it doesn't exit.
  * @param process The process to kill
  * @param timeout The timeout in milliseconds (default: 5000)
- * @returns A promise that resolves with the process exit code
+ * @returns A promise that resolves to a KillReceipt object containing the signal and exit code
  */
-const killWithTimeout = (
+export const killWithTimeout = (
   process: ChildProcess,
   timeout: number = 5000,
-): Promise<number | null> => {
-  if (process.exitCode !== null) return Promise.resolve(process.exitCode);
-  return new Promise<number | null>((resolve) => {
+): Promise<KillReceipt> => {
+  if (process.exitCode !== null)
+    return Promise.resolve({
+      signal: process.signalCode ?? undefined,
+      exitCode: process.exitCode ?? undefined,
+    });
+  return new Promise<KillReceipt>((resolve) => {
     const timer = setTimeout(() => {
       process.kill("SIGKILL");
     }, timeout);
     timer.unref();
     process.once("exit", () => {
       clearTimeout(timer);
-      resolve(process.exitCode);
+      resolve({
+        signal: process.signalCode ?? undefined,
+        exitCode: process.exitCode ?? undefined,
+      });
     });
     process.kill("SIGTERM");
   });
