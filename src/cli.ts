@@ -2,6 +2,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { defineCommand, runMain } from "citty";
 import {
   claimEvent,
@@ -10,23 +12,31 @@ import {
   getOrOpenDb,
   pushEvent,
 } from "./event-queue.ts";
-import { loadFileAgentOf, listAgentPaths } from "./file-agent.ts";
-import { type AgentSystem, agentSystemOf } from "./agent-system.ts";
+import { listAgentPaths } from "./agents/file-agent-loader.ts";
+import {
+  processSystemOf,
+  type ProcessFactory,
+  type ProcessSystemStats,
+} from "./process-system.ts";
+import { clientOf } from "./sdk.ts";
 import { watchFiles } from "./file-watcher.ts";
-import { virtualAgentOf } from "./virtual-agent.ts";
 import { forever } from "./lib/promise.ts";
 import {
   getDaemonStatus,
-  writePidfile,
-  removePidfile,
+  writeDaemonState,
+  removeDaemonState,
+  readDaemonState,
   isProcessAlive,
-} from "./pidfile.ts";
+} from "./daemon-state.ts";
 import { loggerOf } from "./lib/json-logger.ts";
-import { asyncDispose } from "./lib/dispose.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
-import { toOption, unwrap } from "./lib/option.ts";
+import { unwrap, toOption } from "./lib/option.ts";
+import { pathToSlug } from "./lib/slug.ts";
 
 const logger = loggerOf({ source: "cli.ts" });
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FILE_AGENT_SCRIPT = path.join(MODULE_DIR, "agents", "file-agent.ts");
 
 // -- Shared arg definitions --------------------------------------------------
 
@@ -61,6 +71,35 @@ const resolveProjectRoot = (dir?: string): string => dir ?? process.cwd();
 
 const resolveDb = (dir?: string, db?: string) =>
   getOrOpenDb(resolveDbPath(dir, db));
+
+/** Create a ProcessFactory that spawns a file-agent for the given agent def. */
+const fileAgentFactory =
+  (
+    agentDefPath: string,
+    dbPath: string,
+    cwd: string,
+    pollInterval = 1000,
+  ): ProcessFactory =>
+  (_id: string) =>
+    spawn(
+      "node",
+      [
+        "--experimental-strip-types",
+        FILE_AGENT_SCRIPT,
+        "--agent",
+        agentDefPath,
+        "--db",
+        dbPath,
+        "--poll",
+        String(pollInterval),
+        "--parent-pid",
+        String(process.pid),
+      ],
+      {
+        cwd,
+        stdio: "inherit",
+      },
+    );
 
 // -- Subcommands -------------------------------------------------------------
 
@@ -110,58 +149,79 @@ const startCommand = defineCommand({
       ) as typeof process.stderr.write;
     }
 
-    // Write pidfile
-    writePidfile(projectRoot);
-    cleanupEverything.add(() => removePidfile(projectRoot));
+    const writeState = (
+      processes: ProcessSystemStats["processes"] = [],
+    ): void =>
+      writeDaemonState(projectRoot, {
+        daemon: process.pid,
+        processes,
+        updatedAt: new Date().toISOString(),
+      });
+
+    // Write initial state file — this also serves as the daemon's liveness
+    // marker, so write it before spawning any agents.
+    writeState();
+    cleanupEverything.add(() => removeDaemonState(projectRoot));
 
     const db = resolveDb(args.dir, args.db);
     cleanupEverything.add(() => db.close());
 
-    let system: AgentSystem | undefined = undefined;
+    const dbPath = unwrap(toOption(db.location()), "No database location");
 
-    // Cleans up whichever system is active during shutdown
+    const system = processSystemOf({
+      onStatsChange: (s) => writeState(s.processes),
+    });
+
     cleanupEverything.add(async () => {
-      if (system) {
-        await asyncDispose(system);
-      }
+      await system.killAll();
     });
 
     const reloadSystem = async (): Promise<void> => {
-      // Dispose the old system, if it exists
-      if (system) {
-        logger.info("Agent system shutting down...", { stats: system.stats() });
-        await asyncDispose(system);
-      }
-
-      // Create a new system
-      logger.info("Agent system starting...");
-      system = agentSystemOf(db);
-
-      const dbPath = unwrap(toOption(db.location()), "No database location");
-      for await (const agentPath of listAgentPaths(agentsDir)) {
-        try {
-          const config = loadFileAgentOf({
-            path: agentPath,
-            dbPath,
-            cwd: projectRoot,
-          });
-          await system.spawnAgent(config);
-        } catch (e) {
-          logger.error("Failed to load agent", {
-            path: agentPath,
-            error: `${e}`,
-          });
+      try {
+        logger.info("Agent system reloading...", { stats: system.stats() });
+        await system.killAll();
+        for await (const agentPath of listAgentPaths(agentsDir)) {
+          try {
+            const factory = fileAgentFactory(agentPath, dbPath, projectRoot);
+            // Use filename (without extension) as process id
+            const id = unwrap(
+              pathToSlug(agentPath),
+              `Unable to generate slug from agent path: ${agentPath}`,
+            );
+            system.spawn(id, factory);
+          } catch (e) {
+            logger.error("Failed to spawn agent", {
+              path: agentPath,
+              error: `${e}`,
+            });
+          }
         }
+        logger.info("Agent system reloaded", { stats: system.stats() });
+      } catch (e) {
+        logger.error("Agent system reload failed", { error: `${e}` });
       }
-
-      await system.spawnAgent({
-        id: "_sys-reload",
-        listen: ["sys.reload"],
-        setup: virtualAgentOf(() => reloadSystem()),
-      });
-
-      logger.info("Agent system started", { stats: system.stats() });
     };
+
+    // Reload handler: uses SDK directly to listen for sys.reload events
+    const reloadClient = clientOf({ id: "_sys-reload", dbPath });
+    const reloadAbort = new AbortController();
+    cleanupEverything.add(() => reloadAbort.abort());
+
+    const runReloadLoop = async (): Promise<void> => {
+      for await (const _event of reloadClient.subscribe({
+        listen: ["sys.reload"],
+        pollInterval: 1000,
+        signal: reloadAbort.signal,
+      })) {
+        await reloadSystem();
+      }
+    };
+    runReloadLoop().catch((e) => {
+      logger.error("Reload loop crashed; shutting down daemon", {
+        error: `${e}`,
+      });
+      process.exit(1);
+    });
 
     const stopFileWatcher = watchFiles(db, projectRoot);
     cleanupEverything.add(stopFileWatcher);
@@ -214,7 +274,7 @@ const stopCommand = defineCommand({
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 200));
       if (!isProcessAlive(status.pid!)) {
-        removePidfile(projectRoot);
+        removeDaemonState(projectRoot);
         console.log("Busytown daemon stopped.");
         return;
       }
@@ -379,6 +439,26 @@ const checkClaimCommand = defineCommand({
   },
 });
 
+const statsCommand = defineCommand({
+  meta: {
+    name: "stats",
+    description: "Show daemon and agent process stats",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: ({ args }) => {
+    const projectRoot = resolveProjectRoot(args.dir);
+    const status = getDaemonStatus(projectRoot);
+    if (!status.running) {
+      console.log(JSON.stringify({ running: false }));
+      return;
+    }
+    const state = readDaemonState(projectRoot);
+    console.log(JSON.stringify({ running: true, ...state }));
+  },
+});
+
 const reloadCommand = defineCommand({
   meta: {
     name: "reload",
@@ -410,6 +490,7 @@ const main = defineCommand({
     start: startCommand,
     stop: stopCommand,
     status: statusCommand,
+    stats: statsCommand,
     push: pushCommand,
     events: eventsCommand,
     claim: claimCommand,

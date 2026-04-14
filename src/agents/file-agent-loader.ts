@@ -3,23 +3,15 @@ import { Value } from "@sinclair/typebox/value";
 import matter from "gray-matter";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { glob as globDir } from "node:fs/promises";
-import { pathToSlug } from "./lib/slug.ts";
-import { piAgentOf } from "./pi-agent.ts";
-import { piRpcAgentOf } from "./pi-rpc-agent.ts";
-import { shellAgentOf } from "./shell-agent.ts";
-import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import type { Agent } from "./agent.ts";
+import { parseSlug, pathToSlug } from "../lib/slug.ts";
+import { guessProvider } from "./pi-agent-shared.ts";
 import {
   type MemoryBlock,
   MemoryBlockEntrySchema,
   parseMemoryBlockEntries,
   hydrateMemoryBlocks,
-} from "./memory/memory.ts";
-
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");
+} from "../memory/memory.ts";
 
 export const HOOK_NAMES = [
   "session_start",
@@ -174,17 +166,21 @@ export type AgentDef =
   | ShellAgentDef
   | ClaudeAgentDef;
 
-export const loadAgentDef = (filePath: string, cwd: string): AgentDef => {
+export const loadAgentDef = (
+  filePath: string,
+  options: { cwd: string; id?: string },
+): AgentDef => {
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
   const fm = parseAgentFrontmatter(data);
-  const id = pathToSlug(filePath);
+  // Derive ID from options or file path
+  const id = options.id ? parseSlug(options.id) : pathToSlug(filePath);
   if (!id) {
     throw new Error(`Cannot derive agent ID from path: ${filePath}`);
   }
 
   const memoryBlocks = hydrateMemoryBlocks(
-    cwd,
+    options.cwd,
     id,
     parseMemoryBlockEntries(fm.memory_blocks),
   );
@@ -254,57 +250,6 @@ export const loadAgentDef = (filePath: string, cwd: string): AgentDef => {
   };
 };
 
-export type AgentConfig = {
-  path: string;
-  dbPath: string;
-  cwd: string;
-};
-
-export const loadFileAgentOf = (config: AgentConfig): Agent => {
-  const agentDef = loadAgentDef(config.path, config.cwd);
-  const system = buildAgentAppendPrompt(agentDef);
-  const env = {
-    BUSYTOWN_DB_PATH: config.dbPath,
-    BUSYTOWN_AGENT_ID: agentDef.id,
-    BUSYTOWN_AGENT_FILE: config.path,
-  };
-
-  switch (agentDef.type) {
-    case "pi":
-      return piAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        model: agentDef.model,
-        provider: agentDef.provider,
-        system,
-        extensions: [AGENT_EXTENSION_PATH],
-        env,
-      });
-    case "pi-rpc":
-      return piRpcAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        model: agentDef.model,
-        provider: agentDef.provider,
-        system,
-        extensions: [AGENT_EXTENSION_PATH],
-        env,
-      });
-    case "shell":
-      return shellAgentOf({
-        id: agentDef.id,
-        listen: agentDef.listen,
-        ignoreSelf: agentDef.ignoreSelf,
-        shellScript: agentDef.body,
-        env,
-      });
-    case "claude":
-      throw new Error("Claude agent not implemented yet");
-  }
-};
-
 /**
  * Asynchronously lists all agent paths in the given directory.
  * @param agentDir The directory to search for agent files.
@@ -323,6 +268,6 @@ export async function* listAgentDefs(
   cwd: string,
 ): AsyncGenerator<AgentDef> {
   for await (const agentPath of listAgentPaths(agentDir)) {
-    yield loadAgentDef(agentPath, cwd);
+    yield loadAgentDef(agentPath, { cwd });
   }
 }

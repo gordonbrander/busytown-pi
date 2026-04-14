@@ -4,6 +4,10 @@
   "description": "Multi-agent factories over a SQLite event queue",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sdk": "./src/sdk.ts"
+  },
   "bin": {
     "busytown": "src/cli.ts"
   },
@@ -27,29 +31,31 @@
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.63.1",
+    "@mariozechner/pi-tui": "^0.66.1",
     "@sinclair/typebox": "^0.34.48",
     "@types/picomatch": "^4.0.2",
     "chokidar": "^4.0.0",
     "citty": "^0.2.1",
     "gray-matter": "^4.0.3",
-    "js-yaml": "^4.1.1",
     "picomatch": "^4.0.3"
   },
   "scripts": {
     "coverage": "node --experimental-test-coverage --test",
+    "dead": "npx knip",
     "check": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "eslint 'src/**/*.ts'",
     "check-fmt": "prettier --check .",
-    "fmt": "prettier --write ."
+    "fmt": "prettier --write .",
+    "knip": "knip"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/js-yaml": "^4.0.9",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.19.17",
     "eslint": "^10.0.3",
+    "knip": "^6.4.0",
     "prettier": "^3.8.1",
-    "typescript": "^5.7.0",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   }
 }

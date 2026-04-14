@@ -1,0 +1,169 @@
+import { spawn } from "node:child_process";
+import {
+  lineStream,
+  mapStream,
+  stderr,
+  stdin,
+  stdout,
+  writeJsonLine,
+} from "../lib/web-stream.ts";
+import {
+  fromPiAgentSessionEvent,
+  type PiAgentSessionEvent,
+} from "../lib/agent-session-event.ts";
+import { loggerOf } from "../lib/json-logger.ts";
+import { neverAbortSignal } from "../lib/abort-controller.ts";
+import type { EventClient } from "../sdk.ts";
+import type { PiAgentDef } from "./file-agent-loader.ts";
+
+const logger = loggerOf({ source: "pi-agent.ts" });
+
+type PiCliFlagConfig = {
+  model?: string;
+  provider?: string;
+  extensions?: string[];
+  system?: string;
+};
+
+const buildCliArgs = (config: PiCliFlagConfig): string[] => {
+  const args = ["--mode", "json", "-p", "--no-session"];
+  if (config.provider) args.push("--provider", config.provider);
+  if (config.model) args.push("--model", config.model);
+  if (config.system) args.push("--append-system-prompt", config.system);
+  if (config.extensions) {
+    for (const ext of config.extensions) {
+      args.push("-e", ext);
+    }
+  }
+  return args;
+};
+
+export type PiAgentHandlerConfig = PiAgentDef & {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  pollInterval?: number;
+  signal?: AbortSignal;
+  extensions?: string[];
+  system?: string;
+};
+
+export const piAgentHandler = async (
+  client: EventClient,
+  config: PiAgentHandlerConfig,
+): Promise<void> => {
+  const {
+    id,
+    listen,
+    ignoreSelf,
+    pollInterval,
+    signal = neverAbortSignal,
+    cwd = process.cwd(),
+    env = {},
+    extensions,
+    system,
+    model,
+    provider,
+  } = config;
+
+  const cliArgs = buildCliArgs({ model, provider, extensions, system });
+
+  for await (const event of client.subscribe({
+    listen,
+    ignoreSelf,
+    pollInterval,
+    signal,
+  })) {
+    const correlationId = event.id;
+
+    const proc = spawn("pi", cliArgs, {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd,
+      env: { ...process.env, ...env },
+    });
+
+    const onAbort = (): void => {
+      proc.kill("SIGTERM");
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) proc.kill("SIGTERM");
+
+    // Write the event as the prompt to stdin, then close stdin
+    const stdinWriter = stdin(proc).getWriter();
+    writeJsonLine(stdinWriter, event)
+      .then(() => stdinWriter.close())
+      .catch((e) => {
+        logger.error("error writing to stdin", { agent: id, error: `${e}` });
+      });
+
+    // Pipe stderr to logger (fire-and-forget)
+    stderr(proc)
+      .pipeThrough(lineStream())
+      .pipeTo(
+        new WritableStream({
+          write(line) {
+            logger.error("stderr", { agent: id, line });
+          },
+        }),
+      )
+      .catch((e) => {
+        logger.error("stderr", { agent: id, error: `${e}` });
+      });
+
+    // Parse stdout as JSONL PiAgentSessionEvent
+    const output: ReadableStream<PiAgentSessionEvent> = stdout(proc)
+      .pipeThrough(lineStream())
+      .pipeThrough(mapStream(JSON.parse));
+
+    const reader = output.getReader();
+
+    const exitPromise = new Promise<{
+      code: number | null;
+      signal: string | null;
+    }>((resolve) => {
+      proc.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+
+    client.publish(`agent.${id}.start`, {
+      correlation_id: correlationId,
+      event_type: event.type,
+    });
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          const { code, signal } = await exitPromise;
+          if (code !== 0 && code !== null) {
+            client.publish(`agent.${id}.error`, {
+              error: `Process exited unexpectedly (code ${code})`,
+              correlation_id: correlationId,
+              code,
+              signal,
+            });
+          }
+          break;
+        }
+
+        const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
+        if (sessionEvent) {
+          client.publish(`agent.${id}.message`, sessionEvent);
+        }
+
+        if (value.type === "agent_end") {
+          client.publish(`agent.${id}.end`, {
+            correlation_id: correlationId,
+          });
+          break;
+        }
+      }
+    } catch (e) {
+      client.publish(`agent.${id}.error`, {
+        error: `${e}`,
+        correlation_id: correlationId,
+      });
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+      reader.releaseLock();
+    }
+  }
+};

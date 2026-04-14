@@ -3,8 +3,8 @@
  * @module
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { getOrOpenDb, pushEvent } from "./event-queue.ts";
-import { loadAgentDef } from "./file-agent.ts";
+import { getOrOpenDb, pushEvent } from "../event-queue.ts";
+import { loadAgentDef } from "./file-agent-loader.ts";
 import {
   buildAgentAppendPrompt,
   execHook,
@@ -29,7 +29,7 @@ export default (pi: ExtensionAPI) => {
 
   // Register lifecycle hooks + memory tool
   const cwd = process.cwd();
-  const agent = loadAgentDef(agentFile, cwd);
+  const agent = loadAgentDef(agentFile, { cwd, id: agentId });
 
   // Inject busytown context and agent prompt into system prompt
   pi.on("before_agent_start", async (event, ctx) => {

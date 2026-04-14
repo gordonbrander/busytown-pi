@@ -20,13 +20,14 @@ import {
   registerEventLogCommand,
 } from "./dashboard.ts";
 import { spawnDaemon, stopDaemon, getDaemonStatus } from "./daemon.ts";
+import { readDaemonState } from "./daemon-state.ts";
 import {
   registerAgentMemoryTool,
   registerAgentHooks,
   registerBusytownTools,
   buildAgentAppendPrompt,
-} from "./pi-agent-shared.ts";
-import { listAgentDefs, loadAgentDef } from "./file-agent.ts";
+} from "./agents/pi-agent-shared.ts";
+import { listAgentDefs, loadAgentDef } from "./agents/file-agent-loader.ts";
 import { collect } from "./lib/generator.ts";
 
 const resolveDbPath = (projectRoot: string): string =>
@@ -235,6 +236,35 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
+    // /busytown-stats — show daemon + agent process stats
+    pi.registerCommand("busytown-stats", {
+      description: "Show Busytown daemon and agent process stats",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const status = getDaemonStatus(projectRoot);
+        if (!status.running) {
+          ctx.ui.notify("Busytown daemon is not running", "info");
+          return;
+        }
+        const state = readDaemonState(projectRoot);
+        if (!state || state.processes.length === 0) {
+          ctx.ui.notify(
+            `Busytown daemon running (pid ${status.pid}); no agents`,
+            "info",
+          );
+          return;
+        }
+        const lines = [
+          `Busytown daemon pid ${status.pid}`,
+          ...state.processes.map(
+            (p) =>
+              `  ${p.id}  pid=${p.pid ?? "-"}  state=${p.state}  restarts=${p.restartCount}`,
+          ),
+        ];
+        ctx.ui.notify(lines.join("\n"), "info");
+      },
+    });
+
     // /busytown-reload — reload agent definitions
     pi.registerCommand("busytown-reload", {
       description: "Reload agent definitions (sends sys.reload event)",
@@ -250,7 +280,7 @@ export default (pi: ExtensionAPI) => {
     if (agentName) {
       const agentsDir = path.join(projectRoot, ".pi", "agents");
       const agentFile = path.join(agentsDir, `${agentName}.md`);
-      const agent = loadAgentDef(agentFile, projectRoot);
+      const agent = loadAgentDef(agentFile, { cwd: projectRoot });
 
       // Inject agent system prompt on every turn
       pi.on("before_agent_start", async (event) => {

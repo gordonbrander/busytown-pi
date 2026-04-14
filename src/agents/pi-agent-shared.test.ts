@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildAgentAppendPrompt, guessProvider } from "./pi-agent-shared.ts";
-import type { AgentDef } from "./file-agent.ts";
+import type { AgentDef } from "./file-agent-loader.ts";
 
 describe("buildAgentAppendPrompt", () => {
   const makeAgent = (overrides: Partial<AgentDef> = {}): AgentDef => ({

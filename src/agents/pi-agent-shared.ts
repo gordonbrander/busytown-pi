@@ -15,7 +15,7 @@ import {
   getClaimant,
   getEventsSince,
   pushEvent,
-} from "./event-queue.ts";
+} from "../event-queue.ts";
 import {
   loadAgentDef,
   type AgentDef,
@@ -23,15 +23,15 @@ import {
   type PiRpcAgentDef,
   type Hooks,
   type HookName,
-} from "./file-agent.ts";
+} from "./file-agent-loader.ts";
 import {
   applyMemoryUpdate,
   readMemoryBlockValue,
   writeMemoryBlockValue,
   renderMemoryBlocksPrompt,
-} from "./memory/memory.ts";
-import { nextTick } from "./lib/promise.ts";
-import { renderTemplate } from "./lib/template.ts";
+} from "../memory/memory.ts";
+import { nextTick } from "../lib/promise.ts";
+import { renderTemplate } from "../lib/template.ts";
 
 /** Best-guess provider from a model ID string. */
 export const guessProvider = (model: string): string | undefined => {
@@ -214,7 +214,7 @@ export const registerAgentMemoryTool = (
       const oldText = params.oldText as string | undefined;
 
       // Re-read agent def to get block schema (description, charLimit)
-      const currentAgent = loadAgentDef(agentFile, cwd);
+      const currentAgent = loadAgentDef(agentFile, { cwd, id: agentId });
       const block = currentAgent.memoryBlocks[blockKey];
 
       if (!block) {

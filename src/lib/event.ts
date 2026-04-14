@@ -19,6 +19,7 @@ export type RawEventRow = {
   payload: string;
 };
 
+/** Does event match listen pattern? */
 export const eventMatches = (event: Event, listen: string[]): boolean => {
   for (const pattern of listen) {
     if (pattern === "*") return true;
@@ -31,3 +32,13 @@ export const eventMatches = (event: Event, listen: string[]): boolean => {
   }
   return false;
 };
+
+/** Create a predicate function that checks if agent should handle event. */
+export const shouldHandleEventOf =
+  (id: string, ignoreSelf: boolean, listen: string[]) =>
+  (event: Event): boolean => {
+    if (ignoreSelf && event.agent_id === id) {
+      return false;
+    }
+    return eventMatches(event, listen);
+  };
