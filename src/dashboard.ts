@@ -38,7 +38,17 @@ type DashboardState = {
 
 type DashboardAction =
   | { type: "events"; events: Event[] }
-  | { type: "daemon_status"; running: boolean };
+  | { type: "daemon_status"; running: boolean }
+  | { type: "agents_reloaded"; agents: AgentDef[] };
+
+export type { DashboardAction };
+
+const buildInitialAgents = (agents: AgentDef[]): Map<string, AgentState> =>
+  new Map(
+    agents
+      .filter((a) => a.listen.length > 0)
+      .map((a) => [a.id, { id: a.id, status: "idle" as const }]),
+  );
 
 // ---------------------------------------------------------------------------
 // Event helpers
@@ -83,6 +93,10 @@ const dashboardReducer = (
     return action.running === state.daemonRunning
       ? state
       : { ...state, daemonRunning: action.running };
+  }
+
+  if (action.type === "agents_reloaded") {
+    return { ...state, agents: buildInitialAgents(action.agents) };
   }
 
   let agents = state.agents;
@@ -153,26 +167,27 @@ const buildWidgetLines = (state: DashboardState, theme: Theme): string[] => {
   return [parts.join(theme.fg("border", " / "))];
 };
 
+export type WidgetHandle = {
+  stop: () => void;
+  send: (action: DashboardAction) => void;
+};
+
 /**
  * Start the busytown widget that shows daemon + agent states below the editor.
- * Polls the DB every 500ms and re-renders on change.
- * Returns a cleanup function.
+ * Polls the DB every 500ms and re-renders on change. Returns a handle exposing
+ * `stop` (cleanup) and `send` (dispatch into the dashboard reducer).
  */
 export const startWidget = (
   db: DatabaseSync,
   agents: AgentDef[],
   ctx: ExtensionContext,
   projectRoot: string,
-): (() => void) => {
+): WidgetHandle => {
   const tip = getEventsSince(db, { tail: 1 });
   const initialLastSeenId = tip.length > 0 ? tip[0]!.id : 0;
 
   const store = storeOf(dashboardReducer, {
-    agents: new Map(
-      agents
-        .filter((a) => a.listen.length > 0)
-        .map((a) => [a.id, { id: a.id, status: "idle" as const }]),
-    ),
+    agents: buildInitialAgents(agents),
     daemonRunning: getDaemonStatus(projectRoot).running,
     lastSeenId: initialLastSeenId,
   });
@@ -192,16 +207,16 @@ export const startWidget = (
     );
   };
 
+  // Re-render on every state change.
+  store.onChange = apply;
+
   apply();
 
   const interval = setInterval(() => {
-    let changed = false;
-
     // Check daemon status
     const daemonRunning = getDaemonStatus(projectRoot).running;
     if (daemonRunning !== store.value.daemonRunning) {
       store.send({ type: "daemon_status", running: daemonRunning });
-      changed = true;
     }
 
     // Check for new events
@@ -210,15 +225,14 @@ export const startWidget = (
       limit: 200,
     });
     if (events.length > 0) {
-      const prev = store.value;
       store.send({ type: "events", events });
-      if (store.value !== prev) changed = true;
     }
-
-    if (changed) apply();
   }, 500);
 
-  return () => clearInterval(interval);
+  return {
+    stop: () => clearInterval(interval),
+    send: (action) => store.send(action),
+  };
 };
 
 // ---------------------------------------------------------------------------
