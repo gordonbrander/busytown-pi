@@ -45,8 +45,18 @@ export default (pi: ExtensionAPI) => {
     default: "",
   });
 
+  // Register --agents-dir flag
+  pi.registerFlag("agents-dir", {
+    description: "Agent definitions directory (default: <cwd>/.pi/agents)",
+    type: "string",
+    default: "",
+  });
+
   pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
     await nextTick();
+
+    const agentsDirFlag = pi.getFlag("agents-dir") as string;
+    const agentsDir = agentsDirFlag || path.join(projectRoot, ".pi", "agents");
 
     const db = getOrOpenDb(dbPath);
     sessionCleanup.add(() => {
@@ -55,7 +65,7 @@ export default (pi: ExtensionAPI) => {
     });
 
     // Auto-start the daemon
-    const result = await spawnDaemon(projectRoot);
+    const result = await spawnDaemon(projectRoot, agentsDir);
     if (result.ok) {
       ctx.ui.notify(`Busytown daemon running (pid ${result.pid})`, "info");
     } else {
@@ -63,9 +73,7 @@ export default (pi: ExtensionAPI) => {
     }
 
     // Load agents for widget display (read-only, no spawning)
-    const agents = await collect(
-      listAgentDefs(path.join(projectRoot, ".pi", "agents"), projectRoot),
-    );
+    const agents = await collect(listAgentDefs(agentsDir, projectRoot));
 
     // Start the dashboard widget (agent status + daemon indicator)
     const stopWidget = startWidget(db, agents, ctx, projectRoot);
@@ -200,9 +208,17 @@ export default (pi: ExtensionAPI) => {
 
     // /busytown-start — idempotent daemon start
     pi.registerCommand("busytown-start", {
-      description: "Start the Busytown daemon (idempotent)",
-      handler: async (_raw, ctx) => {
+      description:
+        "Start the Busytown daemon (idempotent). Usage: /busytown-start [--agents-dir path]",
+      handler: async (raw, ctx) => {
         await nextTick();
+        const args = parseArgs(shellSplit(raw ?? ""), {
+          "agents-dir": {
+            type: "string" as const,
+            description: "Agent definitions directory",
+          },
+        });
+        const resolvedAgentsDir = args["agents-dir"] || agentsDir;
         const status = getDaemonStatus(projectRoot);
         if (status.running) {
           ctx.ui.notify(
@@ -211,7 +227,7 @@ export default (pi: ExtensionAPI) => {
           );
           return;
         }
-        const res = await spawnDaemon(projectRoot);
+        const res = await spawnDaemon(projectRoot, resolvedAgentsDir);
         if (res.ok) {
           ctx.ui.notify(`Busytown daemon started (pid ${res.pid})`, "info");
         } else {
@@ -278,7 +294,6 @@ export default (pi: ExtensionAPI) => {
     // --agent flag: boot as a busytown agent persona
     const agentName = pi.getFlag("agent") as string;
     if (agentName) {
-      const agentsDir = path.join(projectRoot, ".pi", "agents");
       const agentFile = path.join(agentsDir, `${agentName}.md`);
       const agent = loadAgentDef(agentFile, { cwd: projectRoot });
 

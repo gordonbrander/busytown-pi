@@ -11,6 +11,8 @@ export type DaemonState = {
   processes: ProcessSystemStats["processes"];
   /** ISO timestamp of last write. */
   updatedAt: string;
+  /** Agent definitions directory. */
+  agentsDir?: string;
 };
 
 export const stateFilePath = (projectRoot: string): string =>
@@ -24,7 +26,7 @@ export const writeDaemonState = (
   const p = stateFilePath(projectRoot);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const tmp = `${p}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(state)}\n`);
+  fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`);
   fs.renameSync(tmp, p);
 };
 

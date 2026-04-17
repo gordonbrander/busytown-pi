@@ -13,6 +13,7 @@ const resolveCliBin = (): string =>
  */
 export const spawnDaemon = async (
   projectRoot: string,
+  agentsDir?: string,
 ): Promise<{ ok: boolean; pid?: number }> => {
   const status = getDaemonStatus(projectRoot);
   if (status.running) return { ok: true, pid: status.pid };
@@ -20,6 +21,8 @@ export const spawnDaemon = async (
   const cliBin = resolveCliBin();
   const logPath = path.join(projectRoot, ".pi", "busytown", "daemon.log");
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
+
+  const agentsDirArgs = agentsDir ? ["--agents-dir", agentsDir] : [];
 
   const child = spawn(
     "node",
@@ -31,6 +34,7 @@ export const spawnDaemon = async (
       projectRoot,
       "--log",
       logPath,
+      ...agentsDirArgs,
     ],
     {
       cwd: projectRoot,
