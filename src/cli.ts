@@ -156,6 +156,7 @@ const startCommand = defineCommand({
         daemon: process.pid,
         processes,
         updatedAt: new Date().toISOString(),
+        agentsDir,
       });
 
     // Write initial state file — this also serves as the daemon's liveness
