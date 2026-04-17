@@ -33,6 +33,16 @@ import { collect } from "./lib/generator.ts";
 const resolveDbPath = (projectRoot: string): string =>
   path.join(projectRoot, ".pi", "busytown", "events.db");
 
+/**
+ * Load agent defs from the directory the running daemon is actually using,
+ * falling back to `fallbackDir` when no daemon state is present.
+ */
+const loadActiveAgents = async (projectRoot: string, fallbackDir: string) => {
+  const dir = readDaemonState(projectRoot)?.agentsDir ?? fallbackDir;
+  const agents = await collect(listAgentDefs(dir, projectRoot));
+  return { agentsDir: dir, agents };
+};
+
 export default (pi: ExtensionAPI) => {
   const projectRoot = process.cwd();
   const dbPath = resolveDbPath(projectRoot);
@@ -72,12 +82,13 @@ export default (pi: ExtensionAPI) => {
       ctx.ui.notify("Busytown daemon failed to start", "error");
     }
 
-    // Load agents for widget display (read-only, no spawning)
-    const agents = await collect(listAgentDefs(agentsDir, projectRoot));
+    // Load agents for widget display from the daemon's actual agentsDir
+    // (falls back to our flag if no daemon state yet).
+    const active = await loadActiveAgents(projectRoot, agentsDir);
 
     // Start the dashboard widget (agent status + daemon indicator)
-    const stopWidget = startWidget(db, agents, ctx, projectRoot);
-    sessionCleanup.add(stopWidget);
+    const widget = startWidget(db, active.agents, ctx, projectRoot);
+    sessionCleanup.add(widget.stop);
 
     // Fire-and-forget TUI notification for every event (polls DB)
     const stopNotifier = startNotifier(db, ctx);
@@ -225,11 +236,27 @@ export default (pi: ExtensionAPI) => {
             `Busytown daemon already running (pid ${status.pid})`,
             "info",
           );
+          const refreshed = await loadActiveAgents(
+            projectRoot,
+            resolvedAgentsDir,
+          );
+          widget.send({
+            type: "agents_reloaded",
+            agents: refreshed.agents,
+          });
           return;
         }
         const res = await spawnDaemon(projectRoot, resolvedAgentsDir);
         if (res.ok) {
           ctx.ui.notify(`Busytown daemon started (pid ${res.pid})`, "info");
+          const refreshed = await loadActiveAgents(
+            projectRoot,
+            resolvedAgentsDir,
+          );
+          widget.send({
+            type: "agents_reloaded",
+            agents: refreshed.agents,
+          });
         } else {
           ctx.ui.notify("Busytown daemon failed to start", "error");
         }

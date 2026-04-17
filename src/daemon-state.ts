@@ -12,7 +12,7 @@ export type DaemonState = {
   /** ISO timestamp of last write. */
   updatedAt: string;
   /** Agent definitions directory. */
-  agentsDir?: string;
+  agentsDir: string;
 };
 
 export const stateFilePath = (projectRoot: string): string =>

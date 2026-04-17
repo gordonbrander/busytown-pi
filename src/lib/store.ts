@@ -15,8 +15,17 @@ export class Store<State, Action> {
   }
 
   send(action: Action) {
-    this.#value = this.#reducer(this.#value, action);
+    const next = this.#reducer(this.#value, action);
+    if (next !== this.#value) {
+      this.#value = next;
+      this.onChange?.(next);
+    }
   }
+
+  /**
+   * A callback that is called whenever the store's state changes.
+   */
+  onChange: ((state: State) => void) | undefined;
 }
 
 export const storeOf = <State, Action>(
