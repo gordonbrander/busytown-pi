@@ -334,8 +334,8 @@ export default (pi: ExtensionAPI) => {
       },
     });
 
-    // /busytown-compact-events — drop events already processed by all agents
-    pi.registerCommand("busytown-compact-events", {
+    // /busytown-compact-db — drop events already processed by all agents
+    pi.registerCommand("busytown-compact-db", {
       description:
         "Delete events already processed by all agents. Warns if any agent is >100 events behind.",
       handler: async (raw, ctx) => {
