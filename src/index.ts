@@ -10,8 +10,8 @@ import {
   getClaimant,
   getEventsSince,
   getOrOpenDb,
+  setEpoch,
   pushEvent,
-  seekToTail,
 } from "./event-queue.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
 import { nextTick } from "./lib/promise.ts";
@@ -326,7 +326,7 @@ export default (pi: ExtensionAPI) => {
         "Push sys.epoch and advance all agent cursors to it (abandons backlog).",
       handler: async (_raw, ctx) => {
         await nextTick();
-        const { event, advancedAgentIds } = seekToTail(db);
+        const { event, advancedAgentIds } = setEpoch(db);
         ctx.ui.notify(
           `Pushed sys.epoch event #${event.id}; advanced ${advancedAgentIds.length} cursor(s)`,
           "info",

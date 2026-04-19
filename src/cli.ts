@@ -11,8 +11,8 @@ import {
   getClaimant,
   getEventsSince,
   getOrOpenDb,
+  setEpoch,
   pushEvent,
-  seekToTail,
 } from "./event-queue.ts";
 import { listAgentPaths } from "./agents/file-agent-loader.ts";
 import {
@@ -493,7 +493,7 @@ const epochCommand = defineCommand({
   run: ({ args }) => {
     const db = resolveDb(args.dir, args.db);
     try {
-      const result = seekToTail(db);
+      const result = setEpoch(db);
       console.log(JSON.stringify(result));
     } finally {
       db.close();

@@ -303,7 +303,7 @@ export const getAllCursors = (db: DatabaseSync): CursorRow[] => {
  * Push a sys.epoch event and advance every existing agent cursor to that
  * event's id. Atomic.
  */
-export const seekToTail = (
+export const setEpoch = (
   db: DatabaseSync,
 ): { event: Event; advancedAgentIds: string[] } => {
   db.exec("BEGIN");

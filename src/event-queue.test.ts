@@ -14,8 +14,8 @@ import {
   openDb,
   pollEvents,
   pullNextMatchingEvent,
+  setEpoch,
   pushEvent,
-  seekToTail,
   updateCursor,
 } from "./event-queue.ts";
 
@@ -424,7 +424,7 @@ describe("getAllCursors", () => {
   });
 });
 
-describe("seekToTail", () => {
+describe("setEpoch", () => {
   it("pushes a sys.epoch event and advances all cursors to its id", () => {
     const db = createTestDb();
     pushEvent(db, "w", "a");
@@ -432,7 +432,7 @@ describe("seekToTail", () => {
     updateCursor(db, "agent-1", 1);
     updateCursor(db, "agent-2", 1);
 
-    const { event, advancedAgentIds } = seekToTail(db);
+    const { event, advancedAgentIds } = setEpoch(db);
 
     assert.equal(event.type, "sys.epoch");
     assert.equal(event.agent_id, "sys");
@@ -444,7 +444,7 @@ describe("seekToTail", () => {
 
   it("pushes the event even when no cursors exist", () => {
     const db = createTestDb();
-    const { event, advancedAgentIds } = seekToTail(db);
+    const { event, advancedAgentIds } = setEpoch(db);
     assert.equal(event.type, "sys.epoch");
     assert.deepEqual(advancedAgentIds, []);
     assert.equal(getLatestEventId(db), event.id);
