@@ -6,9 +6,11 @@ import path from "node:path";
 import { parseArgs } from "citty";
 import {
   claimEvent,
+  compactEvents,
   getClaimant,
   getEventsSince,
   getOrOpenDb,
+  setEpoch,
   pushEvent,
 } from "./event-queue.ts";
 import { cleanupGroupAsync } from "./lib/cleanup.ts";
@@ -315,6 +317,49 @@ export default (pi: ExtensionAPI) => {
         await nextTick();
         const event = pushEvent(db, "pi", "sys.reload");
         ctx.ui.notify(`Pushed sys.reload event #${event.id}`, "info");
+      },
+    });
+
+    // /busytown-epoch — push sys.epoch and advance all agent cursors to tail
+    pi.registerCommand("busytown-epoch", {
+      description:
+        "Push sys.epoch and advance all agent cursors to it (abandons backlog).",
+      handler: async (_raw, ctx) => {
+        await nextTick();
+        const { event, advancedAgentIds } = setEpoch(db);
+        ctx.ui.notify(
+          `Pushed sys.epoch event #${event.id}; advanced ${advancedAgentIds.length} cursor(s)`,
+          "info",
+        );
+      },
+    });
+
+    // /busytown-compact-db — drop events already processed by all agents
+    pi.registerCommand("busytown-compact-db", {
+      description:
+        "Delete events already processed by all agents. Warns if any agent is >100 events behind.",
+      handler: async (raw, ctx) => {
+        await nextTick();
+        const args = parseArgs(shellSplit(raw ?? ""), {
+          "warn-threshold": {
+            type: "string" as const,
+            description: "Warn threshold (default: 100)",
+          },
+        });
+        const rawThreshold = args["warn-threshold"];
+        const parsed = rawThreshold ? parseInt(rawThreshold, 10) : 100;
+        const threshold = isNaN(parsed) ? 100 : parsed;
+        const result = compactEvents(db, threshold);
+        for (const { agent_id, behind } of result.laggingAgents) {
+          ctx.ui.notify(
+            `warning: agent "${agent_id}" is ${behind} events behind`,
+            "warning",
+          );
+        }
+        ctx.ui.notify(
+          `Compacted: deleted ${result.deletedEvents} event(s), ${result.deletedClaims} claim(s); cutoff=${result.minCursor}, tail=${result.latestId}`,
+          "info",
+        );
       },
     });
 
