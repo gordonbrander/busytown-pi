@@ -3,15 +3,19 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import {
   claimEvent,
+  compactEvents,
+  getAllCursors,
   getClaimant,
   getCursor,
   getEventsSince,
+  getLatestEventId,
   getNextEvent,
   getOrCreateCursor,
   openDb,
   pollEvents,
   pullNextMatchingEvent,
   pushEvent,
+  seekToTail,
   updateCursor,
 } from "./event-queue.ts";
 
@@ -378,6 +382,163 @@ describe("claimEvent / getClaimant", () => {
 
     const claimant = getClaimant(db, event.id);
     assert.equal(claimant, undefined);
+    db.close();
+  });
+});
+
+describe("getLatestEventId", () => {
+  it("returns 0 for an empty db", () => {
+    const db = createTestDb();
+    assert.equal(getLatestEventId(db), 0);
+    db.close();
+  });
+
+  it("returns the max event id", () => {
+    const db = createTestDb();
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "b");
+    const last = pushEvent(db, "w", "c");
+    assert.equal(getLatestEventId(db), last.id);
+    db.close();
+  });
+});
+
+describe("getAllCursors", () => {
+  it("returns an empty array when no cursors exist", () => {
+    const db = createTestDb();
+    assert.deepEqual(getAllCursors(db), []);
+    db.close();
+  });
+
+  it("returns all cursor rows sorted by agent_id", () => {
+    const db = createTestDb();
+    updateCursor(db, "beta", 10);
+    updateCursor(db, "alpha", 5);
+    const cursors = getAllCursors(db);
+    assert.equal(cursors.length, 2);
+    assert.equal(cursors[0].agent_id, "alpha");
+    assert.equal(cursors[0].since, 5);
+    assert.equal(cursors[1].agent_id, "beta");
+    assert.equal(cursors[1].since, 10);
+    db.close();
+  });
+});
+
+describe("seekToTail", () => {
+  it("pushes a sys.epoch event and advances all cursors to its id", () => {
+    const db = createTestDb();
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "b");
+    updateCursor(db, "agent-1", 1);
+    updateCursor(db, "agent-2", 1);
+
+    const { event, advancedAgentIds } = seekToTail(db);
+
+    assert.equal(event.type, "sys.epoch");
+    assert.equal(event.agent_id, "sys");
+    assert.deepEqual(advancedAgentIds.sort(), ["agent-1", "agent-2"]);
+    assert.equal(getCursor(db, "agent-1"), event.id);
+    assert.equal(getCursor(db, "agent-2"), event.id);
+    db.close();
+  });
+
+  it("pushes the event even when no cursors exist", () => {
+    const db = createTestDb();
+    const { event, advancedAgentIds } = seekToTail(db);
+    assert.equal(event.type, "sys.epoch");
+    assert.deepEqual(advancedAgentIds, []);
+    assert.equal(getLatestEventId(db), event.id);
+    db.close();
+  });
+});
+
+describe("compactEvents", () => {
+  it("deletes events with id strictly less than the minimum cursor", () => {
+    const db = createTestDb();
+    const events = [
+      pushEvent(db, "w", "a"),
+      pushEvent(db, "w", "b"),
+      pushEvent(db, "w", "c"),
+      pushEvent(db, "w", "d"),
+    ];
+    updateCursor(db, "fast", events[3].id);
+    updateCursor(db, "slow", events[2].id);
+
+    const result = compactEvents(db);
+
+    assert.equal(result.minCursor, events[2].id);
+    assert.equal(result.deletedEvents, 2);
+    assert.equal(result.latestId, events[3].id);
+    const remaining = getEventsSince(db, { sinceId: 0, limit: 100 });
+    assert.deepEqual(
+      remaining.map((e) => e.id),
+      [events[2].id, events[3].id],
+    );
+    db.close();
+  });
+
+  it("is a no-op when no cursors exist", () => {
+    const db = createTestDb();
+    pushEvent(db, "w", "a");
+    pushEvent(db, "w", "b");
+
+    const result = compactEvents(db);
+
+    assert.equal(result.deletedEvents, 0);
+    assert.equal(result.deletedClaims, 0);
+    assert.equal(result.minCursor, 0);
+    assert.deepEqual(result.laggingAgents, []);
+    assert.equal(getEventsSince(db, { sinceId: 0, limit: 100 }).length, 2);
+    db.close();
+  });
+
+  it("also deletes claims for removed events", () => {
+    const db = createTestDb();
+    const e1 = pushEvent(db, "w", "a");
+    const e2 = pushEvent(db, "w", "b");
+    const e3 = pushEvent(db, "w", "c");
+    claimEvent(db, "claimer", e1.id);
+    claimEvent(db, "claimer", e2.id);
+    updateCursor(db, "agent", e3.id);
+
+    const result = compactEvents(db);
+
+    assert.ok(result.deletedClaims >= 2);
+    assert.equal(getClaimant(db, e1.id), undefined);
+    assert.equal(getClaimant(db, e2.id), undefined);
+    db.close();
+  });
+
+  it("warns per agent whose cursor is more than threshold behind tail", () => {
+    const db = createTestDb();
+    for (let i = 0; i < 150; i++) {
+      pushEvent(db, "w", "tick");
+    }
+    const latest = getLatestEventId(db);
+    updateCursor(db, "slow", 10);
+    updateCursor(db, "medium", latest - 50);
+    updateCursor(db, "fast", latest);
+
+    const result = compactEvents(db, 100);
+
+    const ids = result.laggingAgents.map((a) => a.agent_id);
+    assert.deepEqual(ids, ["slow"]);
+    assert.equal(result.laggingAgents[0].behind, latest - 10);
+    db.close();
+  });
+
+  it("produces no warnings when all cursors are within threshold", () => {
+    const db = createTestDb();
+    for (let i = 0; i < 50; i++) {
+      pushEvent(db, "w", "tick");
+    }
+    const latest = getLatestEventId(db);
+    updateCursor(db, "a", latest - 5);
+    updateCursor(db, "b", latest);
+
+    const result = compactEvents(db, 100);
+
+    assert.deepEqual(result.laggingAgents, []);
     db.close();
   });
 });

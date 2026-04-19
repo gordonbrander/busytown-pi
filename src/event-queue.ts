@@ -277,3 +277,116 @@ export const getClaimant = (
     .prepare(`SELECT agent_id, claimed_at FROM claims WHERE event_id = ?`)
     .get(eventId) as { agent_id: string; claimed_at: number } | undefined;
 };
+
+export const getLatestEventId = (db: DatabaseSync): number => {
+  const row = db.prepare(`SELECT MAX(id) AS id FROM events`).get() as
+    | { id: number | null }
+    | undefined;
+  return row?.id ?? 0;
+};
+
+export type CursorRow = {
+  agent_id: string;
+  since: number;
+  timestamp: number;
+};
+
+export const getAllCursors = (db: DatabaseSync): CursorRow[] => {
+  return db
+    .prepare(
+      `SELECT agent_id, since, timestamp FROM agent_cursors ORDER BY agent_id ASC`,
+    )
+    .all() as CursorRow[];
+};
+
+/**
+ * Push a sys.epoch event and advance every existing agent cursor to that
+ * event's id. Atomic.
+ */
+export const seekToTail = (
+  db: DatabaseSync,
+): { event: Event; advancedAgentIds: string[] } => {
+  db.exec("BEGIN");
+  try {
+    const event = pushEvent(db, "sys", "sys.epoch", {});
+    const cursors = getAllCursors(db);
+    const update = db.prepare(
+      `UPDATE agent_cursors SET since = ?, timestamp = unixepoch() WHERE agent_id = ?`,
+    );
+    for (const cursor of cursors) {
+      update.run(event.id, cursor.agent_id);
+    }
+    db.exec("COMMIT");
+    return {
+      event,
+      advancedAgentIds: cursors.map((c) => c.agent_id),
+    };
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+};
+
+export type CompactResult = {
+  deletedEvents: number;
+  deletedClaims: number;
+  minCursor: number;
+  latestId: number;
+  laggingAgents: Array<{ agent_id: string; behind: number }>;
+};
+
+/**
+ * Delete events with id < min(agent cursor). Also deletes claims for those
+ * events (claims has no FK cascade). If no cursors exist, no-op.
+ * Returns per-agent warnings when `latestId - cursor.since > warnThreshold`.
+ */
+export const compactEvents = (
+  db: DatabaseSync,
+  warnThreshold: number = 100,
+): CompactResult => {
+  db.exec("BEGIN");
+  try {
+    const cursors = getAllCursors(db);
+    const latestId = getLatestEventId(db);
+
+    const laggingAgents = cursors
+      .map((c) => ({ agent_id: c.agent_id, behind: latestId - c.since }))
+      .filter((c) => c.behind > warnThreshold)
+      .sort((a, b) => b.behind - a.behind);
+
+    if (cursors.length === 0) {
+      db.exec("COMMIT");
+      return {
+        deletedEvents: 0,
+        deletedClaims: 0,
+        minCursor: 0,
+        latestId,
+        laggingAgents,
+      };
+    }
+
+    const minCursor = cursors.reduce(
+      (min, c) => (c.since < min ? c.since : min),
+      cursors[0].since,
+    );
+
+    const deletedClaims = db
+      .prepare(`DELETE FROM claims WHERE event_id < ?`)
+      .run(minCursor).changes as number;
+    const deletedEvents = db
+      .prepare(`DELETE FROM events WHERE id < ?`)
+      .run(minCursor).changes as number;
+
+    db.exec("COMMIT");
+    return {
+      deletedEvents,
+      deletedClaims,
+      minCursor,
+      latestId,
+      laggingAgents,
+    };
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+};

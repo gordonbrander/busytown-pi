@@ -7,10 +7,12 @@ import { fileURLToPath } from "node:url";
 import { defineCommand, runMain } from "citty";
 import {
   claimEvent,
+  compactEvents,
   getClaimant,
   getEventsSince,
   getOrOpenDb,
   pushEvent,
+  seekToTail,
 } from "./event-queue.ts";
 import { listAgentPaths } from "./agents/file-agent-loader.ts";
 import {
@@ -479,6 +481,55 @@ const reloadCommand = defineCommand({
   },
 });
 
+const epochCommand = defineCommand({
+  meta: {
+    name: "epoch",
+    description:
+      "Push a sys.epoch event and advance all agent cursors to its id",
+  },
+  args: {
+    ...globalArgs,
+  },
+  run: ({ args }) => {
+    const db = resolveDb(args.dir, args.db);
+    try {
+      const result = seekToTail(db);
+      console.log(JSON.stringify(result));
+    } finally {
+      db.close();
+    }
+  },
+});
+
+const compactDbCommand = defineCommand({
+  meta: {
+    name: "compact-db",
+    description: "Delete events already processed by all agents",
+  },
+  args: {
+    ...globalArgs,
+    "warn-threshold": {
+      type: "string",
+      description: "Warn for agents more than N events behind (default: 100)",
+    },
+  },
+  run: ({ args }) => {
+    const db = resolveDb(args.dir, args.db);
+    try {
+      const raw = args["warn-threshold"];
+      const parsed = raw ? parseInt(raw, 10) : 100;
+      const threshold = isNaN(parsed) ? 100 : parsed;
+      const result = compactEvents(db, threshold);
+      for (const { agent_id, behind } of result.laggingAgents) {
+        console.warn(`warning: agent "${agent_id}" is ${behind} events behind`);
+      }
+      console.log(JSON.stringify(result));
+    } finally {
+      db.close();
+    }
+  },
+});
+
 // -- Main command ------------------------------------------------------------
 
 const main = defineCommand({
@@ -497,6 +548,8 @@ const main = defineCommand({
     claim: claimCommand,
     "check-claim": checkClaimCommand,
     reload: reloadCommand,
+    epoch: epochCommand,
+    "compact-db": compactDbCommand,
   },
 });
 
