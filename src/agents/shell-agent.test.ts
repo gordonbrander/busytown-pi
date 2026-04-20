@@ -78,55 +78,51 @@ describe("shellAgentHandler", () => {
     });
   });
 
-  it(
-    "sends stderr lines as stderr events",
-    { timeout: 5000 },
-    async () => {
-      const dbPath = createTempDbPath();
-      const ac = new AbortController();
-      const trigger = clientOf({ id: "trigger", dbPath });
-      const agentClient = clientOf({ id: "test-shell", dbPath });
-      const watcher = clientOf({ id: "watcher", dbPath });
+  it("sends stderr lines as stderr events", { timeout: 5000 }, async () => {
+    const dbPath = createTempDbPath();
+    const ac = new AbortController();
+    const trigger = clientOf({ id: "trigger", dbPath });
+    const agentClient = clientOf({ id: "test-shell", dbPath });
+    const watcher = clientOf({ id: "watcher", dbPath });
 
-      const triggerId = trigger.publish("test.run", {}).id;
+    const triggerId = trigger.publish("test.run", {}).id;
 
-      shellAgentHandler(
-        agentClient,
-        handlerConfig("echo out && echo err 1>&2", { signal: ac.signal }),
-      );
+    shellAgentHandler(
+      agentClient,
+      handlerConfig("echo out && echo err 1>&2", { signal: ac.signal }),
+    );
 
-      const collected: { type: string; payload: unknown }[] = [];
-      for await (const event of watcher.subscribe({
-        listen: ["agent.test-shell.*"],
-        pollInterval: 10,
-        signal: ac.signal,
-      })) {
-        collected.push({ type: event.type, payload: event.payload });
-        if (event.type === "agent.test-shell.end") break;
-      }
+    const collected: { type: string; payload: unknown }[] = [];
+    for await (const event of watcher.subscribe({
+      listen: ["agent.test-shell.*"],
+      pollInterval: 10,
+      signal: ac.signal,
+    })) {
+      collected.push({ type: event.type, payload: event.payload });
+      if (event.type === "agent.test-shell.end") break;
+    }
 
-      ac.abort();
+    ac.abort();
 
-      const stdoutEvents = collected.filter(
-        (e) => e.type === "agent.test-shell.stdout",
-      );
-      const stderrEvents = collected.filter(
-        (e) => e.type === "agent.test-shell.stderr",
-      );
+    const stdoutEvents = collected.filter(
+      (e) => e.type === "agent.test-shell.stdout",
+    );
+    const stderrEvents = collected.filter(
+      (e) => e.type === "agent.test-shell.stderr",
+    );
 
-      assert.equal(stdoutEvents.length, 1);
-      assert.deepEqual(stdoutEvents[0].payload, {
-        correlation_id: triggerId,
-        line: "out",
-      });
+    assert.equal(stdoutEvents.length, 1);
+    assert.deepEqual(stdoutEvents[0].payload, {
+      correlation_id: triggerId,
+      line: "out",
+    });
 
-      assert.equal(stderrEvents.length, 1);
-      assert.deepEqual(stderrEvents[0].payload, {
-        correlation_id: triggerId,
-        line: "err",
-      });
-    },
-  );
+    assert.equal(stderrEvents.length, 1);
+    assert.deepEqual(stderrEvents[0].payload, {
+      correlation_id: triggerId,
+      line: "err",
+    });
+  });
 
   it(
     "templates event fields into the shell script",
