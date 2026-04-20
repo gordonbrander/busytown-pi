@@ -32,14 +32,14 @@ const handlerConfig = (
 });
 
 describe("shellAgentHandler", () => {
-  it("sends stdout lines as output events", { timeout: 5000 }, async () => {
+  it("sends stdout lines as stdout events", { timeout: 5000 }, async () => {
     const dbPath = createTempDbPath();
     const ac = new AbortController();
     const trigger = clientOf({ id: "trigger", dbPath });
     const agentClient = clientOf({ id: "test-shell", dbPath });
     const watcher = clientOf({ id: "watcher", dbPath });
 
-    trigger.publish("test.run", {});
+    const triggerId = trigger.publish("test.run", {}).id;
 
     shellAgentHandler(
       agentClient,
@@ -65,11 +65,63 @@ describe("shellAgentHandler", () => {
     assert.ok(types.includes("agent.test-shell.end"));
 
     const outputs = collected.filter(
-      (e) => e.type === "agent.test-shell.output",
+      (e) => e.type === "agent.test-shell.stdout",
     );
     assert.equal(outputs.length, 2);
-    assert.deepEqual(outputs[0].payload, { line: "line one" });
-    assert.deepEqual(outputs[1].payload, { line: "line two" });
+    assert.deepEqual(outputs[0].payload, {
+      correlation_id: triggerId,
+      line: "line one",
+    });
+    assert.deepEqual(outputs[1].payload, {
+      correlation_id: triggerId,
+      line: "line two",
+    });
+  });
+
+  it("sends stderr lines as stderr events", { timeout: 5000 }, async () => {
+    const dbPath = createTempDbPath();
+    const ac = new AbortController();
+    const trigger = clientOf({ id: "trigger", dbPath });
+    const agentClient = clientOf({ id: "test-shell", dbPath });
+    const watcher = clientOf({ id: "watcher", dbPath });
+
+    const triggerId = trigger.publish("test.run", {}).id;
+
+    shellAgentHandler(
+      agentClient,
+      handlerConfig("echo out && echo err 1>&2", { signal: ac.signal }),
+    );
+
+    const collected: { type: string; payload: unknown }[] = [];
+    for await (const event of watcher.subscribe({
+      listen: ["agent.test-shell.*"],
+      pollInterval: 10,
+      signal: ac.signal,
+    })) {
+      collected.push({ type: event.type, payload: event.payload });
+      if (event.type === "agent.test-shell.end") break;
+    }
+
+    ac.abort();
+
+    const stdoutEvents = collected.filter(
+      (e) => e.type === "agent.test-shell.stdout",
+    );
+    const stderrEvents = collected.filter(
+      (e) => e.type === "agent.test-shell.stderr",
+    );
+
+    assert.equal(stdoutEvents.length, 1);
+    assert.deepEqual(stdoutEvents[0].payload, {
+      correlation_id: triggerId,
+      line: "out",
+    });
+
+    assert.equal(stderrEvents.length, 1);
+    assert.deepEqual(stderrEvents[0].payload, {
+      correlation_id: triggerId,
+      line: "err",
+    });
   });
 
   it(
@@ -90,11 +142,14 @@ describe("shellAgentHandler", () => {
       );
 
       for await (const event of watcher.subscribe({
-        listen: ["agent.test-shell.output"],
+        listen: ["agent.test-shell.stdout"],
         pollInterval: 10,
         signal: ac.signal,
       })) {
-        assert.deepEqual(event.payload, { line: "test.hello" });
+        assert.deepEqual(
+          (event.payload as { line: string }).line,
+          "test.hello",
+        );
         break;
       }
 
