@@ -8,9 +8,12 @@ import { buildAgentAppendPrompt } from "./pi-agent-shared.ts";
 import { shellAgentHandler } from "./shell-agent.ts";
 import { piAgentHandler } from "./pi-agent.ts";
 import { piRpcAgentHandler } from "./pi-rpc-agent.ts";
-import { loggerOf } from "../lib/json-logger.ts";
+import { fileLogDriverOf, loggerOf } from "../lib/json-logger.ts";
 
-const logger = loggerOf({ source: "file-agent.ts" });
+const logger = loggerOf(
+  { source: "file-agent.ts" },
+  { drivers: [fileLogDriverOf(".pi/busytown/logs/file-agent.log")] },
+);
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_EXTENSION_PATH = path.join(MODULE_DIR, "pi-agent-extension.ts");

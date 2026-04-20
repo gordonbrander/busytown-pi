@@ -8,7 +8,7 @@ import {
   writeJsonLine,
 } from "../lib/web-stream.ts";
 import { fromPiAgentSessionEvent } from "../lib/agent-session-event.ts";
-import { loggerOf } from "../lib/json-logger.ts";
+import { fileLogDriverOf, loggerOf } from "../lib/json-logger.ts";
 import {
   isPiRpcResponse,
   type PiRpcCommand,
@@ -18,7 +18,10 @@ import type { EventClient } from "../sdk.ts";
 import type { PiRpcAgentDef } from "./file-agent-loader.ts";
 import { neverAbortSignal } from "../lib/abort-controller.ts";
 
-const logger = loggerOf({ source: "pi-rpc-agent.ts" });
+const logger = loggerOf(
+  { source: "pi-rpc-agent.ts" },
+  { drivers: [fileLogDriverOf(".pi/busytown/logs/pi-rpc-agent.log")] },
+);
 
 type PiRpcCliFlagConfig = {
   model?: string;

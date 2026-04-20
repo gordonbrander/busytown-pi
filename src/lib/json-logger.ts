@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -38,12 +39,14 @@ export const consoleJsonLogDriverOf = (): LogDriver => (record: LogRecord) => {
   }
 };
 
-/** Create a log driver that appends a JSON line to a file per call. */
-export const fileLogDriverOf =
-  (logPath: string): LogDriver =>
-  (record: LogRecord) => {
+/** Create a log driver that appends a JSON line to a file per call.
+ * Creates parent directories if they don't exist. */
+export const fileLogDriverOf = (logPath: string): LogDriver => {
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  return (record: LogRecord) => {
     fs.appendFileSync(logPath, JSON.stringify(record) + "\n");
   };
+};
 
 /** Get the log level index. This lets us decide which log levels to log. */
 const logLevelToIndex = (level: LogLevel): number => {
