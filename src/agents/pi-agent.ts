@@ -11,12 +11,15 @@ import {
   fromPiAgentSessionEvent,
   type PiAgentSessionEvent,
 } from "../lib/agent-session-event.ts";
-import { loggerOf } from "../lib/json-logger.ts";
+import { fileLogDriverOf, loggerOf } from "../lib/json-logger.ts";
 import { neverAbortSignal } from "../lib/abort-controller.ts";
 import type { EventClient } from "../sdk.ts";
 import type { PiAgentDef } from "./file-agent-loader.ts";
 
-const logger = loggerOf({ source: "pi-agent.ts" });
+const logger = loggerOf(
+  { source: "pi-agent.ts" },
+  { drivers: [fileLogDriverOf(".pi/busytown/logs/pi-agent.log")] },
+);
 
 type PiCliFlagConfig = {
   model?: string;
