@@ -128,6 +128,23 @@ describe("loggerOf", () => {
     assert.equal(a.records.length, 1);
     assert.equal(b.records.length, 1);
   });
+
+  it("resolves level via thunk on every call (late binding)", () => {
+    const driver = mockDriver();
+    let currentLevel: "debug" | "info" | "warn" | "error" = "warn";
+    const logger = loggerOf(
+      {},
+      { drivers: [driver], level: () => currentLevel },
+    );
+
+    logger.info("filtered");
+    assert.equal(driver.records.length, 0);
+
+    currentLevel = "debug";
+    logger.info("passes");
+    assert.equal(driver.records.length, 1);
+    assert.equal(driver.records[0].msg, "passes");
+  });
 });
 
 describe("fileLogDriverOf", () => {

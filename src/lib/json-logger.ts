@@ -59,59 +59,64 @@ const logLevelToIndex = (level: LogLevel): number => {
       return 2;
     case "error":
       return 3;
-    default:
-      throw new Error(`Invalid log level: ${level}`);
   }
+};
+
+export type LogLevelFn = () => LogLevel;
+
+export const levelOf = (level?: LogLevel | LogLevelFn): LogLevelFn => {
+  switch (typeof level) {
+    case "function":
+      return level as LogLevelFn;
+    case "string":
+      return () => level as LogLevel;
+    default:
+      return () => "debug";
+  }
+};
+
+/** Construct and log a record using the given drivers and level function. */
+const logWith = (
+  drivers: LogDriver[],
+  getLoggerLevel: () => LogLevel,
+  level: LogLevel,
+  message: string,
+  context?: Record<string, unknown>,
+  data?: Record<string, unknown>,
+): void => {
+  if (logLevelToIndex(level) < logLevelToIndex(getLoggerLevel())) return;
+  const record = logRecordOf(level, message, context, data);
+  for (const driver of drivers) driver(record);
 };
 
 export type LoggerConfig = {
-  level?: LogLevel;
+  level?: LogLevel | LogLevelFn;
   drivers?: LogDriver[];
 };
 
-class Logger {
-  #context: Record<string, unknown>;
-  #drivers: LogDriver[];
-  level: LogLevel;
-
-  constructor(context: Record<string, unknown>, config: LoggerConfig = {}) {
-    this.#context = context;
-    this.#drivers = config.drivers ?? [consoleJsonLogDriverOf()];
-    this.level = config.level ?? "debug";
-  }
-
-  #shouldLog(level: LogLevel): boolean {
-    return logLevelToIndex(level) >= logLevelToIndex(this.level);
-  }
-
-  #log(level: LogLevel, message: string, data?: Record<string, unknown>) {
-    if (!this.#shouldLog(level)) return;
-    for (const driver of this.#drivers) {
-      driver(logRecordOf(level, message, this.#context, data));
-    }
-  }
-
-  debug(message: string, data?: Record<string, unknown>) {
-    this.#log("debug", message, data);
-  }
-
-  info(message: string, data?: Record<string, unknown>) {
-    this.#log("info", message, data);
-  }
-
-  warn(message: string, data?: Record<string, unknown>) {
-    this.#log("warn", message, data);
-  }
-
-  error(message: string, data?: Record<string, unknown>) {
-    this.#log("error", message, data);
-  }
-}
+export type Logger = {
+  debug: (message: string, data?: Record<string, unknown>) => void;
+  info: (message: string, data?: Record<string, unknown>) => void;
+  warn: (message: string, data?: Record<string, unknown>) => void;
+  error: (message: string, data?: Record<string, unknown>) => void;
+};
 
 /** Creates a JSON logger that mixes in the given context into log entries. */
 export const loggerOf = (
   context: Record<string, unknown> = {},
-  config: LoggerConfig = {},
-): Logger => new Logger(context, config);
+  { level, drivers = [consoleJsonLogDriverOf()] }: LoggerConfig = {},
+): Logger => {
+  const getLoggerLevel = levelOf(level);
+  return {
+    debug: (message, data) =>
+      logWith(drivers, getLoggerLevel, "debug", message, context, data),
+    info: (message, data) =>
+      logWith(drivers, getLoggerLevel, "info", message, context, data),
+    warn: (message, data) =>
+      logWith(drivers, getLoggerLevel, "warn", message, context, data),
+    error: (message, data) =>
+      logWith(drivers, getLoggerLevel, "error", message, context, data),
+  };
+};
 
 export const logger = loggerOf();
