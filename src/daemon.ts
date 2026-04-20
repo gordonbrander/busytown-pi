@@ -19,7 +19,13 @@ export const spawnDaemon = async (
   if (status.running) return { ok: true, pid: status.pid };
 
   const cliBin = resolveCliBin();
-  const logPath = path.join(projectRoot, ".pi", "busytown", "logs", "daemon.log");
+  const logPath = path.join(
+    projectRoot,
+    ".pi",
+    "busytown",
+    "logs",
+    "daemon.log",
+  );
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
   const agentsDirArgs = agentsDir ? ["--agents-dir", agentsDir] : [];
