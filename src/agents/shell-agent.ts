@@ -1,11 +1,8 @@
 import { spawn } from "node:child_process";
-import { loggerOf } from "../lib/json-logger.ts";
 import { renderTemplate } from "../lib/template.ts";
 import { stderr, stdout, lineStream } from "../lib/web-stream.ts";
 import type { EventClient } from "../sdk.ts";
 import type { ShellAgentDef } from "./file-agent-loader.ts";
-
-const logger = loggerOf({ source: "shell-agent.ts" });
 
 export type ShellAgentHandlerConfig = ShellAgentDef & {
   env?: Record<string, string | undefined>;
@@ -42,21 +39,6 @@ export const shellAgentHandler = async (
       env: { ...process.env, ...env },
     });
 
-    // Pipe stderr to logger (fire-and-forget)
-    stderr(proc)
-      .pipeThrough(lineStream())
-      .pipeTo(
-        new WritableStream({
-          write(line) {
-            logger.warn("stderr", { agent: id, line });
-          },
-        }),
-      )
-      .catch(() => {});
-
-    const lines = stdout(proc).pipeThrough(lineStream());
-    const reader = lines.getReader();
-
     const exitPromise = new Promise<{
       code: number | null;
       signal: string | null;
@@ -68,6 +50,24 @@ export const shellAgentHandler = async (
       correlation_id: correlationId,
       event_type: event.type,
     });
+
+    // Pipe stderr to events (fire-and-forget)
+    stderr(proc)
+      .pipeThrough(lineStream())
+      .pipeTo(
+        new WritableStream({
+          write(line) {
+            client.publish(`agent.${id}.stderr`, {
+              correlation_id: correlationId,
+              line,
+            });
+          },
+        }),
+      )
+      .catch(() => {});
+
+    const lines = stdout(proc).pipeThrough(lineStream());
+    const reader = lines.getReader();
 
     try {
       while (true) {
@@ -88,7 +88,10 @@ export const shellAgentHandler = async (
           }
           break;
         }
-        client.publish(`agent.${id}.output`, { line: value });
+        client.publish(`agent.${id}.stdout`, {
+          correlation_id: correlationId,
+          line: value,
+        });
       }
     } catch (e) {
       client.publish(`agent.${id}.error`, {
