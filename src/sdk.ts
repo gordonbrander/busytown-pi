@@ -107,7 +107,7 @@ export const clientOf = ({
     const shouldHandle = shouldHandleEventOf(id, ignoreSelf, listen);
     while (!signal.aborted) {
       if (parentPid !== undefined) throwIfOrphaned(parentPid);
-      const event = pullNextMatchingEvent(db, id, shouldHandle, claim, 100);
+      const event = pullNextMatchingEvent(db, id, shouldHandle, claim);
       if (event) {
         yield event;
       } else {
