@@ -218,6 +218,16 @@ export const getNextEvent = (
   sinceId: number,
 ): Event | undefined => getNextEvents(db, sinceId, 1).at(0);
 
+export const getEventById = (
+  db: DatabaseSync,
+  id: number,
+): Event | undefined => {
+  const row = db.prepare(`SELECT * FROM events WHERE id = ?`).get(id) as
+    | RawEventRow
+    | undefined;
+  return row ? parseEvent(row) : undefined;
+};
+
 export const pullNextMatchingEvent = (
   db: DatabaseSync,
   id: string,

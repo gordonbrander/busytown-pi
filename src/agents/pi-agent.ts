@@ -124,7 +124,7 @@ export const piAgentHandler = async (
       proc.once("exit", (code, signal) => resolve({ code, signal }));
     });
 
-    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
+    client.publish(`agent.${id}.start`, {}, event);
 
     try {
       while (true) {

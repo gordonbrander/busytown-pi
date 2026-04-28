@@ -134,7 +134,7 @@ export const piRpcAgentHandler = async (
     pollInterval,
     signal: loopAbortSignal,
   })) {
-    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
+    client.publish(`agent.${id}.start`, {}, event);
 
     const isCompact = event.type === `agent.${id}.compact`;
     const isNewSession = event.type === `agent.${id}.new_session`;

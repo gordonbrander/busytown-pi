@@ -44,7 +44,7 @@ export const shellAgentHandler = async (
       proc.once("exit", (code, signal) => resolve({ code, signal }));
     });
 
-    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
+    client.publish(`agent.${id}.start`, {}, event);
 
     // Pipe stderr to events (fire-and-forget)
     stderr(proc)
