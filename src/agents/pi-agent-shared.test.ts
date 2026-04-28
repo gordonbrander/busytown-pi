@@ -11,6 +11,7 @@ describe("buildAgentAppendPrompt", () => {
     description: "A test agent",
     listen: [],
     ignoreSelf: true,
+    claim: false,
     emits: [],
     tools: [],
     body: "You do test things.",

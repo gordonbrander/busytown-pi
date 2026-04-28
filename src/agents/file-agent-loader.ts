@@ -57,6 +57,7 @@ export const AgentFrontmatterSchema = Type.Object(
     description: Type.String({ default: "" }),
     listen: Type.Array(Type.String(), { default: [] }),
     ignore_self: Type.Boolean({ default: true }),
+    claim: Type.Boolean({ default: false }),
     emits: Type.Array(Type.String(), { default: [] }),
     tools: Type.Array(Type.String(), { default: [] }),
     model: Type.Optional(Type.String()),
@@ -109,6 +110,7 @@ export type PiAgentDef = {
   description: string;
   listen: string[];
   ignoreSelf: boolean;
+  claim: boolean;
   emits: string[];
   tools: string[];
   body: string;
@@ -125,6 +127,7 @@ export type PiRpcAgentDef = {
   description: string;
   listen: string[];
   ignoreSelf: boolean;
+  claim: boolean;
   emits: string[];
   tools: string[];
   body: string;
@@ -141,6 +144,7 @@ export type ShellAgentDef = {
   description: string;
   listen: string[];
   ignoreSelf: boolean;
+  claim: boolean;
   emits: string[];
   body: string;
   memoryBlocks: Record<string, MemoryBlockDef>;
@@ -153,6 +157,7 @@ export type ClaudeAgentDef = {
   description: string;
   listen: string[];
   ignoreSelf: boolean;
+  claim: boolean;
   emits: string[];
   tools: string[];
   body: string;
@@ -193,6 +198,7 @@ export const loadAgentDef = (
       description: fm.description,
       listen: fm.listen,
       ignoreSelf: fm.ignore_self,
+      claim: fm.claim,
       emits: fm.emits,
       body: content,
       memoryBlocks,
@@ -207,6 +213,7 @@ export const loadAgentDef = (
       description: fm.description,
       listen: fm.listen,
       ignoreSelf: fm.ignore_self,
+      claim: fm.claim,
       emits: fm.emits,
       tools: fm.tools,
       body: content.trim(),
@@ -223,6 +230,7 @@ export const loadAgentDef = (
       description: fm.description,
       listen: fm.listen,
       ignoreSelf: fm.ignore_self,
+      claim: fm.claim,
       emits: fm.emits,
       tools: fm.tools,
       body: content.trim(),
@@ -240,6 +248,7 @@ export const loadAgentDef = (
     description: fm.description,
     listen: fm.listen,
     ignoreSelf: fm.ignore_self,
+    claim: fm.claim,
     emits: fm.emits,
     tools: fm.tools,
     body: content.trim(),

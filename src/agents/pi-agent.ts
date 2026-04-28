@@ -58,6 +58,7 @@ export const piAgentHandler = async (
     id,
     listen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal = neverAbortSignal,
     cwd = process.cwd(),
@@ -73,6 +74,7 @@ export const piAgentHandler = async (
   for await (const event of client.subscribe({
     listen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal,
   })) {

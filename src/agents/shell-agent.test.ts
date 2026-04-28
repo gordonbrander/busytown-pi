@@ -24,6 +24,7 @@ const handlerConfig = (
   description: "test",
   listen: ["test.*"],
   ignoreSelf: true,
+  claim: false,
   emits: [],
   body,
   memoryBlocks: {},
