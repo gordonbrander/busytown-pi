@@ -352,6 +352,142 @@ describe("pullNextMatchingEvent", () => {
   });
 });
 
+describe("pullNextMatchingEvent with claim: true", () => {
+  const initPuller = (db: DatabaseSync, id: string): void => {
+    getOrCreateCursor(db, id);
+  };
+
+  it("claims the matched event and yields it", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    const e1 = pushEvent(db, "w", "task");
+
+    const result = pullNextMatchingEvent(
+      db,
+      "puller",
+      (e) => e.type === "task",
+      true,
+    );
+
+    assert.equal(result?.id, e1.id);
+    assert.equal(getClaimant(db, e1.id)?.agent_id, "puller");
+    assert.equal(getCursor(db, "puller"), e1.id);
+    db.close();
+  });
+
+  it("publishes a sys.claim.create event attributed to the claimer", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    const e1 = pushEvent(db, "w", "task");
+
+    pullNextMatchingEvent(db, "puller", (e) => e.type === "task", true);
+
+    const claimEvents = getEventsSince(db, {
+      sinceId: 0,
+      filterType: "sys.claim.create",
+    });
+    assert.equal(claimEvents.length, 1);
+    assert.equal(claimEvents[0].agent_id, "puller");
+    assert.deepEqual(claimEvents[0].payload, { event_id: e1.id });
+    db.close();
+  });
+
+  it("first caller wins; second caller skips and gets undefined", () => {
+    const db = createTestDb();
+    initPuller(db, "agent-a");
+    initPuller(db, "agent-b");
+    const e1 = pushEvent(db, "w", "task");
+
+    const resultA = pullNextMatchingEvent(
+      db,
+      "agent-a",
+      (e) => e.type === "task",
+      true,
+    );
+    const resultB = pullNextMatchingEvent(
+      db,
+      "agent-b",
+      (e) => e.type === "task",
+      true,
+    );
+
+    assert.equal(resultA?.id, e1.id);
+    assert.equal(resultB, undefined);
+    assert.equal(getClaimant(db, e1.id)?.agent_id, "agent-a");
+    // Both cursors advanced past the event so neither will retry it.
+    assert.ok(getCursor(db, "agent-a") >= e1.id);
+    assert.ok(getCursor(db, "agent-b") >= e1.id);
+    db.close();
+  });
+
+  it("skips events already claimed by another agent", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    const e1 = pushEvent(db, "w", "task");
+    const e2 = pushEvent(db, "w", "task");
+
+    claimEvent(db, "other-agent", e1.id);
+
+    const result = pullNextMatchingEvent(
+      db,
+      "puller",
+      (e) => e.type === "task",
+      true,
+    );
+
+    assert.equal(result?.id, e2.id);
+    assert.equal(getClaimant(db, e1.id)?.agent_id, "other-agent");
+    assert.equal(getClaimant(db, e2.id)?.agent_id, "puller");
+    db.close();
+  });
+
+  it("returns undefined when no events match filter, advances cursor", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "a");
+    const last = pushEvent(db, "w", "a");
+
+    const result = pullNextMatchingEvent(
+      db,
+      "puller",
+      (e) => e.type === "z",
+      true,
+    );
+
+    assert.equal(result, undefined);
+    assert.equal(getCursor(db, "puller"), last.id);
+    db.close();
+  });
+
+  it("returns undefined when queue is empty", () => {
+    const db = createTestDb();
+    const result = pullNextMatchingEvent(db, "puller", () => true, true);
+    assert.equal(result, undefined);
+    db.close();
+  });
+
+  it("walks past non-matching and other-claimed events to find a free match", () => {
+    const db = createTestDb();
+    initPuller(db, "puller");
+    pushEvent(db, "w", "skip"); // filter miss
+    const claimedByOther = pushEvent(db, "w", "task");
+    const free = pushEvent(db, "w", "task");
+
+    claimEvent(db, "other", claimedByOther.id);
+
+    const result = pullNextMatchingEvent(
+      db,
+      "puller",
+      (e) => e.type === "task",
+      true,
+    );
+
+    assert.equal(result?.id, free.id);
+    assert.equal(getClaimant(db, free.id)?.agent_id, "puller");
+    db.close();
+  });
+});
+
 describe("pollEvents", () => {
   it("returns new events and advances cursor", () => {
     const db = createTestDb();

@@ -113,6 +113,129 @@ describe("SDK clientOf", () => {
     assert.equal(claimedB, false);
   });
 
+  it("subscribe without claim is multicast: two subscribers both see each event", async () => {
+    const dbPath = createTempDbPath();
+    const producer = clientOf({ id: "producer", dbPath });
+    const consumerA = clientOf({ id: "consumer-a", dbPath });
+    const consumerB = clientOf({ id: "consumer-b", dbPath });
+
+    const published = producer.publish("multicast.msg", { n: 1 });
+
+    const eventsA: { id: number }[] = [];
+    for await (const event of consumerA.subscribe({
+      listen: ["multicast.*"],
+      pollInterval: 10,
+    })) {
+      eventsA.push(event);
+      break;
+    }
+
+    const eventsB: { id: number }[] = [];
+    for await (const event of consumerB.subscribe({
+      listen: ["multicast.*"],
+      pollInterval: 10,
+    })) {
+      eventsB.push(event);
+      break;
+    }
+
+    assert.equal(eventsA[0].id, published.id);
+    assert.equal(eventsB[0].id, published.id);
+  });
+
+  it("subscribe with claim:true partitions events between competing consumers", async () => {
+    const dbPath = createTempDbPath();
+    const producer = clientOf({ id: "producer", dbPath });
+    const workerA = clientOf({ id: "worker-a", dbPath });
+    const workerB = clientOf({ id: "worker-b", dbPath });
+
+    const expectedCount = 3;
+    producer.publish("work.do", { n: 1 });
+    producer.publish("work.do", { n: 2 });
+    producer.publish("work.do", { n: 3 });
+
+    const aborter = new AbortController();
+    const idsA: number[] = [];
+    const idsB: number[] = [];
+
+    const checkDone = (): void => {
+      if (idsA.length + idsB.length >= expectedCount) aborter.abort();
+    };
+    // Safety net: if a regression makes one worker silently never yield,
+    // make the test fail fast instead of hanging until the runner timeout.
+    const safety = setTimeout(() => aborter.abort(), 1000);
+
+    const runA = (async () => {
+      for await (const event of workerA.subscribe({
+        listen: ["work.*"],
+        claim: true,
+        pollInterval: 5,
+        signal: aborter.signal,
+      })) {
+        idsA.push(event.id);
+        checkDone();
+      }
+    })();
+
+    const runB = (async () => {
+      for await (const event of workerB.subscribe({
+        listen: ["work.*"],
+        claim: true,
+        pollInterval: 5,
+        signal: aborter.signal,
+      })) {
+        idsB.push(event.id);
+        checkDone();
+      }
+    })();
+
+    await Promise.all([runA, runB]);
+    clearTimeout(safety);
+
+    const union = [...idsA, ...idsB].sort((a, b) => a - b);
+    const dedup = Array.from(new Set(union));
+    assert.equal(union.length, expectedCount, "no event consumed twice");
+    assert.equal(dedup.length, expectedCount, "no duplicate ids");
+  });
+
+  it("speculative claim() still works alongside a claim:true subscriber", async () => {
+    const dbPath = createTempDbPath();
+    const producer = clientOf({ id: "producer", dbPath });
+    const observer = clientOf({ id: "observer", dbPath });
+    const worker = clientOf({ id: "worker", dbPath });
+
+    const event = producer.publish("speculative.task", {});
+
+    // Observer pulls the event without claiming it.
+    let observed: { id: number } | undefined;
+    for await (const e of observer.subscribe({
+      listen: ["speculative.*"],
+      pollInterval: 5,
+    })) {
+      observed = e;
+      break;
+    }
+    assert.equal(observed?.id, event.id);
+
+    // Observer decides to take it via the explicit claim() call.
+    const observerWon = observer.claim(event.id);
+    assert.equal(observerWon, true);
+
+    // A later claim:true subscriber should not see the now-claimed event.
+    const aborter = new AbortController();
+    const workerEvents: { id: number }[] = [];
+    setTimeout(() => aborter.abort(), 50);
+    for await (const e of worker.subscribe({
+      listen: ["speculative.*"],
+      claim: true,
+      pollInterval: 5,
+      signal: aborter.signal,
+    })) {
+      workerEvents.push(e);
+    }
+    assert.equal(workerEvents.length, 0);
+  });
+
   it("subscribe throws when parentPid no longer matches process.ppid", async () => {
     const dbPath = createTempDbPath();
     const producer = clientOf({ id: "producer", dbPath });

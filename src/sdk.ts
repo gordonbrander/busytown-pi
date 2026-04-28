@@ -51,6 +51,12 @@ export type ListenConfig = {
   pollInterval?: number;
   /** Signal to stop the subscribe loop. */
   signal?: AbortSignal;
+  /**
+   * If true, atomically claim each event before yielding. Only events this
+   * agent successfully claims are yielded; events claimed by other agents are
+   * skipped (the cursor still advances past them). Default: false.
+   */
+  claim?: boolean;
 };
 
 /** The client returned by `clientOf()`. */
@@ -88,6 +94,7 @@ export const clientOf = ({
     ignoreSelf = true,
     pollInterval = 1000,
     signal = neverAbortSignal,
+    claim = false,
   }: ListenConfig): AsyncGenerator<Event> {
     clientLogger.debug(`subscribe`, {
       id,
@@ -95,11 +102,12 @@ export const clientOf = ({
       listen,
       ignoreSelf,
       pollInterval,
+      claim,
     });
     const shouldHandle = shouldHandleEventOf(id, ignoreSelf, listen);
     while (!signal.aborted) {
       if (parentPid !== undefined) throwIfOrphaned(parentPid);
-      const event = pullNextMatchingEvent(db, id, shouldHandle);
+      const event = pullNextMatchingEvent(db, id, shouldHandle, claim);
       if (event) {
         yield event;
       } else {
