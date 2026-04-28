@@ -68,7 +68,7 @@ export type EventClient = {
    */
   publish: (type: string, payload?: unknown, cause?: Event) => Event;
   /** Claim exclusive ownership of an event. Returns true if claimed. */
-  claim: (eventId: number, cause?: Event) => boolean;
+  claim: (eventId: number) => boolean;
   /** Async iterable that polls for matching events. Advances cursor after each yield. */
   subscribe: (config: ListenConfig) => AsyncIterable<Event>;
 };
@@ -107,7 +107,7 @@ export const clientOf = ({
     const shouldHandle = shouldHandleEventOf(id, ignoreSelf, listen);
     while (!signal.aborted) {
       if (parentPid !== undefined) throwIfOrphaned(parentPid);
-      const event = pullNextMatchingEvent(db, id, shouldHandle, claim);
+      const event = pullNextMatchingEvent(db, id, shouldHandle, claim, 100);
       if (event) {
         yield event;
       } else {
@@ -119,8 +119,7 @@ export const clientOf = ({
   const publish = (type: string, payload: unknown = {}, cause?: Event): Event =>
     pushEvent(db, id, type, payload, cause);
 
-  const claim = (eventId: number, cause?: Event): boolean =>
-    claimEvent(db, id, eventId, cause);
+  const claim = (eventId: number): boolean => claimEvent(db, id, eventId);
 
   return {
     publish,

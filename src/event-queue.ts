@@ -257,13 +257,12 @@ const _claimEvent = (
   db: DatabaseSync,
   agentId: string,
   eventId: number,
-  cause?: Event,
 ): boolean => {
   const changes = db
     .prepare(`INSERT OR IGNORE INTO claims (event_id, agent_id) VALUES (?, ?)`)
     .run(eventId, agentId).changes as number;
   if (changes === 0) return false;
-  pushEvent(db, agentId, "sys.claim.create", { event_id: eventId }, cause);
+  pushEvent(db, agentId, "sys.claim.create", { event_id: eventId });
   return true;
 };
 
@@ -272,7 +271,6 @@ const _pullAndClaimNextMatchingEvent = (
   id: string,
   filter: (event: Event) => boolean,
   maxScan: number,
-  cause?: Event,
 ): Event | undefined => {
   const sinceId = getOrCreateCursor(db, id);
   const events = getNextEvents(db, sinceId, maxScan);
@@ -285,7 +283,7 @@ const _pullAndClaimNextMatchingEvent = (
     for (const event of events) {
       if (!filter(event)) continue;
       // Race-loser (or already claimed): final updateCursor below skips past.
-      if (!_claimEvent(db, id, event.id, cause)) continue;
+      if (!_claimEvent(db, id, event.id)) continue;
       updateCursor(db, id, event.id);
       db.exec("COMMIT");
       return event;
@@ -305,10 +303,9 @@ export const pullNextMatchingEvent = (
   filter: (event: Event) => boolean,
   claim: boolean = false,
   maxScan: number = 100,
-  cause?: Event,
 ): Event | undefined =>
   claim
-    ? _pullAndClaimNextMatchingEvent(db, id, filter, maxScan, cause)
+    ? _pullAndClaimNextMatchingEvent(db, id, filter, maxScan)
     : _pullNextMatchingEvent(db, id, filter, maxScan);
 
 export const pollEvents = (
@@ -329,11 +326,10 @@ export const claimEvent = (
   db: DatabaseSync,
   agentId: string,
   eventId: number,
-  cause?: Event,
 ): boolean => {
   db.exec("BEGIN");
   try {
-    if (_claimEvent(db, agentId, eventId, cause)) {
+    if (_claimEvent(db, agentId, eventId)) {
       db.exec("COMMIT");
       return true;
     }
