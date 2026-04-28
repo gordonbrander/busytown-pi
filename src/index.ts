@@ -104,9 +104,9 @@ export default (pi: ExtensionAPI) => {
 
     // Register commands (slash-command equivalents of the tools)
 
-    pi.registerCommand("busytown-push", {
+    pi.registerCommand("busytown-publish", {
       description:
-        "Push an event to the Busytown event queue. Usage: /busytown-push <type> [payload-json] [--agent name]",
+        "Publish an event to the Busytown event queue. Usage: /busytown-publish <type> [payload-json] [--agent name]",
       handler: async (raw, ctx) => {
         await nextTick();
         const args = parseArgs(shellSplit(raw ?? ""), {
@@ -129,7 +129,7 @@ export default (pi: ExtensionAPI) => {
         });
         if (!args.type) {
           ctx.ui.notify(
-            "Usage: /busytown-push <type> [--agent name] [payload-json]",
+            "Usage: /busytown-publish <type> [--agent name] [payload-json]",
             "warning",
           );
           return;
@@ -137,7 +137,7 @@ export default (pi: ExtensionAPI) => {
         try {
           const payload = JSON.parse(args.payload);
           const event = pushEvent(db, args.agent, args.type, payload);
-          ctx.ui.notify(`Pushed event #${event.id} (${event.type})`, "info");
+          ctx.ui.notify(`Published event #${event.id} (${event.type})`, "info");
         } catch (err) {
           ctx.ui.notify(`Invalid payload JSON: ${err}`, "error");
         }

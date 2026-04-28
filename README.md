@@ -4,7 +4,7 @@ _A town full of busy little guys who do things_
 
 **busytown** is a multi-agent factory built around a SQLite event queue. It can be used standalone, or as a [Pi](https://github.com/nichochar/pi-coding-agent) extension.
 
-Agents listen for events, react to them, and push new events, forming asynchronous assembly lines. Agents don't need to know about other agents, just about events.
+Agents listen for events, react to them, and publish new events, forming asynchronous assembly lines. Agents don't need to know about other agents, just about events.
 
 <p><img src="./busytown.png" src="A town full of busy little guys who do things" /></p>
 
@@ -29,17 +29,17 @@ in order. Each agent:
 
 - **Listens** for specific event types (exact match or glob like `task.*`)
 - **Reacts** by reading files, writing code, producing artifacts
-- **Pushes** new events to notify other agents of what it did
+- **Publishes** new events to notify other agents of what it did
 - **Claims** events when needed, so only one agent acts on a given event
 
 ## Architecture
 
 ```
-┌──────────┐    push     ┌─────────────────┐    dispatch    ┌───────────┐
+┌──────────┐   publish   ┌─────────────────┐    dispatch    ┌───────────┐
 │  Pi /    │───────────▸ │  SQLite Event   │ ─────────────▸ │  Agent    │
 │  CLI     │             │  Queue          │ ◂───────────── └───────────┘
-└──────────┘             │                 │    push new
-                         │  events table   │    events
+└──────────┘             │                 │   publish new
+                         │  events table   │   events
                          │  agent_cursors  │
                          │  claims         │
                          └─────────────────┘
@@ -102,7 +102,7 @@ pi
 Ask the agent to fire off an event:
 
 ```
-Push a "plan.request" message with payload '{"prd_path": "docs/add-auth.md"}'
+Publish a "plan.request" message with payload '{"prd_path": "docs/add-auth.md"}'
 ```
 
 This triggers the ralph loop: plan → code → review → plan... repeat until approved.
@@ -124,7 +124,7 @@ tools:
 When you receive a `task.created` event, read the file at
 `payload.file_path` and summarize it to `summaries/<name>.md`.
 
-Then push a `task.summarized` event.
+Then publish a `task.summarized` event.
 ```
 
 ### Frontmatter fields
@@ -272,23 +272,23 @@ Block values are stored separately at `.pi/busytown/memory_blocks/<agent_id>/<bl
 
 Busytown registers several additional tools for agents:
 
-| Tool              | Description                         |
-| ----------------- | ----------------------------------- |
-| `busytown-push`   | Push an event to the queue          |
-| `busytown-events` | List recent events (with filtering) |
-| `busytown-claim`  | Claim an event for exclusive access |
+| Tool               | Description                         |
+| ------------------ | ----------------------------------- |
+| `busytown-publish` | Publish an event to the queue       |
+| `busytown-events`  | List recent events (with filtering) |
+| `busytown-claim`   | Claim an event for exclusive access |
 
 You can manually call these tools, plus a few additional commands, from the Pi console.
 
-| Command             | Detail                                                          |
-| ------------------- | --------------------------------------------------------------- |
-| `/busytown-push`    | `/busytown-push plan.request '{"prd_path": "docs/feature.md"}'` |
-| `/busytown-events`  | `/busytown-events --tail 10 --type plan.*`                      |
-| `/busytown-claim`   | `/busytown-claim 42 my-agent`                                   |
-| `/busytown-console` | Display the event console                                       |
-| `/busytown-start`   | Start the daemon (run automatically when Pi starts)             |
-| `/busytown-stop`    | Stop the daemon                                                 |
-| `/busytown-reload`  | Reload agent definitions (sends `sys.reload` event)             |
+| Command             | Detail                                                             |
+| ------------------- | ------------------------------------------------------------------ |
+| `/busytown-publish` | `/busytown-publish plan.request '{"prd_path": "docs/feature.md"}'` |
+| `/busytown-events`  | `/busytown-events --tail 10 --type plan.*`                         |
+| `/busytown-claim`   | `/busytown-claim 42 my-agent`                                      |
+| `/busytown-console` | Display the event console                                          |
+| `/busytown-start`   | Start the daemon (run automatically when Pi starts)                |
+| `/busytown-stop`    | Stop the daemon                                                    |
+| `/busytown-reload`  | Reload agent definitions (sends `sys.reload` event)                |
 
 ## Interactive agent mode
 
@@ -326,8 +326,8 @@ Busytown also includes a standalone CLI. This lets you drive Busytown outside of
 # Start the agent system (daemon)
 busytown start
 
-# Push an event
-busytown push --agent my-script --type plan.request --payload '{"key":"value"}'
+# Publish an event
+busytown publish --agent my-script --type plan.request --payload '{"key":"value"}'
 
 # List events
 busytown events --tail 10 --type plan.*

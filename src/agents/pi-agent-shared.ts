@@ -78,17 +78,17 @@ export const buildAgentAppendPrompt = (agent: AgentDef): string => {
   ].join("\n");
 };
 
-/** Register the three busytown queue tools (push, events, claim). */
+/** Register the three busytown queue tools (publish, events, claim). */
 export const registerBusytownTools = (
   pi: ExtensionAPI,
   db: DatabaseSync,
   defaultAgentId: string,
 ): void => {
   pi.registerTool({
-    name: "busytown-push",
-    label: "Busytown Push",
+    name: "busytown-publish",
+    label: "Busytown Publish",
     description:
-      "Push an event to the Busytown event queue to trigger agent workflows. " +
+      "Publish an event to the Busytown event queue to trigger agent workflows. " +
       "Common event types: plan.request, code.request, review.request",
     parameters: Type.Object({
       type: Type.String({ description: "Event type (e.g. 'plan.request')" }),
