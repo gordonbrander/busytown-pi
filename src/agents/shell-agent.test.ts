@@ -48,13 +48,25 @@ describe("shellAgentHandler", () => {
       }),
     );
 
-    const collected: { type: string; payload: unknown }[] = [];
+    const collected: {
+      type: string;
+      payload: unknown;
+      correlation_id?: number;
+      causation_id?: number;
+      depth: number;
+    }[] = [];
     for await (const event of watcher.subscribe({
       listen: ["agent.test-shell.*"],
       pollInterval: 10,
       signal: ac.signal,
     })) {
-      collected.push({ type: event.type, payload: event.payload });
+      collected.push({
+        type: event.type,
+        payload: event.payload,
+        correlation_id: event.correlation_id,
+        causation_id: event.causation_id,
+        depth: event.depth,
+      });
       if (event.type === "agent.test-shell.end") break;
     }
 
@@ -68,14 +80,16 @@ describe("shellAgentHandler", () => {
       (e) => e.type === "agent.test-shell.stdout",
     );
     assert.equal(outputs.length, 2);
-    assert.deepEqual(outputs[0].payload, {
-      correlation_id: triggerId,
-      line: "line one",
-    });
-    assert.deepEqual(outputs[1].payload, {
-      correlation_id: triggerId,
-      line: "line two",
-    });
+    assert.deepEqual(outputs[0].payload, { line: "line one" });
+    assert.deepEqual(outputs[1].payload, { line: "line two" });
+
+    // Causality is now on the event row, not the payload. Trigger is the
+    // root, so caused events get correlation_id = causation_id = trigger.id.
+    for (const e of collected) {
+      assert.equal(e.causation_id, triggerId);
+      assert.equal(e.correlation_id, triggerId);
+      assert.equal(e.depth, 1);
+    }
   });
 
   it("sends stderr lines as stderr events", { timeout: 5000 }, async () => {
@@ -92,13 +106,23 @@ describe("shellAgentHandler", () => {
       handlerConfig("echo out && echo err 1>&2", { signal: ac.signal }),
     );
 
-    const collected: { type: string; payload: unknown }[] = [];
+    const collected: {
+      type: string;
+      payload: unknown;
+      correlation_id?: number;
+      causation_id?: number;
+    }[] = [];
     for await (const event of watcher.subscribe({
       listen: ["agent.test-shell.*"],
       pollInterval: 10,
       signal: ac.signal,
     })) {
-      collected.push({ type: event.type, payload: event.payload });
+      collected.push({
+        type: event.type,
+        payload: event.payload,
+        correlation_id: event.correlation_id,
+        causation_id: event.causation_id,
+      });
       if (event.type === "agent.test-shell.end") break;
     }
 
@@ -112,16 +136,14 @@ describe("shellAgentHandler", () => {
     );
 
     assert.equal(stdoutEvents.length, 1);
-    assert.deepEqual(stdoutEvents[0].payload, {
-      correlation_id: triggerId,
-      line: "out",
-    });
+    assert.deepEqual(stdoutEvents[0].payload, { line: "out" });
+    assert.equal(stdoutEvents[0].causation_id, triggerId);
+    assert.equal(stdoutEvents[0].correlation_id, triggerId);
 
     assert.equal(stderrEvents.length, 1);
-    assert.deepEqual(stderrEvents[0].payload, {
-      correlation_id: triggerId,
-      line: "err",
-    });
+    assert.deepEqual(stderrEvents[0].payload, { line: "err" });
+    assert.equal(stderrEvents[0].causation_id, triggerId);
+    assert.equal(stderrEvents[0].correlation_id, triggerId);
   });
 
   it(

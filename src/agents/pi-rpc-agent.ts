@@ -134,12 +134,7 @@ export const piRpcAgentHandler = async (
     pollInterval,
     signal: loopAbortSignal,
   })) {
-    const correlationId = event.id;
-
-    client.publish(`agent.${id}.start`, {
-      correlation_id: correlationId,
-      event_type: event.type,
-    });
+    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
 
     const isCompact = event.type === `agent.${id}.compact`;
     const isNewSession = event.type === `agent.${id}.new_session`;
@@ -163,9 +158,9 @@ export const piRpcAgentHandler = async (
         }
 
         if (!isPiRpcResponse(value)) {
-          const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
+          const sessionEvent = fromPiAgentSessionEvent(value);
           if (sessionEvent) {
-            client.publish(`agent.${id}.message`, sessionEvent);
+            client.publish(`agent.${id}.message`, sessionEvent, event);
           }
         }
 
@@ -189,17 +184,12 @@ export const piRpcAgentHandler = async (
             : value.type === "agent_end";
 
         if (isDone) {
-          client.publish(`agent.${id}.end`, {
-            correlation_id: correlationId,
-          });
+          client.publish(`agent.${id}.end`, {}, event);
           break;
         }
       }
     } catch (e) {
-      client.publish(`agent.${id}.error`, {
-        error: String(e),
-        correlation_id: correlationId,
-      });
+      client.publish(`agent.${id}.error`, { error: String(e) }, event);
     }
   }
 

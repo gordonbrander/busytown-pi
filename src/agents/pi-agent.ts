@@ -76,8 +76,6 @@ export const piAgentHandler = async (
     pollInterval,
     signal,
   })) {
-    const correlationId = event.id;
-
     const proc = spawn("pi", cliArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd,
@@ -126,10 +124,7 @@ export const piAgentHandler = async (
       proc.once("exit", (code, signal) => resolve({ code, signal }));
     });
 
-    client.publish(`agent.${id}.start`, {
-      correlation_id: correlationId,
-      event_type: event.type,
-    });
+    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
 
     try {
       while (true) {
@@ -137,33 +132,31 @@ export const piAgentHandler = async (
         if (done) {
           const { code, signal } = await exitPromise;
           if (code !== 0 && code !== null) {
-            client.publish(`agent.${id}.error`, {
-              error: `Process exited unexpectedly (code ${code})`,
-              correlation_id: correlationId,
-              code,
-              signal,
-            });
+            client.publish(
+              `agent.${id}.error`,
+              {
+                error: `Process exited unexpectedly (code ${code})`,
+                code,
+                signal,
+              },
+              event,
+            );
           }
           break;
         }
 
-        const sessionEvent = fromPiAgentSessionEvent(value, correlationId);
+        const sessionEvent = fromPiAgentSessionEvent(value);
         if (sessionEvent) {
-          client.publish(`agent.${id}.message`, sessionEvent);
+          client.publish(`agent.${id}.message`, sessionEvent, event);
         }
 
         if (value.type === "agent_end") {
-          client.publish(`agent.${id}.end`, {
-            correlation_id: correlationId,
-          });
+          client.publish(`agent.${id}.end`, {}, event);
           break;
         }
       }
     } catch (e) {
-      client.publish(`agent.${id}.error`, {
-        error: `${e}`,
-        correlation_id: correlationId,
-      });
+      client.publish(`agent.${id}.error`, { error: `${e}` }, event);
     } finally {
       signal.removeEventListener("abort", onAbort);
       reader.releaseLock();

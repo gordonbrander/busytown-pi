@@ -30,8 +30,6 @@ export const shellAgentHandler = async (
     pollInterval,
     signal,
   })) {
-    const correlationId = event.id;
-
     const rendered = renderTemplate(body, { event });
 
     const proc = spawn("/bin/sh", ["-c", rendered], {
@@ -46,10 +44,7 @@ export const shellAgentHandler = async (
       proc.once("exit", (code, signal) => resolve({ code, signal }));
     });
 
-    client.publish(`agent.${id}.start`, {
-      correlation_id: correlationId,
-      event_type: event.type,
-    });
+    client.publish(`agent.${id}.start`, { event_type: event.type }, event);
 
     // Pipe stderr to events (fire-and-forget)
     stderr(proc)
@@ -57,10 +52,7 @@ export const shellAgentHandler = async (
       .pipeTo(
         new WritableStream({
           write(line) {
-            client.publish(`agent.${id}.stderr`, {
-              correlation_id: correlationId,
-              line,
-            });
+            client.publish(`agent.${id}.stderr`, { line }, event);
           },
         }),
       )
@@ -75,29 +67,24 @@ export const shellAgentHandler = async (
         if (done) {
           const { code, signal } = await exitPromise;
           if (code !== 0 && code !== null) {
-            client.publish(`agent.${id}.error`, {
-              error: `Process exited unexpectedly (code ${code})`,
-              correlation_id: correlationId,
-              code,
-              signal,
-            });
+            client.publish(
+              `agent.${id}.error`,
+              {
+                error: `Process exited unexpectedly (code ${code})`,
+                code,
+                signal,
+              },
+              event,
+            );
           } else {
-            client.publish(`agent.${id}.end`, {
-              correlation_id: correlationId,
-            });
+            client.publish(`agent.${id}.end`, {}, event);
           }
           break;
         }
-        client.publish(`agent.${id}.stdout`, {
-          correlation_id: correlationId,
-          line: value,
-        });
+        client.publish(`agent.${id}.stdout`, { line: value }, event);
       }
     } catch (e) {
-      client.publish(`agent.${id}.error`, {
-        error: `${e}`,
-        correlation_id: correlationId,
-      });
+      client.publish(`agent.${id}.error`, { error: `${e}` }, event);
     } finally {
       reader.releaseLock();
     }

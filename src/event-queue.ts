@@ -8,13 +8,17 @@ const SCHEMA = `
   PRAGMA journal_mode = WAL;
   PRAGMA busy_timeout = 5000;
   PRAGMA foreign_keys = ON;
+  PRAGMA user_version = 1;
 
   CREATE TABLE IF NOT EXISTS events (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
-    type      TEXT    NOT NULL,
-    agent_id  TEXT    NOT NULL,
-    payload   TEXT    NOT NULL DEFAULT '{}'
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       INTEGER NOT NULL DEFAULT (unixepoch()),
+    type            TEXT    NOT NULL,
+    agent_id        TEXT    NOT NULL,
+    correlation_id  INTEGER,
+    causation_id    INTEGER,
+    depth           INTEGER NOT NULL DEFAULT 0,
+    payload         TEXT    NOT NULL DEFAULT '{}'
   );
 
   CREATE TABLE IF NOT EXISTS agent_cursors (
@@ -45,7 +49,13 @@ export const openDb = (dbPath: string): DatabaseSync => {
 export const getOrOpenDb = memoize(openDb, (dbPath) => dbPath);
 
 const parseEvent = (row: RawEventRow): Event => ({
-  ...row,
+  id: row.id,
+  timestamp: row.timestamp,
+  type: row.type,
+  agent_id: row.agent_id,
+  correlation_id: row.correlation_id ?? undefined,
+  causation_id: row.causation_id ?? undefined,
+  depth: row.depth,
   payload: JSON.parse(row.payload),
 });
 
@@ -54,14 +64,26 @@ export const pushEvent = (
   agentId: string,
   type: string,
   payload: unknown = {},
+  cause?: Event,
 ): Event => {
+  const correlationId = cause ? (cause.correlation_id ?? cause.id) : undefined;
+  const causationId = cause?.id;
+  const depth = cause ? cause.depth + 1 : 0;
+
   const row = db
     .prepare(
-      `INSERT INTO events (type, agent_id, payload)
-       VALUES (?, ?, ?)
+      `INSERT INTO events (type, agent_id, correlation_id, causation_id, depth, payload)
+       VALUES (?, ?, ?, ?, ?, ?)
        RETURNING id, timestamp`,
     )
-    .get(type, agentId, JSON.stringify(payload)) as {
+    .get(
+      type,
+      agentId,
+      correlationId ?? null,
+      causationId ?? null,
+      depth,
+      JSON.stringify(payload),
+    ) as {
     id: number;
     timestamp: number;
   };
@@ -71,6 +93,9 @@ export const pushEvent = (
     timestamp: row.timestamp,
     type,
     agent_id: agentId,
+    correlation_id: correlationId,
+    causation_id: causationId,
+    depth,
     payload,
   };
 };

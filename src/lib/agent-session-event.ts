@@ -2,8 +2,8 @@
 // Simplified agent session events
 //
 // One event per logical stage — no streaming deltas, no message wrapper.
-// Every event within a run carries a `correlation_id` that matches the
-// originating `user_message` id.
+// Causality is tracked by the queue itself via correlation_id / causation_id
+// columns; publishers pass the originating event as `cause` to client.publish.
 //
 // See docs/simplified-llm-events.md for the full design.
 // ---------------------------------------------------------------------------
@@ -19,57 +19,48 @@ export type UserMessage = {
 
 export type AgentStart = {
   type: "agent_start";
-  correlation_id: number;
 };
 
 export type AgentEnd = {
   type: "agent_end";
-  correlation_id: number;
   total_input_tokens?: number;
   total_output_tokens?: number;
 };
 
 export type TurnStart = {
   type: "turn_start";
-  correlation_id: number;
 };
 
 export type TurnEnd = {
   type: "turn_end";
-  correlation_id: number;
   input_tokens?: number;
   output_tokens?: number;
 };
 
 export type ThinkingStart = {
   type: "thinking_start";
-  correlation_id: number;
   contentIndex: number;
 };
 
 export type ThinkingEnd = {
   type: "thinking_end";
-  correlation_id: number;
   contentIndex: number;
   content: string;
 };
 
 export type TextStart = {
   type: "text_start";
-  correlation_id: number;
   contentIndex: number;
 };
 
 export type TextEnd = {
   type: "text_end";
-  correlation_id: number;
   contentIndex: number;
   content: string;
 };
 
 export type ToolcallStart = {
   type: "toolcall_start";
-  correlation_id: number;
   contentIndex: number;
   tool_call_id?: string;
   name?: string;
@@ -77,7 +68,6 @@ export type ToolcallStart = {
 
 export type ToolcallEnd = {
   type: "toolcall_end";
-  correlation_id: number;
   contentIndex: number;
   tool_call_id: string;
   name: string;
@@ -86,7 +76,6 @@ export type ToolcallEnd = {
 
 export type ToolExecutionEnd = {
   type: "tool_execution_end";
-  correlation_id: number;
   tool_call_id: string;
   output: unknown;
   isError: boolean;
@@ -94,20 +83,17 @@ export type ToolExecutionEnd = {
 
 export type AgentError = {
   type: "error";
-  correlation_id: number;
   message: string;
   code?: "error" | "aborted";
 };
 
 export type CompactionStart = {
   type: "compaction_start";
-  correlation_id: number;
   reason: "manual" | "threshold" | "overflow";
 };
 
 export type CompactionEnd = {
   type: "compaction_end";
-  correlation_id: number;
   reason: "manual" | "threshold" | "overflow";
   result:
     | { summary: string; firstKeptEntryId: string; tokensBefore: number }
@@ -118,7 +104,6 @@ export type CompactionEnd = {
 
 export type AutoRetryStart = {
   type: "auto_retry_start";
-  correlation_id: number;
   attempt: number;
   maxAttempts: number;
   delayMs: number;
@@ -127,7 +112,6 @@ export type AutoRetryStart = {
 
 export type AutoRetryEnd = {
   type: "auto_retry_end";
-  correlation_id: number;
   success: boolean;
   finalError?: string;
 };
@@ -168,26 +152,22 @@ export type AgentSessionEvent =
  */
 export const fromPiAgentSessionEvent = (
   event: PiAgentSessionEvent,
-  correlationId: number,
 ): AgentSessionEvent | undefined => {
   switch (event.type) {
     case "agent_start":
-      return { type: "agent_start", correlation_id: correlationId };
+      return { type: "agent_start" };
 
     case "agent_end":
-      return { type: "agent_end", correlation_id: correlationId };
+      return { type: "agent_end" };
 
     case "turn_start":
-      return { type: "turn_start", correlation_id: correlationId };
+      return { type: "turn_start" };
 
     case "turn_end":
-      return { type: "turn_end", correlation_id: correlationId };
+      return { type: "turn_end" };
 
     case "message_update":
-      return fromAssistantMessageEvent(
-        event.assistantMessageEvent,
-        correlationId,
-      );
+      return fromAssistantMessageEvent(event.assistantMessageEvent);
 
     case "tool_execution_start":
       // Simplified model has no tool_execution_start — info is on toolcall_start/end
@@ -200,7 +180,6 @@ export const fromPiAgentSessionEvent = (
     case "tool_execution_end":
       return {
         type: "tool_execution_end",
-        correlation_id: correlationId,
         tool_call_id: event.toolCallId,
         output: event.result,
         isError: event.isError,
@@ -209,14 +188,12 @@ export const fromPiAgentSessionEvent = (
     case "compaction_start":
       return {
         type: "compaction_start",
-        correlation_id: correlationId,
         reason: event.reason,
       };
 
     case "compaction_end":
       return {
         type: "compaction_end",
-        correlation_id: correlationId,
         reason: event.reason,
         result:
           event.result !== undefined
@@ -233,7 +210,6 @@ export const fromPiAgentSessionEvent = (
     case "auto_retry_start":
       return {
         type: "auto_retry_start",
-        correlation_id: correlationId,
         attempt: event.attempt,
         maxAttempts: event.maxAttempts,
         delayMs: event.delayMs,
@@ -243,7 +219,6 @@ export const fromPiAgentSessionEvent = (
     case "auto_retry_end":
       return {
         type: "auto_retry_end",
-        correlation_id: correlationId,
         success: event.success,
         finalError: event.finalError,
       };
@@ -263,7 +238,6 @@ export const fromPiAgentSessionEvent = (
       }
       return {
         type: "error",
-        correlation_id: correlationId,
         message: msg.errorMessage ?? msg.stopReason,
         code: msg.stopReason,
       };
@@ -282,20 +256,17 @@ type PiAssistantMessageEvent = Extract<
 
 const fromAssistantMessageEvent = (
   event: PiAssistantMessageEvent,
-  correlationId: number,
 ): AgentSessionEvent | undefined => {
   switch (event.type) {
     case "thinking_start":
       return {
         type: "thinking_start",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
       };
 
     case "thinking_end":
       return {
         type: "thinking_end",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
         content: event.content,
       };
@@ -303,14 +274,12 @@ const fromAssistantMessageEvent = (
     case "text_start":
       return {
         type: "text_start",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
       };
 
     case "text_end":
       return {
         type: "text_end",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
         content: event.content,
       };
@@ -318,14 +287,12 @@ const fromAssistantMessageEvent = (
     case "toolcall_start":
       return {
         type: "toolcall_start",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
       };
 
     case "toolcall_end":
       return {
         type: "toolcall_end",
-        correlation_id: correlationId,
         contentIndex: event.contentIndex,
         tool_call_id: event.toolCall.id,
         name: event.toolCall.name,
@@ -335,7 +302,6 @@ const fromAssistantMessageEvent = (
     case "error":
       return {
         type: "error",
-        correlation_id: correlationId,
         message: event.reason,
         code: event.reason,
       };

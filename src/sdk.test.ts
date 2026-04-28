@@ -179,6 +179,26 @@ describe("SDK clientOf", () => {
     assert.doesNotThrow(() => throwIfOrphaned(100, () => 100));
   });
 
+  it("publish threads cause through to correlation_id, causation_id, depth", () => {
+    const dbPath = createTempDbPath();
+    const client = clientOf({ id: "agent-a", dbPath });
+
+    const root = client.publish("flow.start", {});
+    assert.equal(root.depth, 0);
+    assert.equal(root.correlation_id, undefined);
+    assert.equal(root.causation_id, undefined);
+
+    const child = client.publish("flow.step", { n: 1 }, root);
+    assert.equal(child.causation_id, root.id);
+    assert.equal(child.correlation_id, root.id);
+    assert.equal(child.depth, 1);
+
+    const grandchild = client.publish("flow.step", { n: 2 }, child);
+    assert.equal(grandchild.causation_id, child.id);
+    assert.equal(grandchild.correlation_id, root.id);
+    assert.equal(grandchild.depth, 2);
+  });
+
   it("cursor advances across subscribe iterables", async () => {
     const dbPath = createTempDbPath();
     const producer = clientOf({ id: "producer", dbPath });

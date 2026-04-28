@@ -3,6 +3,9 @@ export type Event = {
   timestamp: number;
   type: string;
   agent_id: string;
+  correlation_id?: number;
+  causation_id?: number;
+  depth: number;
   payload: unknown;
 };
 
@@ -16,6 +19,9 @@ export type RawEventRow = {
   timestamp: number;
   type: string;
   agent_id: string;
+  correlation_id: number | null;
+  causation_id: number | null;
+  depth: number;
   payload: string;
 };
 
