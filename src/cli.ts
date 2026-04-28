@@ -321,8 +321,8 @@ const readPayload = (args: { payload?: string; msg?: string }) => {
   return {};
 };
 
-const pushCommand = defineCommand({
-  meta: { name: "push", description: "Push an event to the queue" },
+const publishCommand = defineCommand({
+  meta: { name: "publish", description: "Publish an event to the queue" },
   args: {
     ...globalArgs,
     agent: {
@@ -543,7 +543,7 @@ const main = defineCommand({
     stop: stopCommand,
     status: statusCommand,
     stats: statsCommand,
-    push: pushCommand,
+    publish: publishCommand,
     events: eventsCommand,
     claim: claimCommand,
     "check-claim": checkClaimCommand,
