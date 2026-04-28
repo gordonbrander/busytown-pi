@@ -117,6 +117,36 @@ listen: []
     assert.equal(agent.ignoreSelf, true);
   });
 
+  it("defaults claim to false", () => {
+    const filePath = writeAgent(
+      "default.md",
+      `---
+listen: []
+---
+`,
+    );
+
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
+    assert.equal(agent.claim, false);
+  });
+
+  it("parses claim: true from frontmatter", () => {
+    const filePath = writeAgent(
+      "worker.md",
+      `---
+type: shell
+listen:
+  - work.do
+claim: true
+---
+echo handling {{event.id}}
+`,
+    );
+
+    const agent = loadAgentDef(filePath, { cwd: tmpDir });
+    assert.equal(agent.claim, true);
+  });
+
   it("handles tools as array", () => {
     const filePath = writeAgent(
       "tools-array.md",

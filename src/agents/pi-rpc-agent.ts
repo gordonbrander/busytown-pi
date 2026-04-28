@@ -58,6 +58,7 @@ export const piRpcAgentHandler = async (
     id,
     listen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal = neverAbortSignal,
     cwd = process.cwd(),
@@ -131,6 +132,7 @@ export const piRpcAgentHandler = async (
   for await (const event of client.subscribe({
     listen: fullListen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal: loopAbortSignal,
   })) {

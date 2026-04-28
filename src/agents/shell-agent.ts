@@ -20,6 +20,7 @@ export const shellAgentHandler = async (
     env = {},
     listen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal,
   } = config;
@@ -27,6 +28,7 @@ export const shellAgentHandler = async (
   for await (const event of client.subscribe({
     listen,
     ignoreSelf,
+    claim,
     pollInterval,
     signal,
   })) {
