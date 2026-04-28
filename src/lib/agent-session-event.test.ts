@@ -14,8 +14,6 @@ const PARTIAL = { role: "assistant", content: [] };
 /** Clone AGENT_MSG with overrides — used for message_end error tests. */
 const assistantMsg = (overrides: object) => ({ ...AGENT_MSG, ...overrides });
 
-const CID = 42;
-
 /** Wrap an assistantMessageEvent in a message_update Pi event. */
 const update = (assistantMessageEvent: object) =>
   pi({
@@ -26,33 +24,27 @@ const update = (assistantMessageEvent: object) =>
 
 describe("fromPiAgentSessionEvent", () => {
   describe("agent lifecycle", () => {
-    it("maps agent_start with correlation_id", () => {
-      assert.deepEqual(
-        fromPiAgentSessionEvent(pi({ type: "agent_start" }), CID),
-        {
-          type: "agent_start",
-          correlation_id: CID,
-        },
-      );
+    it("maps agent_start", () => {
+      assert.deepEqual(fromPiAgentSessionEvent(pi({ type: "agent_start" })), {
+        type: "agent_start",
+      });
     });
 
     it("maps agent_end, strips messages", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           pi({ type: "agent_end", messages: [AGENT_MSG] }),
-          CID,
         ),
-        { type: "agent_end", correlation_id: CID },
+        { type: "agent_end" },
       );
     });
   });
 
   describe("turn lifecycle", () => {
     it("maps turn_start", () => {
-      assert.deepEqual(
-        fromPiAgentSessionEvent(pi({ type: "turn_start" }), CID),
-        { type: "turn_start", correlation_id: CID },
-      );
+      assert.deepEqual(fromPiAgentSessionEvent(pi({ type: "turn_start" })), {
+        type: "turn_start",
+      });
     });
 
     it("maps turn_end, strips message and toolResults", () => {
@@ -63,9 +55,8 @@ describe("fromPiAgentSessionEvent", () => {
             message: AGENT_MSG,
             toolResults: TOOL_RESULTS,
           }),
-          CID,
         ),
-        { type: "turn_end", correlation_id: CID },
+        { type: "turn_end" },
       );
     });
   });
@@ -75,7 +66,6 @@ describe("fromPiAgentSessionEvent", () => {
       assert.equal(
         fromPiAgentSessionEvent(
           pi({ type: "message_start", message: AGENT_MSG }),
-          CID,
         ),
         undefined,
       );
@@ -85,7 +75,6 @@ describe("fromPiAgentSessionEvent", () => {
       assert.equal(
         fromPiAgentSessionEvent(
           pi({ type: "message_end", message: AGENT_MSG }),
-          CID,
         ),
         undefined,
       );
@@ -103,11 +92,9 @@ describe("fromPiAgentSessionEvent", () => {
               errorMessage: '400 {"type":"error", … plan limits …}',
             }),
           }),
-          CID,
         ),
         {
           type: "error",
-          correlation_id: CID,
           message: '400 {"type":"error", … plan limits …}',
           code: "error",
         },
@@ -121,11 +108,9 @@ describe("fromPiAgentSessionEvent", () => {
             type: "message_end",
             message: assistantMsg({ stopReason: "aborted" }),
           }),
-          CID,
         ),
         {
           type: "error",
-          correlation_id: CID,
           message: "aborted",
           code: "aborted",
         },
@@ -139,7 +124,6 @@ describe("fromPiAgentSessionEvent", () => {
             type: "message_end",
             message: assistantMsg({ stopReason: "stop" }),
           }),
-          CID,
         ),
         undefined,
       );
@@ -152,7 +136,6 @@ describe("fromPiAgentSessionEvent", () => {
             type: "message_end",
             message: { role: "user", content: "hello" },
           }),
-          CID,
         ),
         undefined,
       );
@@ -170,7 +153,6 @@ describe("fromPiAgentSessionEvent", () => {
               isError: false,
             },
           }),
-          CID,
         ),
         undefined,
       );
@@ -182,9 +164,8 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           update({ type: "thinking_start", contentIndex: 0, partial: PARTIAL }),
-          CID,
         ),
-        { type: "thinking_start", correlation_id: CID, contentIndex: 0 },
+        { type: "thinking_start", contentIndex: 0 },
       );
     });
 
@@ -197,11 +178,9 @@ describe("fromPiAgentSessionEvent", () => {
             content: "I should search first",
             partial: PARTIAL,
           }),
-          CID,
         ),
         {
           type: "thinking_end",
-          correlation_id: CID,
           contentIndex: 0,
           content: "I should search first",
         },
@@ -214,9 +193,8 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           update({ type: "text_start", contentIndex: 1, partial: PARTIAL }),
-          CID,
         ),
-        { type: "text_start", correlation_id: CID, contentIndex: 1 },
+        { type: "text_start", contentIndex: 1 },
       );
     });
 
@@ -229,11 +207,9 @@ describe("fromPiAgentSessionEvent", () => {
             content: "Hello world",
             partial: PARTIAL,
           }),
-          CID,
         ),
         {
           type: "text_end",
-          correlation_id: CID,
           contentIndex: 1,
           content: "Hello world",
         },
@@ -246,9 +222,8 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           update({ type: "toolcall_start", contentIndex: 2, partial: PARTIAL }),
-          CID,
         ),
-        { type: "toolcall_start", correlation_id: CID, contentIndex: 2 },
+        { type: "toolcall_start", contentIndex: 2 },
       );
     });
 
@@ -267,11 +242,9 @@ describe("fromPiAgentSessionEvent", () => {
               thoughtSignature: "sig_abc",
             },
           }),
-          CID,
         ),
         {
           type: "toolcall_end",
-          correlation_id: CID,
           contentIndex: 2,
           tool_call_id: "call_1",
           name: "bash",
@@ -291,7 +264,6 @@ describe("fromPiAgentSessionEvent", () => {
             delta: "hel",
             partial: PARTIAL,
           }),
-          CID,
         ),
         undefined,
       );
@@ -306,7 +278,6 @@ describe("fromPiAgentSessionEvent", () => {
             delta: "hmm",
             partial: PARTIAL,
           }),
-          CID,
         ),
         undefined,
       );
@@ -321,7 +292,6 @@ describe("fromPiAgentSessionEvent", () => {
             delta: '{"cmd"',
             partial: PARTIAL,
           }),
-          CID,
         ),
         undefined,
       );
@@ -331,10 +301,7 @@ describe("fromPiAgentSessionEvent", () => {
   describe("message_update envelope sub-events are dropped", () => {
     it("returns undefined for start", () => {
       assert.equal(
-        fromPiAgentSessionEvent(
-          update({ type: "start", partial: PARTIAL }),
-          CID,
-        ),
+        fromPiAgentSessionEvent(update({ type: "start", partial: PARTIAL })),
         undefined,
       );
     });
@@ -343,7 +310,6 @@ describe("fromPiAgentSessionEvent", () => {
       assert.equal(
         fromPiAgentSessionEvent(
           update({ type: "done", reason: "stop", message: AGENT_MSG }),
-          CID,
         ),
         undefined,
       );
@@ -355,11 +321,9 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           update({ type: "error", reason: "aborted", error: AGENT_MSG }),
-          CID,
         ),
         {
           type: "error",
-          correlation_id: CID,
           message: "aborted",
           code: "aborted",
         },
@@ -377,7 +341,6 @@ describe("fromPiAgentSessionEvent", () => {
             toolName: "bash",
             args: { command: "ls" },
           }),
-          CID,
         ),
         undefined,
       );
@@ -393,7 +356,6 @@ describe("fromPiAgentSessionEvent", () => {
             args: { command: "ls" },
             partialResult: "partial...",
           }),
-          CID,
         ),
         undefined,
       );
@@ -409,11 +371,9 @@ describe("fromPiAgentSessionEvent", () => {
             result: "file1.ts\nfile2.ts",
             isError: false,
           }),
-          CID,
         ),
         {
           type: "tool_execution_end",
-          correlation_id: CID,
           tool_call_id: "call_1",
           output: "file1.ts\nfile2.ts",
           isError: false,
@@ -431,11 +391,9 @@ describe("fromPiAgentSessionEvent", () => {
             result: "command not found",
             isError: true,
           }),
-          CID,
         ),
         {
           type: "tool_execution_end",
-          correlation_id: CID,
           tool_call_id: "call_2",
           output: "command not found",
           isError: true,
@@ -449,9 +407,8 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           pi({ type: "compaction_start", reason: "threshold" }),
-          CID,
         ),
-        { type: "compaction_start", correlation_id: CID, reason: "threshold" },
+        { type: "compaction_start", reason: "threshold" },
       );
     });
 
@@ -470,11 +427,9 @@ describe("fromPiAgentSessionEvent", () => {
             aborted: false,
             willRetry: false,
           }),
-          CID,
         ),
         {
           type: "compaction_end",
-          correlation_id: CID,
           reason: "threshold",
           result: {
             summary: "Summarized",
@@ -497,11 +452,9 @@ describe("fromPiAgentSessionEvent", () => {
             aborted: true,
             willRetry: true,
           }),
-          CID,
         ),
         {
           type: "compaction_end",
-          correlation_id: CID,
           reason: "overflow",
           result: undefined,
           aborted: true,
@@ -522,11 +475,9 @@ describe("fromPiAgentSessionEvent", () => {
             delayMs: 2000,
             errorMessage: "529 overloaded",
           }),
-          CID,
         ),
         {
           type: "auto_retry_start",
-          correlation_id: CID,
           attempt: 1,
           maxAttempts: 3,
           delayMs: 2000,
@@ -539,11 +490,9 @@ describe("fromPiAgentSessionEvent", () => {
       assert.deepEqual(
         fromPiAgentSessionEvent(
           pi({ type: "auto_retry_end", success: true, attempt: 2 }),
-          CID,
         ),
         {
           type: "auto_retry_end",
-          correlation_id: CID,
           success: true,
           finalError: undefined,
         },
@@ -559,11 +508,9 @@ describe("fromPiAgentSessionEvent", () => {
             attempt: 3,
             finalError: "still overloaded",
           }),
-          CID,
         ),
         {
           type: "auto_retry_end",
-          correlation_id: CID,
           success: false,
           finalError: "still overloaded",
         },

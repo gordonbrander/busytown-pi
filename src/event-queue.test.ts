@@ -47,6 +47,56 @@ describe("pushEvent", () => {
     assert.deepEqual(event.payload, {});
     db.close();
   });
+
+  it("root event (no cause) has depth=0 and undefined correlation/causation", () => {
+    const db = createTestDb();
+    const root = pushEvent(db, "w", "root");
+    assert.equal(root.depth, 0);
+    assert.equal(root.correlation_id, undefined);
+    assert.equal(root.causation_id, undefined);
+    db.close();
+  });
+
+  it("event caused by a root carries correlation_id=root.id and causation_id=root.id", () => {
+    const db = createTestDb();
+    const root = pushEvent(db, "w", "root");
+    const child = pushEvent(db, "w", "child", {}, root);
+    assert.equal(child.causation_id, root.id);
+    assert.equal(child.correlation_id, root.id);
+    assert.equal(child.depth, 1);
+    db.close();
+  });
+
+  it("correlation_id carries forward, causation_id and depth track the immediate parent", () => {
+    const db = createTestDb();
+    const root = pushEvent(db, "w", "root");
+    const child = pushEvent(db, "w", "child", {}, root);
+    const grandchild = pushEvent(db, "w", "grandchild", {}, child);
+
+    assert.equal(grandchild.correlation_id, root.id);
+    assert.equal(grandchild.causation_id, child.id);
+    assert.equal(grandchild.depth, 2);
+    db.close();
+  });
+
+  it("persists correlation_id, causation_id, depth across read/write", () => {
+    const db = createTestDb();
+    const root = pushEvent(db, "w", "root");
+    const child = pushEvent(db, "w", "child", {}, root);
+
+    // Read back via getEventsSince to exercise parseEvent
+    const events = getEventsSince(db, { sinceId: 0, limit: 100 });
+    const reread = events.find((e) => e.id === child.id)!;
+    assert.equal(reread.correlation_id, root.id);
+    assert.equal(reread.causation_id, root.id);
+    assert.equal(reread.depth, 1);
+
+    const rereadRoot = events.find((e) => e.id === root.id)!;
+    assert.equal(rereadRoot.correlation_id, undefined);
+    assert.equal(rereadRoot.causation_id, undefined);
+    assert.equal(rereadRoot.depth, 0);
+    db.close();
+  });
 });
 
 describe("getCursor / updateCursor", () => {

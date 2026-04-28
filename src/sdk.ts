@@ -55,8 +55,12 @@ export type ListenConfig = {
 
 /** The client returned by `clientOf()`. */
 export type EventClient = {
-  /** Push an event to the queue. */
-  publish: (type: string, payload?: unknown) => Event;
+  /**
+   * Push an event to the queue. If `cause` is provided, the new event
+   * inherits its `correlation_id` (or the cause's own id if it's a root)
+   * and sets `causation_id` to `cause.id`, with `depth = cause.depth + 1`.
+   */
+  publish: (type: string, payload?: unknown, cause?: Event) => Event;
   /** Claim exclusive ownership of an event. Returns true if claimed. */
   claim: (eventId: number) => boolean;
   /** Async iterable that polls for matching events. Advances cursor after each yield. */
@@ -104,8 +108,8 @@ export const clientOf = ({
     }
   }
 
-  const publish = (type: string, payload: unknown = {}): Event =>
-    pushEvent(db, id, type, payload);
+  const publish = (type: string, payload: unknown = {}, cause?: Event): Event =>
+    pushEvent(db, id, type, payload, cause);
 
   const claim = (eventId: number): boolean => claimEvent(db, id, eventId);
 

@@ -7,6 +7,7 @@ const makeEvent = (type: string): Event => ({
   timestamp: 0,
   type,
   agent_id: "test",
+  depth: 0,
   payload: {},
 });
 

@@ -7,7 +7,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { AgentDef } from "./agents/file-agent-loader.ts";
 import type { Event } from "./lib/event.ts";
-import { getEventsSince } from "./event-queue.ts";
+import { getEventById, getEventsSince } from "./event-queue.ts";
 import { getDaemonStatus } from "./daemon-state.ts";
 import { pushBuffer } from "./lib/buffer.ts";
 import { storeOf } from "./lib/store.ts";
@@ -59,15 +59,13 @@ const AGENT_EVENT_RE = /^agent\.(.+)\.(start|end|error)$/;
 const applyAgentEvent = (
   agent: AgentState,
   action: string,
-  payload: unknown,
+  triggerType: string | undefined,
 ): AgentState => {
   if (action === "start") {
     return {
       ...agent,
       status: "running",
-      eventType: (payload as Record<string, unknown>)?.event_type as
-        | string
-        | undefined,
+      eventType: triggerType,
       progressChars: undefined,
     };
   }
@@ -85,44 +83,47 @@ const applyAgentEvent = (
   return agent;
 };
 
-const dashboardReducer = (
-  state: DashboardState,
-  action: DashboardAction,
-): DashboardState => {
-  if (action.type === "daemon_status") {
-    return action.running === state.daemonRunning
-      ? state
-      : { ...state, daemonRunning: action.running };
-  }
+const dashboardReducerOf =
+  (db: DatabaseSync) =>
+  (state: DashboardState, action: DashboardAction): DashboardState => {
+    if (action.type === "daemon_status") {
+      return action.running === state.daemonRunning
+        ? state
+        : { ...state, daemonRunning: action.running };
+    }
 
-  if (action.type === "agents_reloaded") {
-    return { ...state, agents: buildInitialAgents(action.agents) };
-  }
+    if (action.type === "agents_reloaded") {
+      return { ...state, agents: buildInitialAgents(action.agents) };
+    }
 
-  let agents = state.agents;
+    let agents = state.agents;
 
-  for (const event of action.events) {
-    const match = event.type.match(AGENT_EVENT_RE);
-    if (match) {
-      const [, agentId, agentAction] = match;
-      const existing = agents.get(agentId!);
-      if (existing) {
-        const updated = applyAgentEvent(existing, agentAction!, event.payload);
-        if (updated !== existing) {
-          // Copy-on-first-write
-          if (agents === state.agents) agents = new Map(state.agents);
-          agents.set(agentId!, updated);
+    for (const event of action.events) {
+      const match = event.type.match(AGENT_EVENT_RE);
+      if (match) {
+        const [, agentId, agentAction] = match;
+        const existing = agents.get(agentId!);
+        if (existing) {
+          const triggerType =
+            agentAction === "start" && event.causation_id != null
+              ? getEventById(db, event.causation_id)?.type
+              : undefined;
+          const updated = applyAgentEvent(existing, agentAction!, triggerType);
+          if (updated !== existing) {
+            // Copy-on-first-write
+            if (agents === state.agents) agents = new Map(state.agents);
+            agents.set(agentId!, updated);
+          }
         }
       }
     }
-  }
 
-  const lastSeenId = action.events[action.events.length - 1]!.id;
+    const lastSeenId = action.events[action.events.length - 1]!.id;
 
-  return agents === state.agents && lastSeenId === state.lastSeenId
-    ? state
-    : { ...state, agents, lastSeenId };
-};
+    return agents === state.agents && lastSeenId === state.lastSeenId
+      ? state
+      : { ...state, agents, lastSeenId };
+  };
 
 // ---------------------------------------------------------------------------
 // Widget (below editor)
@@ -186,7 +187,7 @@ export const startWidget = (
   const tip = getEventsSince(db, { tail: 1 });
   const initialLastSeenId = tip.length > 0 ? tip[0]!.id : 0;
 
-  const store = storeOf(dashboardReducer, {
+  const store = storeOf(dashboardReducerOf(db), {
     agents: buildInitialAgents(agents),
     daemonRunning: getDaemonStatus(projectRoot).running,
     lastSeenId: initialLastSeenId,
