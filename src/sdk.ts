@@ -68,7 +68,7 @@ export type EventClient = {
    */
   publish: (type: string, payload?: unknown, cause?: Event) => Event;
   /** Claim exclusive ownership of an event. Returns true if claimed. */
-  claim: (eventId: number) => boolean;
+  claim: (eventId: number, cause?: Event) => boolean;
   /** Async iterable that polls for matching events. Advances cursor after each yield. */
   subscribe: (config: ListenConfig) => AsyncIterable<Event>;
 };
@@ -119,7 +119,8 @@ export const clientOf = ({
   const publish = (type: string, payload: unknown = {}, cause?: Event): Event =>
     pushEvent(db, id, type, payload, cause);
 
-  const claim = (eventId: number): boolean => claimEvent(db, id, eventId);
+  const claim = (eventId: number, cause?: Event): boolean =>
+    claimEvent(db, id, eventId, cause);
 
   return {
     publish,

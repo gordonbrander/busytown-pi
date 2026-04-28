@@ -551,6 +551,22 @@ describe("claimEvent / getClaimant", () => {
     db.close();
   });
 
+  it("emits sys.claim.create exactly once across repeated re-claims", () => {
+    const db = createTestDb();
+    const event = pushEvent(db, "w", "task");
+
+    claimEvent(db, "claimer", event.id);
+    claimEvent(db, "claimer", event.id);
+    claimEvent(db, "claimer", event.id);
+
+    const claimEvents = getEventsSince(db, {
+      sinceId: 0,
+      filterType: "sys.claim.create",
+    });
+    assert.equal(claimEvents.length, 1);
+    db.close();
+  });
+
   it("getClaimant returns claimant info", () => {
     const db = createTestDb();
     const event = pushEvent(db, "w", "task");

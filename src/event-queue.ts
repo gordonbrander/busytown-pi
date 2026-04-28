@@ -228,46 +228,64 @@ export const getEventById = (
   return row ? parseEvent(row) : undefined;
 };
 
-export const pullNextMatchingEvent = (
+const _pullNextMatchingEvent = (
   db: DatabaseSync,
   id: string,
   filter: (event: Event) => boolean,
-  claim: boolean = false,
-  maxScan: number = 100,
+  maxScan: number,
 ): Event | undefined => {
   const sinceId = getOrCreateCursor(db, id);
   const events = getNextEvents(db, sinceId, maxScan);
-  if (events.length === 0) {
-    return undefined;
-  }
+  if (events.length === 0) return undefined;
 
-  if (!claim) {
-    for (const event of events) {
-      if (filter(event) && !isClaimed(db, event.id)) {
-        updateCursor(db, id, event.id);
-        return event;
-      }
+  for (const event of events) {
+    if (filter(event) && !isClaimed(db, event.id)) {
+      updateCursor(db, id, event.id);
+      return event;
     }
-    updateCursor(db, id, events[events.length - 1].id);
-    return undefined;
   }
+  updateCursor(db, id, events[events.length - 1].id);
+  return undefined;
+};
 
-  // claim: true — wrap the claim insert + sys.claim.create publish + cursor
-  // advance in one transaction so a race-loser doesn't leak partial state.
+/**
+ * Insert a claim row and emit sys.claim.create on success. Caller owns the
+ * transaction. Returns true if this caller just won the insert; false if the
+ * insert was a no-op (event already claimed by this agent or someone else).
+ */
+const _claimEvent = (
+  db: DatabaseSync,
+  agentId: string,
+  eventId: number,
+  cause?: Event,
+): boolean => {
+  const changes = db
+    .prepare(`INSERT OR IGNORE INTO claims (event_id, agent_id) VALUES (?, ?)`)
+    .run(eventId, agentId).changes as number;
+  if (changes === 0) return false;
+  pushEvent(db, agentId, "sys.claim.create", { event_id: eventId }, cause);
+  return true;
+};
+
+const _pullAndClaimNextMatchingEvent = (
+  db: DatabaseSync,
+  id: string,
+  filter: (event: Event) => boolean,
+  maxScan: number,
+  cause?: Event,
+): Event | undefined => {
+  const sinceId = getOrCreateCursor(db, id);
+  const events = getNextEvents(db, sinceId, maxScan);
+  if (events.length === 0) return undefined;
+
+  // Claim insert + sys.claim.create publish + cursor advance must be atomic
+  // so a race-loser doesn't leak partial state.
   db.exec("BEGIN");
   try {
     for (const event of events) {
       if (!filter(event)) continue;
-      const changes = db
-        .prepare(
-          `INSERT OR IGNORE INTO claims (event_id, agent_id) VALUES (?, ?)`,
-        )
-        .run(event.id, id).changes as number;
-      // Lost the race (or already claimed). Don't advance cursor here — the
-      // final updateCursor below will skip past this and any later losers,
-      // since they belong to whichever agent did claim them.
-      if (changes === 0) continue;
-      pushEvent(db, id, "sys.claim.create", { event_id: event.id }, event);
+      // Race-loser (or already claimed): final updateCursor below skips past.
+      if (!_claimEvent(db, id, event.id, cause)) continue;
       updateCursor(db, id, event.id);
       db.exec("COMMIT");
       return event;
@@ -280,6 +298,18 @@ export const pullNextMatchingEvent = (
     throw err;
   }
 };
+
+export const pullNextMatchingEvent = (
+  db: DatabaseSync,
+  id: string,
+  filter: (event: Event) => boolean,
+  claim: boolean = false,
+  maxScan: number = 100,
+  cause?: Event,
+): Event | undefined =>
+  claim
+    ? _pullAndClaimNextMatchingEvent(db, id, filter, maxScan, cause)
+    : _pullNextMatchingEvent(db, id, filter, maxScan);
 
 export const pollEvents = (
   db: DatabaseSync,
@@ -299,25 +329,21 @@ export const claimEvent = (
   db: DatabaseSync,
   agentId: string,
   eventId: number,
+  cause?: Event,
 ): boolean => {
   db.exec("BEGIN");
   try {
-    db.prepare(
-      `INSERT OR IGNORE INTO claims (event_id, agent_id) VALUES (?, ?)`,
-    ).run(eventId, agentId);
-
-    const row = db
-      .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
-      .get(eventId) as { agent_id: string } | undefined;
-
-    if (row?.agent_id === agentId) {
-      const target = getEventById(db, eventId);
-      pushEvent(db, agentId, "sys.claim.create", { event_id: eventId }, target);
+    if (_claimEvent(db, agentId, eventId, cause)) {
       db.exec("COMMIT");
       return true;
     }
+    // Insert was a no-op. Idempotent re-claim: return true if this agent
+    // already owns the claim, without re-emitting sys.claim.create.
+    const row = db
+      .prepare(`SELECT agent_id FROM claims WHERE event_id = ?`)
+      .get(eventId) as { agent_id: string } | undefined;
     db.exec("COMMIT");
-    return false;
+    return row?.agent_id === agentId;
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
